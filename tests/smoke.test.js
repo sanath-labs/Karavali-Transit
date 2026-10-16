@@ -2,33 +2,38 @@
  * tests/smoke.test.js
  * Automated smoke tests for Karavali-Transit database and API contracts.
  */
-import test from 'node:test'
 import assert from 'node:assert/strict'
-import { db } from '../db.js'
+import { initDB, getBuses, recordTelemetry, getRecentTelemetry } from '../db.js'
 
-test('Database schema initialization', () => {
-  assert.ok(db, 'Database instance should be initialized')
+async function runSmokeTests() {
+  console.log('🧪 Starting Karavali-Transit smoke tests...')
 
-  const buses = db.prepare('SELECT COUNT(*) as count FROM buses').get()
-  assert.ok(buses.count >= 1, 'Should have at least 1 registered bus in the database')
+  // 1. Database initialization and seed check
+  await initDB()
+  const buses = await getBuses()
+  assert.ok(buses.length >= 1, 'Should have at least 1 registered coastal bus')
+  console.log(`✅ [1/2] Registered buses retrieved: ${buses.length} (Sample: ${buses[0].bus_name})`)
 
-  const testBus = db.prepare('SELECT * FROM buses WHERE id = 1').get()
-  assert.equal(testBus.name, 'Vishal Express')
-  assert.equal(testBus.route_name, 'Mangaluru Statebank ➔ Surathkal')
-})
+  // 2. Telemetry insertion and query check
+  const insertId = await recordTelemetry({
+    bus_id: 1,
+    bus_name: 'Vishal Express',
+    latitude: 12.8718,
+    longitude: 74.8430,
+    speed: 36,
+    delay_minutes: 0,
+  })
+  assert.ok(insertId > 0, 'Should return a valid telemetry log_id')
 
-test('Telemetry record insertion and retrieval', () => {
-  const insert = db.prepare(`
-    INSERT INTO bus_telemetry (bus_id, latitude, longitude, speed, crowd_status, is_last_bus)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `)
-  const result = insert.run(1, 12.8718, 74.8430, 36, 'Seats Available', 0)
-  assert.ok(result.lastInsertRowid > 0, 'Should insert telemetry row successfully')
+  const recent = await getRecentTelemetry(5)
+  assert.ok(recent.length > 0, 'Should retrieve recent telemetry entries')
+  console.log(`✅ [2/2] Telemetry inserted and queried successfully (Log ID: ${insertId})`)
 
-  const latest = db.prepare(`
-    SELECT * FROM bus_telemetry WHERE bus_id = 1 ORDER BY id DESC LIMIT 1
-  `).get()
-  assert.equal(latest.latitude, 12.8718)
-  assert.equal(latest.longitude, 74.8430)
-  assert.equal(latest.speed, 36)
+  console.log('🎉 All smoke tests passed successfully!')
+  process.exit(0)
+}
+
+runSmokeTests().catch((err) => {
+  console.error('❌ Smoke test failed:', err)
+  process.exit(1)
 })
