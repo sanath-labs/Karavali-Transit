@@ -51,3 +51,4 @@ npm run lint    # Oxlint inspection (0 warnings, 0 errors)
 npm run build   # Production Vite bundle test
 npm test        # Smoke test suite
 ```
+

@@ -24,3 +24,4 @@ The primary testbed corridor for Karavali-Transit connects central Mangaluru to 
 - **Moderate Speed (`20 - 34 km/h`)**: Normal urban coastal traffic. Green indicator, 0–2 min delay.
 - **Heavy Congestion (`< 20 km/h`)**: Bottleneck detected (e.g. Nanthoor flyover diversion). Amber/Red indicator, automatically adds dynamic delay compensation:
   $$\text{Delay}_{\text{calc}} = \left\lceil \frac{d_{\text{remaining}}}{v_{\text{current}}} - \frac{d_{\text{remaining}}}{v_{\text{expected}}} \right\rceil \text{ minutes}$$
+

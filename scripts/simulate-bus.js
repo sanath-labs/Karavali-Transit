@@ -51,3 +51,4 @@ socket.on('connect_error', (err) => {
   console.error('❌ Connection error:', err.message)
   process.exit(1)
 })
+

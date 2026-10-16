@@ -96,3 +96,4 @@ This document details the REST endpoints, SQL database schemas, and Socket.IO re
 - **Event**: `live_location_broadcast`
 - **Broadcast Target**: All connected clients (`io.emit`)
 - **Payload**: Contains sanitized and synchronized live GPS telemetry with millisecond timestamp.
+
