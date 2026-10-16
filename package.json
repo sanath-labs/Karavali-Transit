@@ -8,7 +8,10 @@
     "server": "node server.js",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node tests/smoke.test.js",
+    "simulate": "node scripts/simulate-bus.js",
+    "check": "node scripts/health-check.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
