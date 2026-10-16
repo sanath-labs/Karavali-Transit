@@ -16,6 +16,11 @@ const io = new Server(server, { cors: { origin: '*' } })
 
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id)
+
+  socket.on('update_location', (data) => {
+    io.emit('live_location_broadcast', data)
+  })
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id)
   })
