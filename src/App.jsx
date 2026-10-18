@@ -223,9 +223,20 @@ function App() {
       setAlerts((prev) => [alert, ...prev])
     }
 
+    const handleSyncBuses = (buses) => {
+      if (buses && typeof buses === 'object') {
+        setLiveBuses((prev) => ({
+          ...prev,
+          ...buses,
+        }))
+      }
+    }
+
+    socket.on('sync_buses', handleSyncBuses)
     socket.on('live_location_broadcast', handleLocationBroadcast)
     socket.on('emergency_alert', handleEmergencyAlert)
     return () => {
+      socket.off('sync_buses', handleSyncBuses)
       socket.off('live_location_broadcast', handleLocationBroadcast)
       socket.off('emergency_alert', handleEmergencyAlert)
     }
