@@ -75,6 +75,25 @@ const defaultBuses = {
     crowd_status: 'Seats Available',
     is_last_bus: true,
   },
+  4: {
+    bus_id: 4,
+    bus_name: 'Coastal Star City',
+    route_number: '15B',
+    service_type: 'City / Ordinary',
+    vehicle_number: 'KA-19-MC-1022',
+    driver_phone: '+91 98801 44520',
+    origin: 'Surathkal',
+    destination: 'Mangaluru Statebank',
+    route_name: 'Surathkal ➔ Mangaluru Statebank',
+    latitude: 12.9350,
+    longitude: 74.8210,
+    speed: 34,
+    delay_minutes: 0,
+    eta_minutes: 5,
+    estimated_arrival: '1:20 PM',
+    crowd_status: 'Seats Available',
+    is_last_bus: false,
+  },
 }
 
 function App() {
@@ -213,6 +232,19 @@ function App() {
         crowd_status: 'Seats Available',
         is_last_bus: true,
       })
+    } else if (presetName === 'coastal_star') {
+      setBusData({
+        bus_id: 4,
+        driver_phone: '98801 44520',
+        vehicle_number: 'KA-19-MC-1022',
+        bus_name: 'Coastal Star City',
+        service_type: 'City / Ordinary',
+        route_number: '15B',
+        origin: 'Surathkal',
+        destination: 'Mangaluru Statebank',
+        crowd_status: 'Seats Available',
+        is_last_bus: false,
+      })
     }
   }
 
@@ -295,9 +327,11 @@ function App() {
   // Filter buses based on Destination, Service Type, and Search Query
   const filteredBuses = Object.values(liveBuses).filter((bus) => {
     if (destinationFilter !== 'All') {
+      const df = destinationFilter.toLowerCase()
       const match =
-        bus.destination?.toLowerCase().includes(destinationFilter.toLowerCase()) ||
-        bus.route_name?.toLowerCase().includes(destinationFilter.toLowerCase())
+        bus.destination?.toLowerCase().includes(df) ||
+        bus.origin?.toLowerCase().includes(df) ||
+        bus.route_name?.toLowerCase().includes(df)
       if (!match) return false
     }
 
@@ -402,9 +436,10 @@ function App() {
                 <div className="destination-chips">
                   {[
                     { id: 'All', label: 'All Routes' },
-                    { id: 'Surathkal', label: 'Surathkal (10 km)' },
-                    { id: 'Udupi', label: 'Udupi Express' },
-                    { id: 'Kuloor', label: 'Kuloor Bridge' },
+                    { id: 'Surathkal', label: 'Surathkal / NITK' },
+                    { id: 'Udupi', label: 'Udupi' },
+                    { id: 'Kuloor', label: 'Kuloor' },
+                    { id: 'Statebank', label: 'Statebank' },
                   ].map((dest) => (
                     <button
                       key={dest.id}
@@ -666,6 +701,13 @@ function App() {
                         className={`preset-btn ${busData.bus_name.includes('Padmambika') ? 'preset-active' : ''}`}
                       >
                         🚌 Padmambika (#21)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyPreset('coastal_star')}
+                        className={`preset-btn ${busData.bus_name.includes('Coastal Star') ? 'preset-active' : ''}`}
+                      >
+                        🚌 Coastal Star (#15B)
                       </button>
                     </div>
                   </div>

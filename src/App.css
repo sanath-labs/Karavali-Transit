@@ -881,6 +881,72 @@
   color: #64748b;
 }
 
+/* CUSTOM LEAFLET VEHICLE MARKER PIN */
+.custom-bus-marker-container {
+  background: transparent !important;
+  border: none !important;
+}
+
+.custom-bus-marker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.25);
+  cursor: pointer;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.marker-pin-express {
+  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+  border: 2.5px solid #ffffff;
+}
+
+.marker-pin-local {
+  background: linear-gradient(135deg, #0284c7, #0ea5e9);
+  border: 2.5px solid #ffffff;
+}
+
+.marker-pin-selected {
+  background: linear-gradient(135deg, #b91c1c, #dc2626);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.45), 0 6px 16px rgba(0, 0, 0, 0.35);
+  transform: scale(1.15);
+  animation: pulsePin 2s infinite ease-in-out;
+}
+
+@keyframes pulsePin {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.45), 0 6px 16px rgba(0, 0, 0, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(220, 38, 38, 0.2), 0 8px 20px rgba(0, 0, 0, 0.4);
+  }
+}
+
+.marker-bus-emoji {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.marker-route-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -6px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  letter-spacing: -0.02em;
+}
+
 /* 7. STAFF / DRIVER PORTAL - OFFICIAL LIGHT BOX */
 .conductor-page {
   flex: 1;

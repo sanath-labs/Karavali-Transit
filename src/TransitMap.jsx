@@ -33,6 +33,23 @@ function MapRecenter({ center }) {
   return null
 }
 
+function createBusIcon(bus, isSelected) {
+  const isExpress = (bus.service_type || '').toLowerCase().includes('express')
+  const pinClass = isSelected
+    ? 'marker-pin-selected'
+    : isExpress
+      ? 'marker-pin-express'
+      : 'marker-pin-local'
+
+  return L.divIcon({
+    className: 'custom-bus-marker-container',
+    html: `<div class="custom-bus-marker ${pinClass}"><span class="marker-bus-emoji">🚍</span><span class="marker-route-badge">${bus.route_number || '15'}</span></div>`,
+    iconSize: [42, 42],
+    iconAnchor: [21, 21],
+    popupAnchor: [0, -22],
+  })
+}
+
 function TransitMap({
   buses = [],
   routeCoordinates = defaultRouteCoordinates,
@@ -94,6 +111,7 @@ function TransitMap({
           <Marker
             key={bus.bus_id}
             position={[bus.latitude, bus.longitude]}
+            icon={createBusIcon(bus, isSelected)}
             eventHandlers={{
               click: () => onSelectBus?.(bus.bus_id),
             }}
