@@ -176,9 +176,10 @@ npm install
 
 ### 2. Start the Backend Server (Terminal 1)
 ```bash
+node server.cjs
+# OR
 npm run server
 # Central fleet telemetry engine starts on http://localhost:5000
-# SQLite database connected: transit.db
 ```
 
 ### 3. Start the Frontend Application (Terminal 2)
