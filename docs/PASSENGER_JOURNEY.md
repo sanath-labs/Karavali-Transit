@@ -76,3 +76,4 @@ This document details the staged UX state machine and screen transitions for pas
   - **Animated Blue Route Polyline**: Royal blue navigation path connecting the passenger pin to the approaching bus with directional dashes.
   - **Floating Telemetry HUD**: Displays distance to your stop (e.g., `2.4 km away`), speed (`38 km/h`), and stop ETA.
   - **"← Switch Bus / Exit Map" Button**: Pinned navigation button that returns the commuter back to Step 2 without page reload.
+

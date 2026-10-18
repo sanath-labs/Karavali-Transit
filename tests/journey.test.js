@@ -48,3 +48,4 @@ test('Delay status classification based on speed threshold', () => {
   assert.equal(calculateDelay(38), 0, 'Normal speed should result in 0 delay (On Time)')
   assert.equal(calculateDelay(18), 4, 'Slow speed in congestion should predict +4m delay')
 })
+
