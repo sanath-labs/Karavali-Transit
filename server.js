@@ -54,6 +54,14 @@ const io = new Server(server, {
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id)
 
+  // Send current live buses immediately to newly connected passengers
+  getBuses().then((buses) => {
+    const busMap = {}
+    buses.forEach((b) => { busMap[b.bus_id] = b })
+    socket.emit('sync_buses', busMap)
+    socket.emit('initial_buses', buses)
+  }).catch((err) => console.error('Failed to sync buses:', err))
+
   socket.on('start_shift', async (data) => {
     console.log('Driver Shift Started:', data)
     await recordShift(data)
@@ -64,8 +72,14 @@ io.on('connection', (socket) => {
     console.log('GPS Update received:', data)
     // 1. Broadcast real-time location to all connected passengers
     io.emit('live_location_broadcast', data)
+    io.emit('bus_location_update', data)
     // 2. Persist location log into SQL database table
     await recordTelemetry(data)
+  })
+
+  // Emergency / Traffic delay notifications
+  socket.on('send_alert', (alertData) => {
+    io.emit('emergency_alert', alertData)
   })
 
   socket.on('disconnect', () => {
