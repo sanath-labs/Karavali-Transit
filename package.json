@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "node server.js",
+    "server": "node server.cjs",
+    "server:cjs": "node server.cjs",
+    "server:es": "node server.js",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
@@ -28,10 +30,14 @@
     "sqlite3": "^6.0.1"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "autoprefixer": "^10.6.1",
     "oxlint": "^1.81.0",
+    "postcss": "^8.5.30",
+    "tailwindcss": "^4.3.3",
     "vite": "^8.3.0"
   }
 }
