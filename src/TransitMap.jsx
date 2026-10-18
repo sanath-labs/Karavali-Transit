@@ -23,6 +23,22 @@ const corridorStops = [
 
 const defaultRouteCoordinates = corridorStops.map((stop) => stop.coords)
 
+// Smoothly frame both Passenger & Tracked Bus in view (Zomato/Uber style)
+function MapTrackingFocuser({ passengerCoords, busCoords }) {
+  const map = useMap()
+  useEffect(() => {
+    if (passengerCoords && busCoords && busCoords[0] && busCoords[1]) {
+      const bounds = L.latLngBounds([passengerCoords, busCoords])
+      map.fitBounds(bounds, {
+        padding: [80, 80],
+        maxZoom: 15,
+        animate: true,
+      })
+    }
+  }, [passengerCoords, busCoords, map])
+  return null
+}
+
 function MapRecenter({ center }) {
   const map = useMap()
   useEffect(() => {
@@ -33,6 +49,23 @@ function MapRecenter({ center }) {
   return null
 }
 
+// Generate the road corridor path connecting passenger and the incoming bus
+function getTrackingPath(passengerCoords, busCoords, stops = corridorStops) {
+  if (!passengerCoords || !busCoords) return []
+  const [pLat] = passengerCoords
+  const [bLat] = busCoords
+  const minLat = Math.min(pLat, bLat)
+  const maxLat = Math.max(pLat, bLat)
+
+  const intermediate = stops
+    .filter((s) => s.coords[0] > minLat && s.coords[0] < maxLat)
+    .sort((a, b) => (pLat < bLat ? a.coords[0] - b.coords[0] : b.coords[0] - a.coords[0]))
+    .map((s) => s.coords)
+
+  return [passengerCoords, ...intermediate, busCoords]
+}
+
+// Custom Bus Marker Pin with Route Tag & Glow
 function createBusIcon(bus, isSelected) {
   const isExpress = (bus.service_type || '').toLowerCase().includes('express')
   const pinClass = isSelected
@@ -43,10 +76,32 @@ function createBusIcon(bus, isSelected) {
 
   return L.divIcon({
     className: 'custom-bus-marker-container',
-    html: `<div class="custom-bus-marker ${pinClass}"><span class="marker-bus-emoji">🚍</span><span class="marker-route-badge">${bus.route_number || '15'}</span></div>`,
+    html: `
+      <div class="custom-bus-marker ${pinClass}">
+        <span class="marker-bus-emoji">🚍</span>
+        <span class="marker-route-badge">${bus.route_number || '15'}</span>
+      </div>
+    `,
     iconSize: [42, 42],
     iconAnchor: [21, 21],
     popupAnchor: [0, -22],
+  })
+}
+
+// Custom Passenger "You / Boarding Location" Pin with animated radar ring
+function createPassengerIcon() {
+  return L.divIcon({
+    className: 'custom-passenger-marker-container',
+    html: `
+      <div class="custom-passenger-marker">
+        <div class="passenger-radar-ring"></div>
+        <div class="passenger-pin-core">🧍‍♂️</div>
+        <div class="passenger-tag">You (Boarding)</div>
+      </div>
+    `,
+    iconSize: [46, 46],
+    iconAnchor: [23, 23],
+    popupAnchor: [0, -25],
   })
 }
 
@@ -56,9 +111,21 @@ function TransitMap({
   selectedBusId = null,
   onSelectBus = null,
   mapCenter = [12.9100, 74.8300],
+  passengerCoords = [12.8718, 74.8430],
+  passengerStopName = 'Mangaluru Statebank Terminal',
 }) {
   const selectedBus = buses.find((b) => b.bus_id === selectedBusId)
-  const targetCenter = selectedBus ? [selectedBus.latitude, selectedBus.longitude] : null
+  const busCoords = selectedBus ? [selectedBus.latitude, selectedBus.longitude] : null
+
+  // When a bus is selected, show ONLY that bus (like Zomato tracking your delivery partner)
+  const busesToRender = selectedBusId
+    ? buses.filter((b) => b.bus_id === selectedBusId)
+    : buses
+
+  // Blue route line connecting passenger directly to the selected bus along corridor
+  const trackingPath = selectedBus
+    ? getTrackingPath(passengerCoords, busCoords, corridorStops)
+    : []
 
   return (
     <MapContainer
@@ -66,7 +133,13 @@ function TransitMap({
       zoom={13}
       className="transit-map"
     >
-      <MapRecenter center={targetCenter} />
+      {/* Dynamic auto-framing */}
+      {selectedBus ? (
+        <MapTrackingFocuser passengerCoords={passengerCoords} busCoords={busCoords} />
+      ) : (
+        <MapRecenter center={mapCenter} />
+      )}
+
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
       {/* Corridor Key Stops Circles */}
@@ -91,19 +164,62 @@ function TransitMap({
         </CircleMarker>
       ))}
 
-      {/* Route Map Polyline - Official Blue for active tracking */}
+      {/* Background Corridor Polyline */}
       <Polyline
         positions={routeCoordinates}
         pathOptions={{
-          color: selectedBusId ? '#1d4ed8' : '#2563eb',
-          weight: selectedBusId ? 6 : 4,
-          dashArray: selectedBusId ? undefined : '6, 6',
-          opacity: selectedBusId ? 0.95 : 0.75,
+          color: selectedBusId ? '#94a3b8' : '#2563eb',
+          weight: selectedBusId ? 3 : 5,
+          dashArray: selectedBusId ? '4, 8' : undefined,
+          opacity: selectedBusId ? 0.45 : 0.85,
         }}
       />
 
-      {/* Live Buses */}
-      {buses.map((bus) => {
+      {/* ZOMATO-STYLE BLUE NAVIGATION ROUTE LINE (Between Passenger & Selected Bus) */}
+      {selectedBus && trackingPath.length >= 2 && (
+        <>
+          {/* Outer soft blue glowing line */}
+          <Polyline
+            positions={trackingPath}
+            pathOptions={{
+              color: '#3b82f6',
+              weight: 10,
+              opacity: 0.35,
+              lineCap: 'round',
+              lineJoin: 'round',
+            }}
+          />
+          {/* Inner crisp animated navigation blue line */}
+          <Polyline
+            positions={trackingPath}
+            pathOptions={{
+              color: '#1d4ed8',
+              weight: 5,
+              opacity: 0.95,
+              dashArray: '8, 8',
+              className: 'animated-tracking-polyline',
+            }}
+          />
+        </>
+      )}
+
+      {/* Passenger Location Marker ("You Are Here / Boarding Stop") */}
+      <Marker position={passengerCoords} icon={createPassengerIcon()}>
+        <Popup>
+          <div className="stop-popup">
+            <strong>🧍‍♂️ Your Boarding Location</strong>
+            <span>{passengerStopName}</span>
+            {selectedBus && (
+              <p style={{ marginTop: '4px', fontSize: '11px', color: '#1d4ed8', fontWeight: 'bold' }}>
+                ⚡ Tracking {selectedBus.bus_name} approaching you!
+              </p>
+            )}
+          </div>
+        </Popup>
+      </Marker>
+
+      {/* Buses: If a bus is selected, ONLY that bus is shown; otherwise all buses */}
+      {busesToRender.map((bus) => {
         const isSelected = selectedBusId === bus.bus_id
         const isExpress = (bus.service_type || '').toLowerCase().includes('express')
 

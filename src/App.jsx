@@ -96,6 +96,20 @@ const defaultBuses = {
   },
 }
 
+function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return (R * c).toFixed(1)
+}
+
 function App() {
   const [role, setRole] = useState('passenger') // 'passenger' | 'conductor'
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -353,7 +367,16 @@ function App() {
     return true
   })
 
+  const passengerCoords = [12.8718, 74.8430] // Mangaluru Statebank Central Terminal
   const trackedBus = liveBuses[selectedBusId]
+  const distanceToPassenger = trackedBus
+    ? calculateDistanceKm(
+        passengerCoords[0],
+        passengerCoords[1],
+        trackedBus.latitude,
+        trackedBus.longitude,
+      )
+    : null
   const mapCenter = trackedBus
     ? [trackedBus.latitude, trackedBus.longitude]
     : [12.9100, 74.8300]
@@ -609,8 +632,8 @@ function App() {
 
             {/* RIGHT PANEL: LEAFLET MAP WITH CLEAN FLOATING HUD */}
             <div className="map-panel">
-              {/* CLEAN OFFICIAL FLOATING TRACKING HUD */}
-              {trackedBus && (
+              {/* CLEAN OFFICIAL FLOATING TRACKING HUD (ZOMATO STYLE) */}
+              {trackedBus ? (
                 <div className="floating-hud">
                   <div className="hud-left">
                     <span className="pulsing-green-dot" />
@@ -622,17 +645,23 @@ function App() {
                           {trackedBus.service_type}
                         </span>
                       </div>
-                      <span className="hud-bus-route">{trackedBus.route_name}</span>
+                      <span className="hud-bus-route">
+                        {trackedBus.route_name} • <strong>{distanceToPassenger} km away from your stop</strong>
+                      </span>
                     </div>
                   </div>
 
                   <div className="hud-stats">
                     <div className="hud-stat">
+                      <span>Distance to You</span>
+                      <strong style={{ color: '#1d4ed8' }}>{distanceToPassenger} km</strong>
+                    </div>
+                    <div className="hud-stat">
                       <span>Arrival Time</span>
                       <strong>{trackedBus.eta_minutes ?? 3} Mins ({trackedBus.estimated_arrival || '1:15 PM'})</strong>
                     </div>
                     <div className="hud-stat">
-                      <span>Speed</span>
+                      <span>Live Speed</span>
                       <strong>{trackedBus.speed ?? 38} km/h</strong>
                     </div>
                     <div className="hud-stat">
@@ -647,11 +676,15 @@ function App() {
                     type="button"
                     onClick={() => setSelectedBusId(null)}
                     className="hud-close-action"
-                    title="Stop tracking"
+                    title="Show all fleet buses on map"
                   >
                     <X size={15} />
-                    <span>Close</span>
+                    <span>Show All Buses</span>
                   </button>
+                </div>
+              ) : (
+                <div className="map-tracking-hint">
+                  <span>💡 <strong>Live Tracking Mode:</strong> Select any bus to view its real-time blue route line to your stop!</span>
                 </div>
               )}
 
@@ -661,6 +694,8 @@ function App() {
                   selectedBusId={selectedBusId}
                   onSelectBus={(busId) => setSelectedBusId(busId)}
                   mapCenter={mapCenter}
+                  passengerCoords={passengerCoords}
+                  passengerStopName="Mangaluru Statebank Terminal"
                 />
               </Suspense>
             </div>
