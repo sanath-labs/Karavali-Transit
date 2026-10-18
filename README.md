@@ -42,13 +42,15 @@ flowchart TD
 
 ## ✨ Key Features & Capabilities
 
-### 1. 🧍 Passenger Live Radar
-* **1-Tap Destination Chips:** Filter incoming coastal corridor buses with a single tap (`All Routes`, `Surathkal (10 km)`, `Udupi Express`, `Kuloor Bridge`).
-* **Service Classification:** Instant visual toggle between `All`, `⚡ Express Service` (limited stops), and `🚌 City / Ordinary` (all stops).
-* **Live Arrival Countdown & ETA:** Prominently displays arrival countdowns (e.g., **`3 MINS`**), scheduled arrival clock times (e.g., `1:15 PM`), and current speed (km/h).
-* **Smart Delay Predictor:** Dynamically calculates delay status (`✅ On Time` vs. `⚠️ +4m Delay`) based on live vehicle velocity.
-* **Seating & Night Service Indicators:** Displays real-time crowd status (`🟢 Seats Available` / `🟡 Standing Allowed`) and flags night-time final departures with `🌙 Night Last Bus`.
-* **Single-Bus Active Tracking HUD:** Clicking any bus card illuminates it in official transit royal blue, pans the map camera directly to the bus, and opens a floating Live Tracking HUD.
+### 1. 🧍 3-Step Passenger Journey & Live Radar
+* **Step 1 — Clean Destination Selection (Landing):** When opening the app, commuters see ONLY an uncluttered destination selection interface with no map or bus list distraction. Quick 1-tap destination pills (`Surathkal / NITK`, `Udupi`, `Kuloor`, `Statebank`, `All Routes`), route search, and a primary *"Search Incoming Buses ➔"* action.
+* **Step 2 — Filtered Bus List Screen:** Displays only the buses operating along the commuter's selected destination corridor. Highlights route numbers, `⚡ Express` vs. `🚌 Ordinary` classifications, crowd load, next arrival countdown (`3 MINS`), scheduled time, and `🌙 LAST BUS OF THE NIGHT` alerts.
+* **Step 3 — Zomato-Style Live Tracking Map:**
+  * **Location Permission Prompt:** When selecting a bus, prompts *"Turn on your location to track this bus live"*, supporting native HTML5 GPS or terminal boarding stop fallback.
+  * **Single-Bus Isolation:** Automatically focuses on ONLY the tracked bus (filtering out other buses for zero distraction, just like tracking a delivery partner in Zomato).
+  * **Animated Blue Navigation Route Line:** Draws a royal blue glowing navigation polyline with moving dashes directly connecting the passenger pin (`🧍‍♂️ You`) and the incoming bus (`🚍`).
+  * **Live Distance & Arrival HUD:** Displays real-time road distance (e.g. `2.4 km away from your stop`), arrival countdown, speed, and congestion delays.
+  * **Switch Bus / Exit Map Button:** Pinned top navigation button to return to Step 2 instantly without page reloading.
 
 ### 2. 👨‍✈️ Driver & Conductor Duty Portal
 * **Hardware-Free GPS Telemetry:** Uses native browser HTML5 Geolocation (`watchPosition`) with automated coastal corridor simulation fallback for desktop testing.
@@ -56,6 +58,7 @@ flowchart TD
   * `⚡ Vishal Express (Route 15: Statebank ➔ Surathkal)`
   * `⚡ Canara Pinto Deluxe (Route NH-66: Statebank ➔ Udupi)`
   * `🚌 Padmambika Local (Route 21: Statebank ➔ Kuloor)`
+  * `🚌 Coastal Star City (Route 15B: Surathkal ➔ Statebank)`
 * **Night Last Bus Flag:** Conductors can flag a bus as the last night service to alert commuters.
 * **Live Shift Telemetry:** Displays driver contact, vehicle registration number, active route corridor, and real-time streaming confirmation.
 
