@@ -950,6 +950,22 @@
   }
 }
 
+.bus-radar-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 58px;
+  height: 58px;
+  margin-top: -29px;
+  margin-left: -29px;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.25);
+  border: 2px solid #2563eb;
+  animation: radarWave 2s infinite ease-out;
+  pointer-events: none;
+  z-index: 0;
+}
+
 .marker-bus-emoji {
   font-size: 19px;
   line-height: 1;

@@ -316,9 +316,11 @@ function App() {
 
     const fullRoute = `${busData.origin} ➔ ${busData.destination}`
 
-    const broadcast = (lat, lng, speedVal) => {
+    const broadcast = (lat, lng, speedVal, headingVal = null) => {
       const speed = speedVal === null || speedVal === undefined ? 38 : Math.round(speedVal * 3.6)
       const delayMinutes = speed < 25 ? 4 : 0
+      const dist = calculateDistanceKm(passengerCoords[0], passengerCoords[1], lat, lng)
+      const dynamicEta = Math.max(1, Math.round((dist / (speed || 38)) * 60))
 
       socket.emit('update_location', {
         bus_id: busData.bus_id,
@@ -332,10 +334,11 @@ function App() {
         route_name: fullRoute,
         latitude: lat,
         longitude: lng,
+        heading: headingVal,
         speed,
         delay_minutes: delayMinutes,
-        eta_minutes: 3,
-        estimated_arrival: '1:15 PM',
+        eta_minutes: dynamicEta,
+        estimated_arrival: `${dynamicEta} Mins away`,
         crowd_status: busData.crowd_status,
         is_last_bus: busData.is_last_bus,
       })
@@ -344,26 +347,30 @@ function App() {
     if ('geolocation' in navigator) {
       watchId.current = navigator.geolocation.watchPosition(
         (position) => {
-          broadcast(position.coords.latitude, position.coords.longitude, position.coords.speed)
+          const { latitude, longitude, speed, heading, accuracy } = position.coords
+          // GPS Jitter filter: discard readings with poor accuracy (> 50m)
+          if (accuracy && accuracy > 50) return
+          broadcast(latitude, longitude, speed, heading)
         },
         () => {
-          // Automatic corridor waypoint simulation for laptops/desktops
+          // Automatic corridor waypoint simulation along NH-66 for laptops/desktops
           let step = 0
           const waypoints = [
-            [12.8718, 74.8430],
-            [12.8850, 74.8450],
-            [12.8970, 74.8480],
-            [12.8997, 74.8530],
-            [12.9271, 74.8415],
-            [12.9472, 74.7963],
+            [12.8718, 74.8430], // Statebank (Terminal)
+            [12.8850, 74.8450], // Hampankatta
+            [12.8970, 74.8480], // Lalbagh
+            [12.8997, 74.8530], // Nanthoor Jn
+            [12.9271, 74.8415], // Kuloor Bridge
+            [12.9350, 74.8210], // Baikampady
+            [12.9472, 74.7963], // Surathkal (Terminus)
           ]
           broadcast(waypoints[0][0], waypoints[0][1], 38)
           simTimer.current = setInterval(() => {
             step = (step + 1) % waypoints.length
             broadcast(waypoints[step][0], waypoints[step][1], 42)
-          }, 3500)
+          }, 3200)
         },
-        { enableHighAccuracy: true },
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 8000 },
       )
     } else {
       broadcast(12.8997, 74.8530, 38)

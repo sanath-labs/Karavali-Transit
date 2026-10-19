@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import { MapContainer, Marker, Popup, TileLayer, Polyline, CircleMarker, useMap } from 'react-leaflet'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
@@ -18,10 +18,27 @@ const corridorStops = [
   { name: 'Lalbagh', coords: [12.8970, 74.8480] },
   { name: 'Nanthoor Jn', coords: [12.8997, 74.8530] },
   { name: 'Kuloor Bridge', coords: [12.9271, 74.8415] },
+  { name: 'Baikampady Industrial', coords: [12.9350, 74.8210] },
   { name: 'Surathkal (Terminus)', coords: [12.9472, 74.7963] },
 ]
 
 const defaultRouteCoordinates = corridorStops.map((stop) => stop.coords)
+
+// Calculate geographic bearing (heading angle in degrees 0-360)
+function calculateBearing(lat1, lon1, lat2, lon2) {
+  const toRad = (deg) => (deg * Math.PI) / 180
+  const toDeg = (rad) => (rad * 180) / Math.PI
+  const phi1 = toRad(lat1)
+  const phi2 = toRad(lat2)
+  const deltaLambda = toRad(lon2 - lon1)
+
+  const y = Math.sin(deltaLambda) * Math.cos(phi2)
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda)
+  const theta = Math.atan2(y, x)
+  return (toDeg(theta) + 360) % 360
+}
 
 // Smoothly frame both Passenger & Tracked Bus in view (Zomato/Uber style)
 function MapTrackingFocuser({ passengerCoords, busCoords }) {
@@ -65,8 +82,8 @@ function getTrackingPath(passengerCoords, busCoords, stops = corridorStops) {
   return [passengerCoords, ...intermediate, busCoords]
 }
 
-// Custom Bus Marker Pin with Route Tag & Glow
-function createBusIcon(bus, isSelected) {
+// Custom Bus Marker Pin with Route Tag, Directional Rotation & Radar Halo
+function createBusIcon(bus, isSelected, heading = 0) {
   const isExpress = (bus.service_type || '').toLowerCase().includes('express')
   const pinClass = isSelected
     ? 'marker-pin-selected'
@@ -78,12 +95,13 @@ function createBusIcon(bus, isSelected) {
     className: 'custom-bus-marker-container',
     html: `
       <div class="custom-bus-marker ${pinClass}">
-        <span class="marker-bus-emoji">🚍</span>
+        ${isSelected ? '<div class="bus-radar-pulse"></div>' : ''}
+        <span class="marker-bus-emoji" style="display:inline-block; transform: rotate(${Math.round(heading)}deg); transition: transform 0.4s ease;">🚍</span>
         <span class="marker-route-badge">${bus.route_number || '15'}</span>
       </div>
     `,
-    iconSize: [42, 42],
-    iconAnchor: [21, 21],
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
     popupAnchor: [0, -22],
   })
 }
@@ -103,6 +121,150 @@ function createPassengerIcon() {
     iconAnchor: [23, 23],
     popupAnchor: [0, -25],
   })
+}
+
+// ZOMATO-STYLE SMOOTH GLIDING BUS MARKER WITH 60 FPS LERP INTERPOLATION
+function SmoothAnimatedBusMarker({ bus, isSelected, onSelectBus }) {
+  const markerRef = useRef(null)
+  const animFrameRef = useRef(null)
+  const prevCoordsRef = useRef([bus.latitude, bus.longitude])
+  const targetCoordsRef = useRef([bus.latitude, bus.longitude])
+  const startTimeRef = useRef(null)
+  const [heading, setHeading] = useState(bus.heading || 0)
+
+  const isExpress = (bus.service_type || '').toLowerCase().includes('express')
+
+  useEffect(() => {
+    const newTarget = [bus.latitude, bus.longitude]
+    const currentPrev = prevCoordsRef.current
+
+    // Skip if coordinates are effectively unchanged
+    if (
+      Math.abs(newTarget[0] - targetCoordsRef.current[0]) < 0.00001 &&
+      Math.abs(newTarget[1] - targetCoordsRef.current[1]) < 0.00001
+    ) {
+      return
+    }
+
+    // Compute bearing/direction of travel
+    if (
+      Math.abs(currentPrev[0] - newTarget[0]) > 0.00001 ||
+      Math.abs(currentPrev[1] - newTarget[1]) > 0.00001
+    ) {
+      const calculatedHeading = calculateBearing(
+        currentPrev[0],
+        currentPrev[1],
+        newTarget[0],
+        newTarget[1]
+      )
+      if (!isNaN(calculatedHeading)) {
+        setHeading(calculatedHeading)
+      }
+    }
+
+    targetCoordsRef.current = newTarget
+    startTimeRef.current = performance.now()
+    const startCoords = [currentPrev[0], currentPrev[1]]
+    const duration = 2400 // Smooth 2.4s glide transition between updates (Zomato-style LERP)
+
+    const animate = (now) => {
+      if (!markerRef.current) return
+      const elapsed = now - (startTimeRef.current || now)
+      const progress = Math.min(elapsed / duration, 1)
+
+      // Cubic ease-out interpolation for smooth natural motion
+      const easeProgress = 1 - Math.pow(1 - progress, 3)
+
+      const lat = startCoords[0] + (targetCoordsRef.current[0] - startCoords[0]) * easeProgress
+      const lng = startCoords[1] + (targetCoordsRef.current[1] - startCoords[1]) * easeProgress
+
+      prevCoordsRef.current = [lat, lng]
+      markerRef.current.setLatLng([lat, lng])
+
+      if (progress < 1) {
+        animFrameRef.current = requestAnimationFrame(animate)
+      }
+    }
+
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current)
+    }
+    animFrameRef.current = requestAnimationFrame(animate)
+
+    return () => {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current)
+      }
+    }
+  }, [bus.latitude, bus.longitude])
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={[bus.latitude, bus.longitude]}
+      icon={createBusIcon(bus, isSelected, heading)}
+      eventHandlers={{
+        click: () => onSelectBus?.(bus.bus_id),
+      }}
+    >
+      <Popup>
+        <div className="map-popup-card">
+          <div className="popup-header">
+            <div>
+              <strong className="popup-bus-title">{bus.bus_name}</strong>
+              <span className="popup-bus-route">
+                Route {bus.route_number || '15'} • {bus.route_name || 'Mangaluru Statebank ➔ Surathkal'}
+              </span>
+            </div>
+            <span className={`service-pill ${isExpress ? 'pill-express' : 'pill-city'}`}>
+              {isExpress ? '⚡ Express' : '🚌 City'}
+            </span>
+          </div>
+
+          <div className="popup-bus-details">
+            <div className="popup-stat-row">
+              <span>Expected Arrival:</span>
+              <strong className="stat-highlight">{bus.estimated_arrival || '1:15 PM'}</strong>
+            </div>
+            <div className="popup-stat-row">
+              <span>Stop ETA:</span>
+              <strong className="stat-eta">{bus.eta_minutes ?? 3} Mins away</strong>
+            </div>
+            <div className="popup-stat-row">
+              <span>Delay Status:</span>
+              <strong className={bus.delay_minutes > 0 ? 'stat-delay' : 'stat-ontime'}>
+                {bus.delay_minutes > 0 ? `+${bus.delay_minutes} Mins Late` : 'On Time'}
+              </strong>
+            </div>
+            <div className="popup-stat-row">
+              <span>Speed / Load:</span>
+              <strong>{bus.speed ?? 35} km/h • {bus.crowd_status || 'Seats Available'}</strong>
+            </div>
+            {bus.driver_phone && (
+              <div className="popup-driver-row">
+                <span>📞 Driver: {bus.driver_phone}</span>
+              </div>
+            )}
+            {bus.is_last_bus && (
+              <div className="popup-last-bus-banner">
+                🌙 LAST BUS OF THE NIGHT
+              </div>
+            )}
+          </div>
+
+          {!isSelected && onSelectBus && (
+            <button
+              type="button"
+              className="popup-track-btn"
+              onClick={() => onSelectBus(bus.bus_id)}
+            >
+              Track This Bus (Focus)
+            </button>
+          )}
+        </div>
+      </Popup>
+    </Marker>
+  )
 }
 
 function TransitMap({
@@ -218,79 +380,15 @@ function TransitMap({
         </Popup>
       </Marker>
 
-      {/* Buses: If a bus is selected, ONLY that bus is shown; otherwise all buses */}
-      {busesToRender.map((bus) => {
-        const isSelected = selectedBusId === bus.bus_id
-        const isExpress = (bus.service_type || '').toLowerCase().includes('express')
-
-        return (
-          <Marker
-            key={bus.bus_id}
-            position={[bus.latitude, bus.longitude]}
-            icon={createBusIcon(bus, isSelected)}
-            eventHandlers={{
-              click: () => onSelectBus?.(bus.bus_id),
-            }}
-          >
-            <Popup>
-              <div className="map-popup-card">
-                <div className="popup-header">
-                  <div>
-                    <strong className="popup-bus-title">{bus.bus_name}</strong>
-                    <span className="popup-bus-route">
-                      Route {bus.route_number || '15'} • {bus.route_name || 'Mangaluru Statebank ➔ Surathkal'}
-                    </span>
-                  </div>
-                  <span className={`service-pill ${isExpress ? 'pill-express' : 'pill-city'}`}>
-                    {isExpress ? '⚡ Express' : '🚌 City'}
-                  </span>
-                </div>
-
-                <div className="popup-bus-details">
-                  <div className="popup-stat-row">
-                    <span>Expected Arrival:</span>
-                    <strong className="stat-highlight">{bus.estimated_arrival || '1:15 PM'}</strong>
-                  </div>
-                  <div className="popup-stat-row">
-                    <span>Stop ETA:</span>
-                    <strong className="stat-eta">{bus.eta_minutes ?? 3} Mins away</strong>
-                  </div>
-                  <div className="popup-stat-row">
-                    <span>Delay Status:</span>
-                    <strong className={bus.delay_minutes > 0 ? 'stat-delay' : 'stat-ontime'}>
-                      {bus.delay_minutes > 0 ? `+${bus.delay_minutes} Mins Late` : 'On Time'}
-                    </strong>
-                  </div>
-                  <div className="popup-stat-row">
-                    <span>Speed / Load:</span>
-                    <strong>{bus.speed ?? 35} km/h • {bus.crowd_status || 'Seats Available'}</strong>
-                  </div>
-                  {bus.driver_phone && (
-                    <div className="popup-driver-row">
-                      <span>📞 Driver: {bus.driver_phone}</span>
-                    </div>
-                  )}
-                  {bus.is_last_bus && (
-                    <div className="popup-last-bus-banner">
-                      🌙 LAST BUS OF THE NIGHT
-                    </div>
-                  )}
-                </div>
-
-                {!isSelected && onSelectBus && (
-                  <button
-                    type="button"
-                    className="popup-track-btn"
-                    onClick={() => onSelectBus(bus.bus_id)}
-                  >
-                    Track This Bus (Focus)
-                  </button>
-                )}
-              </div>
-            </Popup>
-          </Marker>
-        )
-      })}
+      {/* Smoothly Animated Gliding Buses (Zomato-style LERP) */}
+      {busesToRender.map((bus) => (
+        <SmoothAnimatedBusMarker
+          key={bus.bus_id}
+          bus={bus}
+          isSelected={selectedBusId === bus.bus_id}
+          onSelectBus={onSelectBus}
+        />
+      ))}
     </MapContainer>
   )
 }
