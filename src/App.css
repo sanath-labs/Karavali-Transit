@@ -2208,6 +2208,487 @@
   padding: 6px;
 }
 
+/* ============================================================== */
+/* BMTC / KARNATAKA STATE TRANSIT PORTAL STYLES (START PAGE)     */
+/* ============================================================== */
+
+.bmtc-portal-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: #f8fafc;
+}
+
+/* 1. CRIMSON RED HERO BANNER */
+.bmtc-hero-banner {
+  position: relative;
+  background: linear-gradient(135deg, #701a2e 0%, #881337 40%, #9f1239 80%, #be123c 100%);
+  min-height: 430px;
+  padding: 24px 24px 90px 24px;
+  overflow: hidden;
+  box-shadow: inset 0 -15px 30px rgba(0, 0, 0, 0.2);
+}
+
+.bmtc-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1160px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 10;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.bmtc-brand-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.bmtc-govt-seal {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #ffffff;
+  padding: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #facc15;
+}
+
+.bmtc-govt-seal img,
+.bmtc-govt-seal svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.bmtc-seal-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #881337;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.bmtc-title-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.bmtc-kannada-headline {
+  font-size: clamp(22px, 3.5vw, 32px);
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bmtc-sub-headline {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fecdd3;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+.bmtc-bus-sketch-badge {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 12px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  backdrop-blur: 4px;
+}
+
+@media (min-width: 900px) {
+  .bmtc-bus-sketch-badge {
+    display: flex;
+  }
+}
+
+.bmtc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bmtc-helpline-pill {
+  background: #ffffff;
+  color: #881337;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 20px;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.bmtc-helpline-pill:hover {
+  background: #fff1f2;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+}
+
+.bmtc-lang-dropdown {
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 18px;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.bmtc-lang-dropdown:hover {
+  background: #f8fafc;
+  transform: translateY(-2px);
+}
+
+/* BIG WATERMARK TEXT */
+.bmtc-watermark-text {
+  position: absolute;
+  top: 48%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: clamp(60px, 15vw, 170px);
+  font-weight: 950;
+  color: rgba(255, 255, 255, 0.07);
+  letter-spacing: 0.1em;
+  user-select: none;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 1;
+  text-transform: uppercase;
+}
+
+/* CLOUDS & SKYLINE COLLAGE SILHOUETTE */
+.bmtc-cloud {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+.bmtc-cloud-1 {
+  width: 140px;
+  height: 40px;
+  top: 90px;
+  left: 8%;
+  opacity: 0.7;
+}
+
+.bmtc-cloud-2 {
+  width: 180px;
+  height: 48px;
+  top: 110px;
+  right: 10%;
+  opacity: 0.6;
+}
+
+.bmtc-skyline-collage {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0.35;
+}
+
+.bmtc-city-silhouette {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(0) invert(1);
+}
+
+.bmtc-bottom-bus-scenery {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 55px;
+  background: #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 30px;
+  z-index: 3;
+  border-top: 3px solid #facc15;
+}
+
+.bmtc-scenery-item {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 2. THE 8 ACTION CARDS GRID */
+.bmtc-cards-wrapper {
+  position: relative;
+  z-index: 20;
+  max-width: 1160px;
+  margin: -65px auto 40px auto;
+  padding: 0 20px;
+  width: 100%;
+}
+
+.bmtc-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1024px) {
+  .bmtc-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .bmtc-cards-wrapper {
+    margin-top: -45px;
+  }
+}
+
+@media (max-width: 540px) {
+  .bmtc-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+.bmtc-card {
+  background: #ffffff;
+  border-radius: 22px;
+  padding: 28px 18px 22px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1.5px solid #e2e8f0;
+  box-shadow: 0 10px 25px -4px rgba(15, 23, 42, 0.08), 0 6px 12px -4px rgba(15, 23, 42, 0.04);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  position: relative;
+  text-align: center;
+}
+
+.bmtc-card:hover {
+  transform: translateY(-6px);
+  border-color: #f43f5e;
+  box-shadow: 0 20px 30px -8px rgba(159, 18, 57, 0.16), 0 10px 16px -4px rgba(0, 0, 0, 0.08);
+}
+
+.bmtc-card:active {
+  transform: translateY(-2px);
+}
+
+.bmtc-icon-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.bmtc-card:hover .bmtc-icon-circle {
+  transform: scale(1.1);
+}
+
+/* SPECIFIC ICON PALETTES MATCHING THE REFERENCE IMAGE */
+.icon-journey {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.icon-trackbus {
+  background: #ffedd5;
+  color: #ea580c;
+}
+
+.icon-liveroute {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.icon-timetable {
+  background: #dcfce7;
+  color: #10b981;
+}
+
+.icon-facilities {
+  background: #ffe4e6;
+  color: #e11d48;
+}
+
+.icon-fare {
+  background: #fef3c7;
+  color: #ca8a04;
+}
+
+.icon-feedback {
+  background: #fef9c3;
+  color: #eab308;
+}
+
+.icon-userguide {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.bmtc-card-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.bmtc-card-kannada {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  margin-top: -6px;
+}
+
+/* 3. MODALS FOR BMTC PORTAL */
+.bmtc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.bmtc-modal-card {
+  background: #ffffff;
+  border-radius: 24px;
+  max-width: 620px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid #e2e8f0;
+  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes scaleUp {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.bmtc-modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+}
+
+.bmtc-modal-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.bmtc-modal-close {
+  background: #e2e8f0;
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.bmtc-modal-close:hover {
+  background: #cbd5e1;
+  color: #0f172a;
+}
+
+.bmtc-modal-body {
+  padding: 24px;
+}
+
+.portal-home-nav-btn {
+  background: #881337;
+  color: #ffffff;
+  border: none;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.portal-home-nav-btn:hover {
+  background: #9f1239;
+  transform: translateY(-1px);
+}
+
 .modal-cancel-btn:hover {
   color: #0f172a;
 }
