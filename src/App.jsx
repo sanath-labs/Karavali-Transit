@@ -176,6 +176,8 @@ function App() {
     crowd_status: 'Seats Available',
     is_last_bus: false,
   })
+  const [conductorPassengerCount, setConductorPassengerCount] = useState(24)
+  const latestGpsRef = useRef([12.8997, 74.8530, 38, null])
   const [gpsError, setGpsError] = useState('')
   const watchId = useRef(null)
   const simTimer = useRef(null)
@@ -321,6 +323,7 @@ function App() {
       const delayMinutes = speed < 25 ? 4 : 0
       const dist = calculateDistanceKm(passengerCoords[0], passengerCoords[1], lat, lng)
       const dynamicEta = Math.max(1, Math.round((dist / (speed || 38)) * 60))
+      latestGpsRef.current = [lat, lng, speed, headingVal]
 
       socket.emit('update_location', {
         bus_id: busData.bus_id,
@@ -390,6 +393,50 @@ function App() {
     }
     setGpsError('')
     setIsLoggedIn(false)
+  }
+
+  // Conductor: Real-time passenger crowd occupancy toggle
+  const handleUpdateCrowdStatus = (newStatus, newCount = conductorPassengerCount) => {
+    setBusData((prev) => ({ ...prev, crowd_status: newStatus }))
+    setConductorPassengerCount(newCount)
+
+    const [lat, lng, speed, headingVal] = latestGpsRef.current
+    const fullRoute = `${busData.origin} ➔ ${busData.destination}`
+    const dist = calculateDistanceKm(passengerCoords[0], passengerCoords[1], lat, lng)
+    const dynamicEta = Math.max(1, Math.round((dist / (speed || 38)) * 60))
+
+    socket.emit('update_location', {
+      bus_id: busData.bus_id,
+      driver_phone: busData.driver_phone,
+      vehicle_number: busData.vehicle_number,
+      bus_name: busData.bus_name,
+      service_type: busData.service_type,
+      route_number: busData.route_number,
+      origin: busData.origin,
+      destination: busData.destination,
+      route_name: fullRoute,
+      latitude: lat,
+      longitude: lng,
+      heading: headingVal,
+      speed,
+      delay_minutes: speed < 25 ? 4 : 0,
+      eta_minutes: dynamicEta,
+      estimated_arrival: `${dynamicEta} Mins away`,
+      crowd_status: newStatus,
+      passenger_count: newCount,
+      is_last_bus: busData.is_last_bus,
+    })
+  }
+
+  const handleAdjustPassengerCount = (delta) => {
+    const updated = Math.max(0, Math.min(55, conductorPassengerCount + delta))
+    let autoStatus = 'Seats Available'
+    if (updated >= 42) {
+      autoStatus = 'Overcrowded'
+    } else if (updated >= 28) {
+      autoStatus = 'Standing Allowed'
+    }
+    handleUpdateCrowdStatus(autoStatus, updated)
   }
 
   // Filter buses for Step 2 based on chosen route/destination
@@ -1152,6 +1199,91 @@ function App() {
                     <div>
                       <span className="text-[10px] uppercase font-extrabold text-slate-400 block">Database Sync</span>
                       <strong className="text-emerald-700 font-extrabold">💾 Logged in transit.db</strong>
+                    </div>
+                  </div>
+
+                  {/* REAL-TIME PASSENGER CROWD & OCCUPANCY CONTROLS */}
+                  <div className="conductor-crowd-card bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-3 text-left">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] uppercase font-extrabold text-slate-500">
+                        Live Passenger Occupancy
+                      </span>
+                      <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${
+                        busData.crowd_status === 'Seats Available'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : busData.crowd_status === 'Standing Allowed'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        {busData.crowd_status}
+                      </span>
+                    </div>
+
+                    {/* Quick Status Buttons */}
+                    <div className="grid grid-cols-3 gap-1.5 text-xs font-bold">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateCrowdStatus('Seats Available')}
+                        className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                          busData.crowd_status === 'Seats Available'
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        🟢 Seats Avail
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateCrowdStatus('Standing Allowed')}
+                        className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                          busData.crowd_status === 'Standing Allowed'
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        🟡 Standing
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateCrowdStatus('Overcrowded')}
+                        className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                          busData.crowd_status === 'Overcrowded'
+                            ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        🔴 Full
+                      </button>
+                    </div>
+
+                    {/* Passenger Boarding Counter */}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 block">
+                          Onboard: <strong>{conductorPassengerCount} / 42 Seats</strong>
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          {Math.round((conductorPassengerCount / 42) * 100)}% Capacity
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleAdjustPassengerCount(-1)}
+                          className="w-8 h-8 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 font-extrabold text-slate-700 flex items-center justify-center cursor-pointer shadow-sm"
+                          title="1 Passenger Alighted"
+                        >
+                          -1
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAdjustPassengerCount(1)}
+                          className="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 font-extrabold text-white flex items-center justify-center cursor-pointer shadow-sm"
+                          title="1 Passenger Boarded"
+                        >
+                          +1
+                        </button>
+                      </div>
                     </div>
                   </div>
 

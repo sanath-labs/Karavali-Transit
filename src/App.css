@@ -1802,6 +1802,12 @@
   color: #0f172a;
 }
 
+/* CONDUCTOR OCCUPANCY & ROAD ALERT CONTROLS */
+.conductor-crowd-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+
 /* ==========================================================================
    3-STEP PASSENGER JOURNEY & LOCATION PERMISSION MODAL
    ========================================================================== */
@@ -2211,4 +2217,10 @@
 .modal-cancel-btn:hover {
   color: #0f172a;
 }
+
+/* CONDUCTOR OCCUPANCY & ROAD ALERT CONTROLS */
+.conductor-crowd-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
 
