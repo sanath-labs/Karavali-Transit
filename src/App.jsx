@@ -10,6 +10,8 @@ import {
   Navigation,
   Radio,
   Search,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react'
 import io from 'socket.io-client'
@@ -143,6 +145,42 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
   return (R * c).toFixed(1)
 }
 
+// Native Web Audio chime for close bus proximity alert (< 1.2 km)
+function playArrivalChime() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextClass) return
+    const ctx = new AudioContextClass()
+    const now = ctx.currentTime
+
+    // Tone 1: 587.33 Hz (D5)
+    const osc1 = ctx.createOscillator()
+    const gain1 = ctx.createGain()
+    osc1.type = 'sine'
+    osc1.frequency.setValueAtTime(587.33, now)
+    gain1.gain.setValueAtTime(0.18, now)
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35)
+    osc1.connect(gain1)
+    gain1.connect(ctx.destination)
+    osc1.start(now)
+    osc1.stop(now + 0.35)
+
+    // Tone 2: 880 Hz (A5 - Harmonic fifth)
+    const osc2 = ctx.createOscillator()
+    const gain2 = ctx.createGain()
+    osc2.type = 'sine'
+    osc2.frequency.setValueAtTime(880, now + 0.18)
+    gain2.gain.setValueAtTime(0.2, now + 0.18)
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55)
+    osc2.connect(gain2)
+    gain2.connect(ctx.destination)
+    osc2.start(now + 0.18)
+    osc2.stop(now + 0.55)
+  } catch (err) {
+    console.debug('Web Audio chime policy:', err)
+  }
+}
+
 function App() {
   const [role, setRole] = useState('passenger') // 'passenger' | 'conductor'
 
@@ -151,6 +189,8 @@ function App() {
   // Step 2: Filtered Bus List Screen
   // Step 3: Live Tracking Map View
   const [passengerStep, setPassengerStep] = useState(1)
+  const [isAudioChimeEnabled, setIsAudioChimeEnabled] = useState(true)
+  const hasChimededForBusRef = useRef(null)
   const [selectedDestination, setSelectedDestination] = useState('Surathkal')
   const [searchQuery, setSearchQuery] = useState('')
   const [serviceTypeFilter, setServiceTypeFilter] = useState('All') // 'All' | 'Express' | 'City'
@@ -553,6 +593,19 @@ function App() {
     ? [trackedBus.latitude, trackedBus.longitude]
     : [12.9100, 74.8300]
 
+  // Proximity sound chime trigger when tracked bus is within 1.2 km of passenger stop
+  useEffect(() => {
+    if (passengerStep === 3 && trackedBus && distanceToPassenger !== null) {
+      const dist = Number(distanceToPassenger)
+      if (dist <= 1.2 && hasChimededForBusRef.current !== trackedBus.bus_id) {
+        hasChimededForBusRef.current = trackedBus.bus_id
+        if (isAudioChimeEnabled) {
+          playArrivalChime()
+        }
+      }
+    }
+  }, [passengerStep, trackedBus, distanceToPassenger, isAudioChimeEnabled])
+
   return (
     <main className="transit-app min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
       {/* 1. TOP OFFICIAL GOVERNMENT MICRO-HEADER */}
@@ -916,7 +969,10 @@ function App() {
                     {/* CRITICAL FEATURE: "SWITCH BUS / EXIT MAP" BUTTON */}
                     <button
                       type="button"
-                      onClick={() => setPassengerStep(2)}
+                      onClick={() => {
+                        hasChimededForBusRef.current = null
+                        setPassengerStep(2)
+                      }}
                       className="switch-bus-btn bg-slate-900 hover:bg-blue-600 text-white text-xs font-extrabold px-4 py-2 rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer"
                       title="Return to Step 2 Bus List"
                     >
@@ -942,7 +998,20 @@ function App() {
                   </div>
 
                   {/* Live Quick Metrics in Header */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsAudioChimeEnabled((prev) => !prev)}
+                      title={isAudioChimeEnabled ? 'Arrival proximity chime is active' : 'Arrival proximity chime is muted'}
+                      className={`px-2.5 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all ${
+                        isAudioChimeEnabled
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                          : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {isAudioChimeEnabled ? <Volume2 size={14} className="text-emerald-700" /> : <VolumeX size={14} className="text-slate-400" />}
+                      <span className="hidden sm:inline">{isAudioChimeEnabled ? 'Chime Active' : 'Muted'}</span>
+                    </button>
                     <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
                       ETA: {trackedBus.eta_minutes ?? 3} Mins
                     </span>
@@ -953,47 +1022,70 @@ function App() {
                 </div>
 
                 {/* FLOATING HUD ON MAP */}
-                <div className="floating-hud absolute top-16 left-4 right-4 z-20 bg-white/95 backdrop-blur-md border border-blue-200 rounded-2xl p-4 shadow-lg flex items-center justify-between gap-4 flex-wrap">
-                  <div className="hud-left flex items-center gap-3">
-                    <span className="pulsing-green-dot w-3 h-3 rounded-full bg-emerald-500 shadow animate-ping" />
-                    <div>
-                      <div className="hud-bus-header flex items-center gap-2">
-                        <strong className="hud-bus-name text-base font-extrabold text-slate-900">
-                          {trackedBus.bus_name}
-                        </strong>
-                        <span className="route-tag bg-slate-900 text-white text-[10px] font-extrabold px-2 py-0.5 rounded">
-                          Route #{trackedBus.route_number}
-                        </span>
-                        <span className="service-badge text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                          {trackedBus.service_type}
+                <div className="floating-hud absolute top-16 left-4 right-4 z-20 bg-white/95 backdrop-blur-md border border-blue-200 rounded-2xl p-4 shadow-lg flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="hud-left flex items-center gap-3">
+                      <span className="pulsing-green-dot w-3 h-3 rounded-full bg-emerald-500 shadow animate-ping" />
+                      <div>
+                        <div className="hud-bus-header flex items-center gap-2">
+                          <strong className="hud-bus-name text-base font-extrabold text-slate-900">
+                            {trackedBus.bus_name}
+                          </strong>
+                          <span className="route-tag bg-slate-900 text-white text-[10px] font-extrabold px-2 py-0.5 rounded">
+                            Route #{trackedBus.route_number}
+                          </span>
+                          <span className="service-badge text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                            {trackedBus.service_type}
+                          </span>
+                        </div>
+                        <span className="hud-bus-route text-xs text-slate-600 block mt-0.5">
+                          {trackedBus.route_name} • <strong>{distanceToPassenger} km to your stop</strong>
                         </span>
                       </div>
-                      <span className="hud-bus-route text-xs text-slate-600 block mt-0.5">
-                        {trackedBus.route_name} • <strong>{distanceToPassenger} km to your stop</strong>
-                      </span>
+                    </div>
+
+                    <div className="hud-stats flex items-center gap-4 text-xs">
+                      <div className="hud-stat flex flex-col">
+                        <span className="text-slate-400 uppercase text-[9px] font-extrabold">Distance</span>
+                        <strong className="text-blue-700 text-sm font-extrabold">{distanceToPassenger} km</strong>
+                      </div>
+                      <div className="hud-stat flex flex-col">
+                        <span className="text-slate-400 uppercase text-[9px] font-extrabold">Next Arrival</span>
+                        <strong className="text-slate-900 text-sm font-extrabold">{trackedBus.eta_minutes ?? 3} Mins ({trackedBus.estimated_arrival || '1:15 PM'})</strong>
+                      </div>
+                      <div className="hud-stat flex flex-col">
+                        <span className="text-slate-400 uppercase text-[9px] font-extrabold">Speed</span>
+                        <strong className="text-slate-900 text-sm font-bold">{trackedBus.speed ?? 38} km/h</strong>
+                      </div>
+                      <div className="hud-stat flex flex-col">
+                        <span className="text-slate-400 uppercase text-[9px] font-extrabold">Status</span>
+                        <strong className={`text-sm font-bold ${trackedBus.delay_minutes > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                          {trackedBus.delay_minutes > 0 ? `+${trackedBus.delay_minutes}m Delay` : 'On Time'}
+                        </strong>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="hud-stats flex items-center gap-4 text-xs">
-                    <div className="hud-stat flex flex-col">
-                      <span className="text-slate-400 uppercase text-[9px] font-extrabold">Distance</span>
-                      <strong className="text-blue-700 text-sm font-extrabold">{distanceToPassenger} km</strong>
+                  {/* PROXIMITY ARRIVAL ALERT BANNER (WITHIN 1.2 KM) */}
+                  {distanceToPassenger !== null && Number(distanceToPassenger) <= 1.2 && (
+                    <div className="w-full pt-2 border-t border-emerald-100 flex items-center justify-between gap-3 text-xs bg-emerald-50 text-emerald-900 rounded-xl px-3 py-2 animate-pulse">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping" />
+                        <strong className="font-extrabold">
+                          Bus Approaching Your Stop ({distanceToPassenger} km) — Prepare to board!
+                        </strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsAudioChimeEnabled((prev) => !prev)}
+                        title={isAudioChimeEnabled ? 'Mute arrival chime' : 'Unmute arrival chime'}
+                        className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center gap-1 transition-all"
+                      >
+                        {isAudioChimeEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+                        <span>{isAudioChimeEnabled ? 'Chimed' : 'Muted'}</span>
+                      </button>
                     </div>
-                    <div className="hud-stat flex flex-col">
-                      <span className="text-slate-400 uppercase text-[9px] font-extrabold">Next Arrival</span>
-                      <strong className="text-slate-900 text-sm font-extrabold">{trackedBus.eta_minutes ?? 3} Mins ({trackedBus.estimated_arrival || '1:15 PM'})</strong>
-                    </div>
-                    <div className="hud-stat flex flex-col">
-                      <span className="text-slate-400 uppercase text-[9px] font-extrabold">Speed</span>
-                      <strong className="text-slate-900 text-sm font-bold">{trackedBus.speed ?? 38} km/h</strong>
-                    </div>
-                    <div className="hud-stat flex flex-col">
-                      <span className="text-slate-400 uppercase text-[9px] font-extrabold">Status</span>
-                      <strong className={`text-sm font-bold ${trackedBus.delay_minutes > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
-                        {trackedBus.delay_minutes > 0 ? `+${trackedBus.delay_minutes}m Delay` : 'On Time'}
-                      </strong>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* LEAFLET MAP VIEW */}
