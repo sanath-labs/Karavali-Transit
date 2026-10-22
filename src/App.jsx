@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Bus,
+  CheckCircle2,
   Compass,
   MapPin,
   Navigation,
@@ -177,6 +178,7 @@ function App() {
     is_last_bus: false,
   })
   const [conductorPassengerCount, setConductorPassengerCount] = useState(24)
+  const [broadcastNotice, setBroadcastNotice] = useState('')
   const latestGpsRef = useRef([12.8997, 74.8530, 38, null])
   const [gpsError, setGpsError] = useState('')
   const watchId = useRef(null)
@@ -437,6 +439,19 @@ function App() {
       autoStatus = 'Standing Allowed'
     }
     handleUpdateCrowdStatus(autoStatus, updated)
+  }
+
+  // Conductor: Broadcast road incident & weather alerts
+  const handleBroadcastRoadAlert = (situationText) => {
+    const alertData = {
+      id: Date.now(),
+      message: `📢 [${busData.bus_name} • KA-19]: ${situationText}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    }
+    socket.emit('send_alert', alertData)
+    setAlerts((prev) => [alertData, ...prev])
+    setBroadcastNotice(`Broadcasted to all commuters: "${situationText}"`)
+    setTimeout(() => setBroadcastNotice(''), 4500)
   }
 
   // Filter buses for Step 2 based on chosen route/destination
@@ -1285,6 +1300,61 @@ function App() {
                         </button>
                       </div>
                     </div>
+                  </div>
+
+                  {/* REAL-TIME CORRIDOR INCIDENT & ROAD ALERT BROADCASTER */}
+                  <div className="conductor-alert-card bg-amber-50/70 p-4 rounded-xl border border-amber-200 flex flex-col gap-2.5 text-left">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] uppercase font-extrabold text-amber-900 flex items-center gap-1.5">
+                        <AlertTriangle size={14} className="text-amber-600" />
+                        Corridor Incident &amp; Delay Broadcaster
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                        Live Push
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-amber-800 m-0">
+                      Tap a situation preset below to broadcast an instant road alert to all commuters along NH-66:
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-1.5 text-xs font-bold">
+                      <button
+                        type="button"
+                        onClick={() => handleBroadcastRoadAlert('Heavy traffic delay at Nanthoor Junction (+6m delay)')}
+                        className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
+                      >
+                        ⚠️ Nanthoor Jam
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBroadcastRoadAlert('Heavy monsoon rain slowdown near Kuloor Bridge')}
+                        className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
+                      >
+                        🌧️ Kuloor Rain
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBroadcastRoadAlert('Road resurfacing work near Baikampady. Normal speed resumed shortly')}
+                        className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
+                      >
+                        🚧 Baikampady Work
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBroadcastRoadAlert('Final night service of the day. Connects all stops to Surathkal')}
+                        className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
+                      >
+                        🌙 Night Last Bus
+                      </button>
+                    </div>
+
+                    {broadcastNotice && (
+                      <div className="p-2 bg-emerald-100 border border-emerald-300 rounded-lg text-emerald-900 text-xs font-bold flex items-center gap-1.5 animate-pulse">
+                        <CheckCircle2 size={14} className="text-emerald-700 shrink-0" />
+                        <span>{broadcastNotice}</span>
+                      </div>
+                    )}
                   </div>
 
                   <button

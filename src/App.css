@@ -1803,9 +1803,11 @@
 }
 
 /* CONDUCTOR OCCUPANCY & ROAD ALERT CONTROLS */
-.conductor-crowd-card {
+.conductor-crowd-card,
+.conductor-alert-card {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
+
 
 
 /* ==========================================================================
@@ -2219,8 +2221,10 @@
 }
 
 /* CONDUCTOR OCCUPANCY & ROAD ALERT CONTROLS */
-.conductor-crowd-card {
+.conductor-crowd-card,
+.conductor-alert-card {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
+
 
 
