@@ -19,6 +19,17 @@ const TransitMap = lazy(() => import('./TransitMap.jsx'))
 
 const socket = io('http://localhost:5000')
 
+// NH-66 Coastal Highway key stops for corridor timeline progress
+const corridorStopsList = [
+  { name: 'Statebank', lat: 12.8718, lng: 74.8430 },
+  { name: 'Hampankatta', lat: 12.8850, lng: 74.8450 },
+  { name: 'Lalbagh', lat: 12.8970, lng: 74.8480 },
+  { name: 'Nanthoor', lat: 12.8997, lng: 74.8530 },
+  { name: 'Kuloor', lat: 12.9271, lng: 74.8415 },
+  { name: 'Baikampady', lat: 12.9350, lng: 74.8210 },
+  { name: 'Surathkal', lat: 12.9472, lng: 74.7963 },
+]
+
 // Preloaded realistic coastal buses for instant demo & evaluation
 const defaultBuses = {
   1: {
@@ -997,6 +1008,48 @@ function App() {
                       passengerStopName={passengerLocationName}
                     />
                   </Suspense>
+
+                  {/* DOCKED STOP-BY-STOP CORRIDOR PROGRESSION STEPPER */}
+                  <div className="corridor-stepper-dock absolute bottom-3 left-4 right-4 z-20 bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl p-3 shadow-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-extrabold uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                        <Bus size={14} className="text-blue-600" />
+                        NH-66 Highway Route Progress: {trackedBus.bus_name}
+                      </span>
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full">
+                        Corridor Stepper
+                      </span>
+                    </div>
+
+                    <div className="corridor-stepper-track flex items-center justify-between gap-1 overflow-x-auto py-1">
+                      {corridorStopsList.map((stop, index) => {
+                        const isSouthbound = trackedBus.route_name?.toLowerCase().includes('statebank') && !trackedBus.route_name?.toLowerCase().startsWith('mangaluru')
+                        const isPassed = isSouthbound
+                          ? trackedBus.latitude < stop.lat - 0.003
+                          : trackedBus.latitude > stop.lat + 0.003
+                        const isCurrent = Math.abs(trackedBus.latitude - stop.lat) <= 0.005
+
+                        return (
+                          <div key={stop.name} className="stepper-node flex flex-col items-center flex-1 min-w-[70px] text-center">
+                            <div className={`stepper-node-dot w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold border-2 transition-all ${
+                              isCurrent
+                                ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-4 ring-blue-100 animate-pulse'
+                                : isPassed
+                                  ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm'
+                                  : 'bg-slate-100 text-slate-400 border-slate-200'
+                            }`}>
+                              {isCurrent ? '🚍' : isPassed ? '✓' : index + 1}
+                            </div>
+                            <span className={`text-[10px] mt-1 font-bold truncate max-w-[80px] ${
+                              isCurrent ? 'text-blue-700 font-extrabold' : isPassed ? 'text-emerald-700' : 'text-slate-500'
+                            }`}>
+                              {stop.name}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

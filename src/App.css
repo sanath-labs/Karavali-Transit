@@ -1808,6 +1808,21 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
+/* DOCKED CORRIDOR STEPPER ON LIVE TRACKING MAP */
+.corridor-stepper-dock {
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.05);
+}
+
+.corridor-stepper-track::-webkit-scrollbar {
+  height: 4px;
+}
+
+.corridor-stepper-track::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+
 
 
 /* ==========================================================================
@@ -2225,6 +2240,21 @@
 .conductor-alert-card {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
+
+/* DOCKED CORRIDOR STEPPER ON LIVE TRACKING MAP */
+.corridor-stepper-dock {
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.05);
+}
+
+.corridor-stepper-track::-webkit-scrollbar {
+  height: 4px;
+}
+
+.corridor-stepper-track::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
 
 
 
