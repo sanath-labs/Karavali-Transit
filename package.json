@@ -11,7 +11,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node tests/smoke.test.js",
+    "test": "node --test tests/*.test.js",
     "simulate": "node scripts/simulate-bus.js",
     "check": "node scripts/health-check.js"
   },

@@ -96,6 +96,8 @@ stateDiagram-v2
 - **Passenger Pin (`🧍‍♂️ You`)**: High-contrast marker with an animated green radar wave ring showing the passenger's boarding location.
 - **Animated Royal Blue Route Polyline**: Royal blue navigation line (`#1d4ed8`) with moving dashes directly connecting the passenger pin to the approaching bus.
 - **Floating Telemetry HUD**: Displays real-time road distance (e.g. `2.4 km away from your stop`), stop arrival countdown, and vehicle speed.
+- **Native Web Audio Proximity Chime**: Automatically plays an alert chime (harmonic dual-tone `587 Hz` ➔ `880 Hz`) when the tracked bus enters the `< 1.2 km` radius of the passenger's stop, accompanied by an animated boarding banner with quick mute/unmute toggles.
+- **Docked Stop-by-Stop Corridor Progression**: Visual timeline stepper tracking 7 major NH-66 coastal highway nodes (`Statebank ➔ Hampankatta ➔ Lalbagh ➔ Nanthoor ➔ Kuloor ➔ Baikampady ➔ Surathkal`) with real-time passed (`✓`), approaching (`🚍`), and upcoming states.
 - **"← Switch Bus / Exit Map" Button**: Pinned navigation button that returns the commuter back to Step 2 to select another bus instantly without page reloading.
 
 ---
@@ -103,6 +105,8 @@ stateDiagram-v2
 ## 👨‍✈️ Driver & Conductor Duty Portal
 
 - **Hardware-Free GPS Streaming**: Built on native browser HTML5 Geolocation (`navigator.geolocation.watchPosition`).
+- **Real-Time Passenger Load Counter**: Dynamic passenger count stepper (`-1` / `+1`) with automatic capacity percentage calculation and one-tap occupancy toggles (`🟢 Seats Available`, `🟡 Standing Allowed`, `🔴 Full / Overcrowded`).
+- **Road Incident & Delay Broadcaster**: Instant corridor incident broadcast panel with 1-tap presets (e.g., Nanthoor traffic choke, Kuloor monsoon waterlogging, Baikampady road work, Night Last Bus advisory) that streams alerts live to passenger tickers via WebSockets.
 - **Corridor Simulation Fallback**: Automatically activates a smooth, realistic 6-waypoint simulation along NH-66 for desktop/laptop evaluation.
 - **1-Click Duty Presets**: Instant prefilled profiles for quick demonstrations:
   - `⚡ Vishal Express (Route 15: Mangaluru Statebank ➔ Surathkal)`
