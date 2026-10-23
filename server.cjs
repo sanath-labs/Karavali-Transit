@@ -100,12 +100,25 @@ io.on('connection', (socket) => {
   socket.emit('sync_buses', activeBuses);
   socket.emit('initial_buses', Object.values(activeBuses));
 
-  // Conductor broadcasts GPS telemetry
+  // Conductor broadcasts GPS telemetry (Zomato-style in-memory relay)
   socket.on('update_location', (data) => {
-    activeBuses[data.bus_id] = data;
-    // Broadcast instantly to all connected passengers
-    io.emit('live_location_broadcast', data);
-    io.emit('bus_location_update', data);
+    // Step 4: Speed Validation Check — Ignore unrealistic bus teleportation spikes
+    if (data.speed && data.speed > 100) {
+      console.warn(`[GPS Spike Rejected] Bus #${data.bus_id} reported impossible speed: ${data.speed} km/h`);
+      return;
+    }
+
+    const payload = {
+      ...(activeBuses[data.bus_id] || {}),
+      ...data,
+      timestamp: data.timestamp || Date.now()
+    };
+
+    activeBuses[data.bus_id] = payload;
+
+    // Instantly broadcast to all connected passengers in milliseconds (Zomato-style push)
+    io.emit('live_location_broadcast', payload);
+    io.emit('bus_location_update', payload);
   });
 
   // Emergency / Traffic delay notifications

@@ -132,10 +132,22 @@ function SmoothAnimatedBusMarker({ bus, isSelected, onSelectBus }) {
   const startTimeRef = useRef(null)
   const [heading, setHeading] = useState(bus.heading || 0)
 
-  const isExpress = (bus.service_type || '').toLowerCase().includes('express')
+  const isExpress = (bus?.service_type || '').toLowerCase().includes('express')
+  const busLat = bus?.latitude
+  const busLng = bus?.longitude
 
   useEffect(() => {
-    const newTarget = [bus.latitude, bus.longitude]
+    // Step 4: Handle GPS Glitches & Tunnel Drops — validate numeric coordinates
+    if (
+      typeof busLat !== 'number' ||
+      typeof busLng !== 'number' ||
+      isNaN(busLat) ||
+      isNaN(busLng)
+    ) {
+      return
+    }
+
+    const newTarget = [busLat, busLng]
     const currentPrev = prevCoordsRef.current
 
     // Skip if coordinates are effectively unchanged
@@ -144,6 +156,16 @@ function SmoothAnimatedBusMarker({ bus, isSelected, onSelectBus }) {
       Math.abs(newTarget[1] - targetCoordsRef.current[1]) < 0.00001
     ) {
       return
+    }
+
+    // Step 4: Ignore unrealistic satellite jump spikes (> 0.08 deg in a single update)
+    if (currentPrev && currentPrev[0] !== 0) {
+      const latDiff = Math.abs(newTarget[0] - currentPrev[0])
+      const lngDiff = Math.abs(newTarget[1] - currentPrev[1])
+      if (latDiff > 0.08 || lngDiff > 0.08) {
+        console.warn('GPS Teleportation jump spike discarded by map renderer')
+        return
+      }
     }
 
     // Compute bearing/direction of travel
@@ -196,7 +218,17 @@ function SmoothAnimatedBusMarker({ bus, isSelected, onSelectBus }) {
         cancelAnimationFrame(animFrameRef.current)
       }
     }
-  }, [bus.latitude, bus.longitude])
+  }, [busLat, busLng])
+
+  if (
+    !bus ||
+    typeof bus.latitude !== 'number' ||
+    typeof bus.longitude !== 'number' ||
+    isNaN(bus.latitude) ||
+    isNaN(bus.longitude)
+  ) {
+    return null
+  }
 
   return (
     <Marker

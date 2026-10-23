@@ -106,3 +106,4 @@ test('Proximity arrival chime threshold triggers within 1.2 km', () => {
   assert.equal(shouldTriggerChime(1.2), true, '1.2 km boundary should trigger arrival chime')
   assert.equal(shouldTriggerChime(1.5), false, '1.5 km is too far for arrival chime')
 })
+

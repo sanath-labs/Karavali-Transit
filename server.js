@@ -51,16 +51,23 @@ const io = new Server(server, {
   cors: { origin: '*' },
 })
 
+// Store live bus telemetry in memory (Zomato-style instant relay cache)
+const activeBuses = {}
+
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id)
 
   // Send current live buses immediately to newly connected passengers
-  getBuses().then((buses) => {
-    const busMap = {}
-    buses.forEach((b) => { busMap[b.bus_id] = b })
-    socket.emit('sync_buses', busMap)
-    socket.emit('initial_buses', buses)
-  }).catch((err) => console.error('Failed to sync buses:', err))
+  if (Object.keys(activeBuses).length > 0) {
+    socket.emit('sync_buses', activeBuses)
+    socket.emit('initial_buses', Object.values(activeBuses))
+  } else {
+    getBuses().then((buses) => {
+      buses.forEach((b) => { activeBuses[b.bus_id] = b })
+      socket.emit('sync_buses', activeBuses)
+      socket.emit('initial_buses', buses)
+    }).catch((err) => console.error('Failed to sync buses:', err))
+  }
 
   socket.on('start_shift', async (data) => {
     console.log('Driver Shift Started:', data)
@@ -69,12 +76,29 @@ io.on('connection', (socket) => {
   })
 
   socket.on('update_location', async (data) => {
-    console.log('GPS Update received:', data)
-    // 1. Broadcast real-time location to all connected passengers
-    io.emit('live_location_broadcast', data)
-    io.emit('bus_location_update', data)
-    // 2. Persist location log into SQL database table
-    await recordTelemetry(data)
+    // Step 4: Speed Validation Check — Ignore unrealistic bus teleportation spikes
+    if (data.speed && data.speed > 100) {
+      console.warn(`[GPS Spike Rejected] Bus #${data.bus_id} reported impossible speed: ${data.speed} km/h`)
+      return
+    }
+
+    const payload = {
+      ...(activeBuses[data.bus_id] || {}),
+      ...data,
+      timestamp: data.timestamp || Date.now(),
+    }
+    activeBuses[data.bus_id] = payload
+
+    // 1. Instantly broadcast to all connected passengers in milliseconds (Zomato-style push)
+    io.emit('live_location_broadcast', payload)
+    io.emit('bus_location_update', payload)
+
+    // 2. Asynchronously persist location log into SQL database table
+    try {
+      await recordTelemetry(payload)
+    } catch (err) {
+      console.error('Database telemetry logging error:', err)
+    }
   })
 
   // Emergency / Traffic delay notifications

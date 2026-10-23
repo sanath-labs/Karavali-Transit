@@ -234,6 +234,15 @@ function App() {
   const [gpsError, setGpsError] = useState('')
   const watchId = useRef(null)
   const simTimer = useRef(null)
+  const lastEmitTimeRef = useRef(0)
+  const lastSentCoordsRef = useRef(null)
+  const [currentTime, setCurrentTime] = useState(() => Date.now())
+
+  // Periodic heartbeat timer for telemetry freshness checks
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(Date.now()), 5000)
+    return () => clearInterval(timer)
+  }, [])
 
   const phoneInputId = useId()
   const vehicleInputId = useId()
@@ -262,16 +271,28 @@ function App() {
     return () => clearInterval(interval)
   }, [alerts.length])
 
-  // Listen for real-time WebSocket GPS coordinates
+  // Listen for real-time WebSocket GPS coordinates (Zomato-style smooth sync)
   useEffect(() => {
     const handleLocationBroadcast = (data) => {
-      setLiveBuses((prev) => ({
-        ...prev,
-        [data.bus_id]: {
-          ...(prev[data.bus_id] || {}),
-          ...data,
-        },
-      }))
+      // Step 4: Speed Validation Check — Ignore unrealistic bus teleportation spikes
+      if (data.speed && data.speed > 100) {
+        console.warn('Ignoring unrealistic bus teleportation spike:', data.speed)
+        return
+      }
+
+      setLiveBuses((prev) => {
+        const existing = prev[data.bus_id] || {}
+        return {
+          ...prev,
+          [data.bus_id]: {
+            ...existing,
+            ...data,
+            // Fallback: If coordinates drop or glitch, preserve last known position
+            latitude: typeof data.latitude === 'number' && !isNaN(data.latitude) ? data.latitude : existing.latitude,
+            longitude: typeof data.longitude === 'number' && !isNaN(data.longitude) ? data.longitude : existing.longitude,
+          },
+        }
+      })
     }
 
     const handleEmergencyAlert = (alert) => {
@@ -364,7 +385,7 @@ function App() {
     }
   }
 
-  // Conductor: Start duty & stream coordinates
+  // Conductor: Start duty & stream coordinates (Zomato-style Smart GPS Throttling)
   const handleStartShift = (event) => {
     event.preventDefault()
     setGpsError('')
@@ -372,10 +393,30 @@ function App() {
     const fullRoute = `${busData.origin} ➔ ${busData.destination}`
 
     const broadcast = (lat, lng, speedVal, headingVal = null) => {
-      const speed = speedVal === null || speedVal === undefined ? 38 : Math.round(speedVal * 3.6)
+      // Step 1: Speed conversion (m/s to km/h)
+      const speed = speedVal === null || speedVal === undefined ? 35 : Math.round(speedVal * 3.6)
+
+      // Step 4: Speed Validation Check — Ignore unrealistic bus teleportation spikes
+      if (speed > 100) {
+        console.warn(`[GPS Jitter Filter] Ignored impossible speed spike: ${speed} km/h`)
+        return
+      }
+
+      // Step 1: Smart GPS Throttling — Don't spam WebSocket if stationary or within 2.5s
+      const now = Date.now()
+      if (lastSentCoordsRef.current) {
+        const [prevLat, prevLng] = lastSentCoordsRef.current
+        const deltaKm = calculateDistanceKm(prevLat, prevLng, lat, lng)
+        if (deltaKm < 0.01 && now - lastEmitTimeRef.current < 2500) {
+          return
+        }
+      }
+      lastEmitTimeRef.current = now
+      lastSentCoordsRef.current = [lat, lng]
+
       const delayMinutes = speed < 25 ? 4 : 0
       const dist = calculateDistanceKm(passengerCoords[0], passengerCoords[1], lat, lng)
-      const dynamicEta = Math.max(1, Math.round((dist / (speed || 38)) * 60))
+      const dynamicEta = Math.max(1, Math.round((dist / (speed || 35)) * 60))
       latestGpsRef.current = [lat, lng, speed, headingVal]
 
       socket.emit('update_location', {
@@ -397,6 +438,7 @@ function App() {
         estimated_arrival: `${dynamicEta} Mins away`,
         crowd_status: busData.crowd_status,
         is_last_bus: busData.is_last_bus,
+        timestamp: Date.now(),
       })
     }
 
@@ -408,28 +450,35 @@ function App() {
           if (accuracy && accuracy > 50) return
           broadcast(latitude, longitude, speed, heading)
         },
-        () => {
-          // Automatic corridor waypoint simulation along NH-66 for laptops/desktops
-          let step = 0
-          const waypoints = [
-            [12.8718, 74.8430], // Statebank (Terminal)
-            [12.8850, 74.8450], // Hampankatta
-            [12.8970, 74.8480], // Lalbagh
-            [12.8997, 74.8530], // Nanthoor Jn
-            [12.9271, 74.8415], // Kuloor Bridge
-            [12.9350, 74.8210], // Baikampady
-            [12.9472, 74.7963], // Surathkal (Terminus)
-          ]
-          broadcast(waypoints[0][0], waypoints[0][1], 38)
-          simTimer.current = setInterval(() => {
-            step = (step + 1) % waypoints.length
-            broadcast(waypoints[step][0], waypoints[step][1], 42)
-          }, 3200)
+        (error) => {
+          console.error('GPS Error / Weak Signal:', error)
+          // Step 4: Last Known Position Fallback & NH-66 Corridor Simulation for desktops
+          if (!simTimer.current) {
+            let step = 0
+            const waypoints = [
+              [12.8718, 74.8430], // Statebank (Terminal)
+              [12.8850, 74.8450], // Hampankatta
+              [12.8970, 74.8480], // Lalbagh
+              [12.8997, 74.8530], // Nanthoor Jn
+              [12.9271, 74.8415], // Kuloor Bridge
+              [12.9350, 74.8210], // Baikampady
+              [12.9472, 74.7963], // Surathkal (Terminus)
+            ]
+            broadcast(waypoints[0][0], waypoints[0][1], 35)
+            simTimer.current = setInterval(() => {
+              step = (step + 1) % waypoints.length
+              broadcast(waypoints[step][0], waypoints[step][1], 38)
+            }, 3000)
+          }
         },
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 8000 },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 3000, // Accept cached positions up to 3 seconds old
+          timeout: 5000,
+        },
       )
     } else {
-      broadcast(12.8997, 74.8530, 38)
+      broadcast(12.8997, 74.8530, 35)
     }
 
     setIsLoggedIn(true)
@@ -444,6 +493,8 @@ function App() {
       clearInterval(simTimer.current)
       simTimer.current = null
     }
+    lastSentCoordsRef.current = null
+    lastEmitTimeRef.current = 0
     setGpsError('')
     setIsLoggedIn(false)
   }
@@ -986,8 +1037,14 @@ function App() {
                           Tracking: {trackedBus.bus_name} (Route #{trackedBus.route_number})
                         </strong>
                         {isGpsActive && (
-                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                            🛰️ Live GPS Active
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                            trackedBus.timestamp && (currentTime - trackedBus.timestamp > 15000)
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {trackedBus.timestamp && (currentTime - trackedBus.timestamp > 15000)
+                              ? '📍 Last Known Position (Holding)'
+                              : '🛰️ Live GPS Active'}
                           </span>
                         )}
                       </div>
