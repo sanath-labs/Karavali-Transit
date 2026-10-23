@@ -142,3 +142,4 @@ test('Step 3 & 4: Passenger state sync updates position and safely holds last kn
   assert.equal(fallbackBuses[1].latitude, 12.9271, 'Must hold last known coordinate during tunnel drop without crashing')
   assert.equal(fallbackBuses[1].speed, 20)
 })
+

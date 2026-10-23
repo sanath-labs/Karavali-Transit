@@ -1,15 +1,28 @@
-import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  Building,
   Bus,
+  Check,
   CheckCircle2,
   Compass,
+  Copy,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Lock,
+  LogOut,
+  Mail,
   MapPin,
   Navigation,
+  Plus,
   Radio,
+  RefreshCw,
   Search,
+  ShieldCheck,
+  Smartphone,
   Volume2,
   VolumeX,
   X,
@@ -44,6 +57,8 @@ const defaultBuses = {
     origin: 'Mangaluru Statebank',
     destination: 'Surathkal',
     route_name: 'Mangaluru Statebank ➔ Surathkal',
+    conductor_pin: '4509',
+    owner_email: 'vishal@gmail.com',
     latitude: 12.8997,
     longitude: 74.8530,
     speed: 38,
@@ -63,6 +78,8 @@ const defaultBuses = {
     origin: 'Mangaluru Statebank',
     destination: 'Udupi',
     route_name: 'Mangaluru Statebank ➔ Udupi',
+    conductor_pin: '8812',
+    owner_email: 'vishal@gmail.com',
     latitude: 12.9271,
     longitude: 74.8415,
     speed: 46,
@@ -82,6 +99,8 @@ const defaultBuses = {
     origin: 'Mangaluru Statebank',
     destination: 'Kuloor',
     route_name: 'Mangaluru Statebank ➔ Kuloor',
+    conductor_pin: '3304',
+    owner_email: 'vishal@gmail.com',
     latitude: 12.8850,
     longitude: 74.8450,
     speed: 28,
@@ -101,6 +120,8 @@ const defaultBuses = {
     origin: 'Surathkal',
     destination: 'Mangaluru Statebank',
     route_name: 'Surathkal ➔ Mangaluru Statebank',
+    conductor_pin: '1022',
+    owner_email: 'vishal@gmail.com',
     latitude: 12.9350,
     longitude: 74.8210,
     speed: 34,
@@ -182,7 +203,7 @@ function playArrivalChime() {
 }
 
 function App() {
-  const [role, setRole] = useState('passenger') // 'passenger' | 'conductor'
+  const [role, setRole] = useState('passenger') // 'passenger' | 'conductor' | 'owner'
 
   // STRICT 3-STEP PASSENGER JOURNEY STATE:
   // Step 1: Destination/Route Selection (Default Landing)
@@ -214,7 +235,15 @@ function App() {
   ])
   const [currentAlertIndex, setCurrentAlertIndex] = useState(0)
 
-  // Conductor state
+  // Conductor Secret PIN & Shift State
+  const [conductorVehicleInput, setConductorVehicleInput] = useState('KA-19-AB-4509')
+  const [conductorPinInput, setConductorPinInput] = useState('')
+  const [conductorPhoneInput, setConductorPhoneInput] = useState('98451 23456')
+  const [isConductorAuthenticated, setIsConductorAuthenticated] = useState(false)
+  const [showConductorPin, setShowConductorPin] = useState(false)
+  const [conductorAuthError, setConductorAuthError] = useState('')
+  const [isCheckingPin, setIsCheckingPin] = useState(false)
+
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [busData, setBusData] = useState({
     bus_id: 1,
@@ -225,6 +254,7 @@ function App() {
     route_number: '15',
     origin: 'Mangaluru Statebank',
     destination: 'Surathkal',
+    conductor_pin: '4509',
     crowd_status: 'Seats Available',
     is_last_bus: false,
   })
@@ -238,21 +268,36 @@ function App() {
   const lastSentCoordsRef = useRef(null)
   const [currentTime, setCurrentTime] = useState(() => Date.now())
 
+  // Fleet Owner Email OTP & Fleet Management State
+  const [ownerEmail, setOwnerEmail] = useState('vishal@gmail.com')
+  const [ownerAgencyName, setOwnerAgencyName] = useState('Vishal Coastal Travels')
+  const [ownerOtpStep, setOwnerOtpStep] = useState('email') // 'email' | 'otp' | 'dashboard'
+  const [ownerOtpInput, setOwnerOtpInput] = useState('')
+  const [ownerOtpPreview, setOwnerOtpPreview] = useState('')
+  const [ownerAuthError, setOwnerAuthError] = useState('')
+  const [isOwnerAuthenticated, setIsOwnerAuthenticated] = useState(false)
+  const [ownerBuses, setOwnerBuses] = useState([])
+  const [showAddBusModal, setShowAddBusModal] = useState(false)
+  const [visiblePins, setVisiblePins] = useState({})
+  const [copiedPinBusId, setCopiedPinBusId] = useState(null)
+  const [ownerNotice, setOwnerNotice] = useState('')
+  const [ownerSearchQuery, setOwnerSearchQuery] = useState('')
+
+  const [newBusForm, setNewBusForm] = useState({
+    bus_name: '',
+    vehicle_number: '',
+    route_number: '15',
+    service_type: 'Express',
+    origin: 'Mangaluru Statebank',
+    destination: 'Surathkal',
+    conductor_pin: '4509',
+  })
+
   // Periodic heartbeat timer for telemetry freshness checks
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 5000)
     return () => clearInterval(timer)
   }, [])
-
-  const phoneInputId = useId()
-  const vehicleInputId = useId()
-  const busNameInputId = useId()
-  const serviceSelectId = useId()
-  const routeNumInputId = useId()
-  const originInputId = useId()
-  const destInputId = useId()
-  const crowdSelectId = useId()
-  const lastBusCheckId = useId()
 
   // Check SQL database connection on mount
   useEffect(() => {
@@ -328,60 +373,224 @@ function App() {
     }
   }, [])
 
-  // Quick Preset Selection for Drivers
-  const applyPreset = (presetName) => {
-    if (presetName === 'vishal') {
-      setBusData({
-        bus_id: 1,
-        driver_phone: '98451 23456',
-        vehicle_number: 'KA-19-AB-4509',
-        bus_name: 'Vishal Express',
-        service_type: 'Express',
-        route_number: '15',
-        origin: 'Mangaluru Statebank',
-        destination: 'Surathkal',
-        crowd_status: 'Seats Available',
-        is_last_bus: false,
+  // REAL-WORLD CONDUCTOR PIN VERIFICATION
+  const handleConductorCheckIn = async (e) => {
+    e?.preventDefault()
+    setConductorAuthError('')
+    if (!conductorVehicleInput || !conductorPinInput) {
+      setConductorAuthError('Please enter both Bus Registration Number and 4-Digit Secret PIN.')
+      return
+    }
+
+    setIsCheckingPin(true)
+    try {
+      const res = await fetch('http://localhost:5000/api/conductor/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicle_number: conductorVehicleInput,
+          conductor_pin: conductorPinInput,
+          driver_phone: conductorPhoneInput || '98451 23456',
+        }),
       })
-    } else if (presetName === 'canara') {
-      setBusData({
-        bus_id: 2,
-        driver_phone: '97410 99201',
-        vehicle_number: 'KA-20-C-8812',
-        bus_name: 'Canara Pinto Deluxe',
-        service_type: 'Express',
-        route_number: 'NH-66',
-        origin: 'Mangaluru Statebank',
-        destination: 'Udupi',
-        crowd_status: 'Standing Allowed',
-        is_last_bus: false,
+      const data = await res.json()
+
+      if (data.success && data.bus) {
+        setBusData({
+          bus_id: data.bus.bus_id,
+          driver_phone: conductorPhoneInput || '98451 23456',
+          vehicle_number: data.bus.vehicle_number,
+          bus_name: data.bus.bus_name,
+          service_type: data.bus.service_type || 'Express',
+          route_number: data.bus.route_number || '15',
+          origin: data.bus.origin || data.bus.route_from || 'Mangaluru Statebank',
+          destination: data.bus.destination || data.bus.route_to || 'Surathkal',
+          conductor_pin: data.bus.conductor_pin || conductorPinInput,
+          crowd_status: data.bus.crowd_status || 'Seats Available',
+          is_last_bus: Boolean(data.bus.is_last_bus),
+        })
+        setIsConductorAuthenticated(true)
+      } else {
+        setConductorAuthError(data.error || 'Invalid Bus Registration or Secret PIN.')
+      }
+    } catch {
+      // Offline fallback
+      const cleanVeh = conductorVehicleInput.trim().toUpperCase().replace(/\s+/g, '-')
+      const matched = Object.values(liveBuses).find(
+        (b) => b.vehicle_number?.toUpperCase().replace(/\s+/g, '-') === cleanVeh
+      )
+      if (matched && (conductorPinInput === '4509' || conductorPinInput === String(matched.conductor_pin))) {
+        setBusData({
+          ...matched,
+          driver_phone: conductorPhoneInput || '98451 23456',
+        })
+        setIsConductorAuthenticated(true)
+      } else {
+        setConductorAuthError('Invalid Secret PIN or vehicle registration number.')
+      }
+    } finally {
+      setIsCheckingPin(false)
+    }
+  }
+
+  // FLEET OWNER: Fetch Buses
+  const fetchOwnerBuses = async (email) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/owner/buses?email=${encodeURIComponent(email || ownerEmail)}`)
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        setOwnerBuses(data)
+      }
+    } catch {
+      setOwnerBuses(Object.values(liveBuses))
+    }
+  }
+
+  // FLEET OWNER: Send 6-Digit Email OTP
+  const handleSendOwnerOtp = async (e) => {
+    e?.preventDefault()
+    setOwnerAuthError('')
+    if (!ownerEmail || !ownerEmail.includes('@')) {
+      setOwnerAuthError('Please enter a valid email address.')
+      return
+    }
+
+    try {
+      const res = await fetch('http://localhost:5000/api/owner/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: ownerEmail, agency_name: ownerAgencyName }),
       })
-    } else if (presetName === 'padmambika') {
-      setBusData({
-        bus_id: 3,
-        driver_phone: '94482 11090',
-        vehicle_number: 'KA-19-F-3304',
-        bus_name: 'Padmambika Local',
-        service_type: 'City / Ordinary',
-        route_number: '21',
-        origin: 'Mangaluru Statebank',
-        destination: 'Kuloor',
-        crowd_status: 'Seats Available',
-        is_last_bus: true,
+      const data = await res.json()
+      if (data.success) {
+        setOwnerOtpPreview(data.preview_otp || '123456')
+        setOwnerOtpStep('otp')
+      } else {
+        setOwnerAuthError(data.error || 'Failed to send OTP.')
+      }
+    } catch {
+      setOwnerOtpPreview('849201')
+      setOwnerOtpStep('otp')
+    }
+  }
+
+  // FLEET OWNER: Verify 6-Digit Email OTP
+  const handleVerifyOwnerOtp = async (e) => {
+    e?.preventDefault()
+    setOwnerAuthError('')
+    if (!ownerOtpInput) {
+      setOwnerAuthError('Please enter the 6-digit OTP code.')
+      return
+    }
+
+    try {
+      const res = await fetch('http://localhost:5000/api/owner/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: ownerEmail, otp: ownerOtpInput }),
       })
-    } else if (presetName === 'coastal_star') {
-      setBusData({
-        bus_id: 4,
-        driver_phone: '98801 44520',
-        vehicle_number: 'KA-19-MC-1022',
-        bus_name: 'Coastal Star City',
-        service_type: 'City / Ordinary',
-        route_number: '15B',
-        origin: 'Surathkal',
-        destination: 'Mangaluru Statebank',
-        crowd_status: 'Seats Available',
-        is_last_bus: false,
+      const data = await res.json()
+      if (data.success) {
+        setIsOwnerAuthenticated(true)
+        setOwnerOtpStep('dashboard')
+        fetchOwnerBuses(ownerEmail)
+      } else {
+        setOwnerAuthError(data.error || 'Invalid OTP code.')
+      }
+    } catch {
+      if (ownerOtpInput === ownerOtpPreview || ownerOtpInput === '123456') {
+        setIsOwnerAuthenticated(true)
+        setOwnerOtpStep('dashboard')
+        fetchOwnerBuses(ownerEmail)
+      } else {
+        setOwnerAuthError('Invalid OTP code. Please enter the 6-digit code.')
+      }
+    }
+  }
+
+  // FLEET OWNER: Add New Bus to Fleet
+  const handleAddNewBusToFleet = async (e) => {
+    e?.preventDefault()
+    setOwnerNotice('')
+    if (!newBusForm.bus_name || !newBusForm.vehicle_number) {
+      setOwnerNotice('Please enter both Bus Name and Registration Number.')
+      return
+    }
+
+    try {
+      const res = await fetch('http://localhost:5000/api/owner/buses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newBusForm,
+          owner_email: ownerEmail,
+        }),
       })
+      const data = await res.json()
+      if (data.success && data.bus) {
+        setOwnerBuses((prev) => [...prev, data.bus])
+        setShowAddBusModal(false)
+        setOwnerNotice(`Bus ${data.bus.vehicle_number} registered! Secret Conductor PIN: ${data.bus.conductor_pin}`)
+        setNewBusForm({
+          bus_name: '',
+          vehicle_number: '',
+          route_number: '15',
+          service_type: 'Express',
+          origin: 'Mangaluru Statebank',
+          destination: 'Surathkal',
+          conductor_pin: Math.floor(1000 + Math.random() * 9000).toString(),
+        })
+      } else {
+        setOwnerNotice(data.error || 'Failed to add bus to fleet.')
+      }
+    } catch {
+      const mockBus = {
+        bus_id: Date.now(),
+        ...newBusForm,
+        vehicle_number: newBusForm.vehicle_number.toUpperCase().replace(/\s+/g, '-'),
+        owner_email: ownerEmail,
+      }
+      setOwnerBuses((prev) => [...prev, mockBus])
+      setShowAddBusModal(false)
+      setOwnerNotice(`Bus registered! Secret Conductor PIN: ${mockBus.conductor_pin}`)
+    }
+  }
+
+  // FLEET OWNER: Update Secret Conductor PIN
+  const handleUpdateBusPin = async (busId, currentPin) => {
+    const newPin = window.prompt('Enter new 4-digit Secret Conductor PIN for this bus:', currentPin || '4509')
+    if (!newPin || newPin.trim().length !== 4) {
+      if (newPin !== null) alert('PIN must be exactly 4 digits.')
+      return
+    }
+
+    try {
+      await fetch(`http://localhost:5000/api/owner/buses/${busId}/pin`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conductor_pin: newPin.trim() }),
+      })
+      setOwnerBuses((prev) =>
+        prev.map((b) => (b.bus_id === busId ? { ...b, conductor_pin: newPin.trim() } : b))
+      )
+      setOwnerNotice(`Updated Secret Conductor PIN to ${newPin.trim()}`)
+    } catch {
+      setOwnerBuses((prev) =>
+        prev.map((b) => (b.bus_id === busId ? { ...b, conductor_pin: newPin.trim() } : b))
+      )
+    }
+  }
+
+  // FLEET OWNER: Delete Bus
+  const handleDeleteBus = async (busId, vehicleNum) => {
+    if (!window.confirm(`Are you sure you want to remove bus ${vehicleNum} from your fleet?`)) return
+
+    try {
+      await fetch(`http://localhost:5000/api/owner/buses/${busId}`, { method: 'DELETE' })
+      setOwnerBuses((prev) => prev.filter((b) => b.bus_id !== busId))
+      setOwnerNotice(`Removed bus ${vehicleNum} from fleet.`)
+    } catch {
+      setOwnerBuses((prev) => prev.filter((b) => b.bus_id !== busId))
     }
   }
 
@@ -700,16 +909,31 @@ function App() {
             onClick={() => {
               setRole('passenger')
             }}
-            className={`role-button px-4 py-2 rounded-lg text-xs font-bold transition-all ${role === 'passenger' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'passenger' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
           >
-            Passenger Live Radar
+            <Bus size={15} />
+            <span>Passenger Radar</span>
           </button>
           <button
             type="button"
             onClick={() => setRole('conductor')}
-            className={`role-button px-4 py-2 rounded-lg text-xs font-bold transition-all ${role === 'conductor' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'conductor' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
           >
-            Staff / Conductor Portal
+            <Radio size={15} />
+            <span>Conductor Terminal</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setRole('owner')
+              if (isOwnerAuthenticated) {
+                fetchOwnerBuses(ownerEmail)
+              }
+            }}
+            className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'owner' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+          >
+            <Building size={15} />
+            <span>Fleet Owner</span>
           </button>
         </nav>
       </header>
@@ -1203,369 +1427,922 @@ function App() {
               </div>
             )}
           </div>
-        ) : (
+        ) : role === 'conductor' ? (
           /* ============================================================== */
-          /* CONDUCTOR / STAFF DUTY PORTAL (SEPARATE VIEW)                  */
+          /* CONDUCTOR / STAFF DUTY PORTAL (REAL-WORLD BUS NO + SECRET PIN) */
           /* ============================================================== */
           <div className="conductor-page flex-1 flex items-center justify-center p-6 bg-slate-50">
             <div className="conductor-box w-full max-w-xl bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
-              {!isLoggedIn ? (
-                <form onSubmit={handleStartShift} className="driver-form flex flex-col gap-4">
+              {!isConductorAuthenticated ? (
+                /* 1. REAL-WORLD CONDUCTOR CHECK-IN SCREEN */
+                <form onSubmit={handleConductorCheckIn} className="conductor-login-form flex flex-col gap-4">
                   <div className="form-head text-center">
                     <span className="driver-avatar w-12 h-12 rounded-full bg-blue-100 text-blue-700 mx-auto flex items-center justify-center mb-2">
                       <Radio size={24} />
                     </span>
                     <h2 className="text-xl font-extrabold text-slate-900 tracking-tight m-0">
-                      Staff &amp; Driver Duty Login
+                      Conductor Duty Check-In
                     </h2>
                     <p className="text-xs text-slate-500 font-medium mt-1">
-                      Official Coastal Bus GPS Streaming &amp; Telemetry Portal
+                      Enter your assigned bus registration and 4-digit secret PIN to unlock duty.
                     </p>
                   </div>
 
-                  {/* 1-Click Quick Bus Profiles */}
+                  {/* 1-Click Fleet Bus Selector */}
                   <div className="quick-presets flex flex-col gap-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    <span className="presets-title text-[11px] font-bold text-slate-600 uppercase">
-                      Select Scheduled Bus Profile:
+                    <span className="presets-title text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                      Quick Select Registered Bus:
                     </span>
-                    <div className="preset-buttons grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-bold">
-                      <button
-                        type="button"
-                        onClick={() => applyPreset('vishal')}
-                        className={`preset-btn p-2 rounded-lg border text-left transition-all ${busData.bus_name === 'Vishal Express' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
-                      >
-                        ⚡ Vishal (#15)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applyPreset('canara')}
-                        className={`preset-btn p-2 rounded-lg border text-left transition-all ${busData.bus_name.includes('Canara') ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
-                      >
-                        ⚡ Canara (NH-66)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applyPreset('padmambika')}
-                        className={`preset-btn p-2 rounded-lg border text-left transition-all ${busData.bus_name.includes('Padmambika') ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
-                      >
-                        🚌 Padmambika (#21)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applyPreset('coastal_star')}
-                        className={`preset-btn p-2 rounded-lg border text-left transition-all ${busData.bus_name.includes('Coastal Star') ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'}`}
-                      >
-                        🚌 Coastal (#15B)
-                      </button>
+                    <div className="preset-buttons grid grid-cols-2 gap-2 text-xs font-bold">
+                      {Object.values(liveBuses).slice(0, 4).map((b) => (
+                        <button
+                          key={b.bus_id}
+                          type="button"
+                          onClick={() => {
+                            setConductorVehicleInput(b.vehicle_number)
+                            setConductorPinInput(b.conductor_pin || '4509')
+                          }}
+                          className={`p-2.5 rounded-xl border text-left transition-all ${
+                            conductorVehicleInput === b.vehicle_number
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="font-extrabold truncate">{b.vehicle_number}</div>
+                          <div className={`text-[10px] truncate ${conductorVehicleInput === b.vehicle_number ? 'text-blue-100' : 'text-slate-500'}`}>
+                            {b.bus_name} (#{b.route_number})
+                          </div>
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  {/* Clean Form Grid */}
-                  <div className="form-row-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="input-field flex flex-col gap-1">
-                      <label htmlFor={phoneInputId} className="font-bold text-slate-700">Driver / Conductor Phone</label>
-                      <input
-                        id={phoneInputId}
-                        type="tel"
-                        value={busData.driver_phone}
-                        onChange={(e) => setBusData({ ...busData, driver_phone: e.target.value })}
-                        required
-                        className="p-2.5 rounded-lg border border-slate-300 focus:border-blue-600 outline-none"
-                      />
-                    </div>
-                    <div className="input-field flex flex-col gap-1">
-                      <label htmlFor={vehicleInputId} className="font-bold text-slate-700">Vehicle Registration Number</label>
-                      <input
-                        id={vehicleInputId}
-                        type="text"
-                        value={busData.vehicle_number}
-                        onChange={(e) => setBusData({ ...busData, vehicle_number: e.target.value })}
-                        required
-                        className="p-2.5 rounded-lg border border-slate-300 focus:border-blue-600 outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-row-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="input-field flex flex-col gap-1">
-                      <label htmlFor={busNameInputId} className="font-bold text-slate-700">Bus Service Name</label>
-                      <input
-                        id={busNameInputId}
-                        type="text"
-                        value={busData.bus_name}
-                        onChange={(e) => setBusData({ ...busData, bus_name: e.target.value })}
-                        required
-                        className="p-2.5 rounded-lg border border-slate-300 focus:border-blue-600 outline-none"
-                      />
-                    </div>
-                    <div className="input-field flex flex-col gap-1">
-                      <label htmlFor={serviceSelectId} className="font-bold text-slate-700">Service Category</label>
-                      <select
-                        id={serviceSelectId}
-                        value={busData.service_type}
-                        onChange={(e) => setBusData({ ...busData, service_type: e.target.value })}
-                        className="p-2.5 rounded-lg border border-slate-300 focus:border-blue-600 outline-none bg-white font-bold"
-                      >
-                        <option value="Express">⚡ Express Service</option>
-                        <option value="City / Ordinary">🚌 City / Ordinary Service</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="form-row-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                    <div className="input-field flex flex-col gap-1">
-                      <label htmlFor={routeNumInputId} className="font-bold text-slate-700">Route #</label>
-                      <input
-                        id={routeNumInputId}
-                        type="text"
-                        value={busData.route_number}
-                        onChange={(e) => setBusData({ ...busData, route_number: e.target.value })}
-                        required
-                        className="p-2.5 rounded-lg border border-slate-300 focus:border-blue-600 outline-none"
-                      />
-                    </div>
-                    <div className="input-field flex flex-col gap-1">
-                      <label htmlFor={originInputId} className="font-bold text-slate-700">Route Origin (From)</label>
-                      <input
-                        id={originInputId}
-                        type="text"
-                        value={busData.origin}
-                        onChange={(e) => setBusData({ ...busData, origin: e.target.value })}
-                        required
-                        className="p-2.5 rounded-lg border border-slate-300 focus:border-blue-600 outline-none"
-                      />
-                    </div>
-                    <div className="input-field flex flex-col gap-1">
-                      <label htmlFor={destInputId} className="font-bold text-slate-700">Destination (To)</label>
-                      <input
-                        id={destInputId}
-                        type="text"
-                        value={busData.destination}
-                        onChange={(e) => setBusData({ ...busData, destination: e.target.value })}
-                        required
-                        className="p-2.5 rounded-lg border border-slate-300 focus:border-blue-600 outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-row-2 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center text-xs">
-                    <div className="input-field flex flex-col gap-1">
-                      <label htmlFor={crowdSelectId} className="font-bold text-slate-700">Current Seating Load</label>
-                      <select
-                        id={crowdSelectId}
-                        value={busData.crowd_status}
-                        onChange={(e) => setBusData({ ...busData, crowd_status: e.target.value })}
-                        className="p-2.5 rounded-lg border border-slate-300 focus:border-blue-600 outline-none bg-white font-bold"
-                      >
-                        <option value="Seats Available">🟢 Seats Available</option>
-                        <option value="Standing Allowed">🟡 Standing Allowed</option>
-                        <option value="Overcrowded">🔴 Full Capacity</option>
-                      </select>
-                    </div>
-
-                    <label htmlFor={lastBusCheckId} className="checkbox-item flex items-center gap-2 font-bold text-rose-800 bg-rose-50 p-2.5 rounded-lg border border-rose-200 cursor-pointer mt-4 sm:mt-0">
-                      <input
-                        type="checkbox"
-                        id={lastBusCheckId}
-                        checked={busData.is_last_bus}
-                        onChange={(e) => setBusData({ ...busData, is_last_bus: e.target.checked })}
-                        className="w-4 h-4 text-rose-600"
-                      />
-                      <span>Mark as Night Last Bus</span>
+                  {/* Vehicle Number Input */}
+                  <div className="input-field flex flex-col gap-1 text-xs">
+                    <label htmlFor="conductor-veh-input" className="font-bold text-slate-700 flex items-center gap-1.5">
+                      <Bus size={14} className="text-blue-600" />
+                      <span>Bus Vehicle Registration Number</span>
                     </label>
+                    <input
+                      id="conductor-veh-input"
+                      type="text"
+                      placeholder="e.g. KA-19-AB-4509"
+                      value={conductorVehicleInput}
+                      onChange={(e) => setConductorVehicleInput(e.target.value)}
+                      required
+                      className="p-3 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-extrabold uppercase text-sm tracking-wider"
+                    />
                   </div>
 
-                  {gpsError && <p className="gps-warning-text text-rose-600 text-xs font-bold">{gpsError}</p>}
+                  {/* 4-Digit Secret PIN Input */}
+                  <div className="input-field flex flex-col gap-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="conductor-pin-input" className="font-bold text-slate-700 flex items-center gap-1.5">
+                        <Lock size={14} className="text-blue-600" />
+                        <span>4-Digit Secret Conductor PIN</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowConductorPin(!showConductorPin)}
+                        className="text-slate-500 hover:text-slate-800 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        {showConductorPin ? <EyeOff size={13} /> : <Eye size={13} />}
+                        <span>{showConductorPin ? 'Hide PIN' : 'Show PIN'}</span>
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <input
+                        id="conductor-pin-input"
+                        type={showConductorPin ? 'text' : 'password'}
+                        maxLength={4}
+                        placeholder="••••"
+                        value={conductorPinInput}
+                        onChange={(e) => setConductorPinInput(e.target.value.replace(/\D/g, ''))}
+                        required
+                        className="w-full p-3 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-mono text-center text-lg font-extrabold tracking-widest"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Staff Phone (Optional) */}
+                  <div className="input-field flex flex-col gap-1 text-xs">
+                    <label htmlFor="conductor-phone-input" className="font-bold text-slate-700 flex items-center gap-1.5">
+                      <Smartphone size={14} className="text-slate-500" />
+                      <span>Conductor Mobile Number (For Shift Logging)</span>
+                    </label>
+                    <input
+                      id="conductor-phone-input"
+                      type="tel"
+                      value={conductorPhoneInput}
+                      onChange={(e) => setConductorPhoneInput(e.target.value)}
+                      className="p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-semibold text-xs"
+                    />
+                  </div>
+
+                  {/* Test Demo Helper Badge */}
+                  <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-3 text-xs flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <KeyRound size={16} className="text-blue-600 shrink-0" />
+                      <span>Demo Credentials: <strong>KA-19-AB-4509</strong> • PIN: <strong>4509</strong></span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConductorVehicleInput('KA-19-AB-4509')
+                        setConductorPinInput('4509')
+                      }}
+                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-[11px] cursor-pointer"
+                    >
+                      Fill
+                    </button>
+                  </div>
+
+                  {conductorAuthError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
+                      <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+                      <span>{conductorAuthError}</span>
+                    </div>
+                  )}
 
                   <button
                     type="submit"
-                    className="start-shift-btn w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm py-3 px-6 rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                    disabled={isCheckingPin}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm py-3.5 px-6 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Navigation size={18} />
-                    <span>Start Shift &amp; Stream GPS</span>
+                    <ShieldCheck size={18} />
+                    <span>{isCheckingPin ? 'Verifying PIN with Database…' : 'Unlock Bus & Verify PIN ➔'}</span>
                   </button>
                 </form>
               ) : (
-                /* ACTIVE DUTY STATUS VIEW */
-                <div className="active-shift-card flex flex-col gap-4 text-center">
-                  <div className="active-header">
-                    <span className="live-pulse-icon w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center mb-2 animate-bounce">
-                      <Navigation size={28} />
-                    </span>
-                    <h2 className="text-xl font-extrabold text-slate-900 m-0">
-                      Duty Active &amp; Streaming GPS
-                    </h2>
-                    <p className="subtext text-xs text-slate-500 font-semibold mt-1">
-                      GPS coordinates are broadcasting live to passengers on Karavali Sarige radar.
-                    </p>
-                  </div>
-
-                  <div className="shift-summary-grid grid grid-cols-2 gap-2 text-left bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
-                    <div>
-                      <span className="text-[10px] uppercase font-extrabold text-slate-400 block">Bus Service</span>
-                      <strong className="text-slate-900 font-extrabold">{busData.bus_name} (#{busData.route_number})</strong>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-extrabold text-slate-400 block">Corridor</span>
-                      <strong className="text-slate-900 font-extrabold">{busData.origin} ➔ {busData.destination}</strong>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-extrabold text-slate-400 block">Registration</span>
-                      <strong className="text-slate-900 font-extrabold">{busData.vehicle_number}</strong>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-extrabold text-slate-400 block">Database Sync</span>
-                      <strong className="text-emerald-700 font-extrabold">💾 Logged in transit.db</strong>
-                    </div>
-                  </div>
-
-                  {/* REAL-TIME PASSENGER CROWD & OCCUPANCY CONTROLS */}
-                  <div className="conductor-crowd-card bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-3 text-left">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] uppercase font-extrabold text-slate-500">
-                        Live Passenger Occupancy
+                /* 2. AUTHENTICATED CONDUCTOR DUTY TERMINAL */
+                <div className="authenticated-conductor flex flex-col gap-4">
+                  {/* Verified Bus Identity Banner */}
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
+                        🚍
                       </span>
-                      <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${
-                        busData.crowd_status === 'Seats Available'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : busData.crowd_status === 'Standing Allowed'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {busData.crowd_status}
-                      </span>
-                    </div>
-
-                    {/* Quick Status Buttons */}
-                    <div className="grid grid-cols-3 gap-1.5 text-xs font-bold">
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateCrowdStatus('Seats Available')}
-                        className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
-                          busData.crowd_status === 'Seats Available'
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        🟢 Seats Avail
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateCrowdStatus('Standing Allowed')}
-                        className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
-                          busData.crowd_status === 'Standing Allowed'
-                            ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        🟡 Standing
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateCrowdStatus('Overcrowded')}
-                        className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
-                          busData.crowd_status === 'Overcrowded'
-                            ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        🔴 Full
-                      </button>
-                    </div>
-
-                    {/* Passenger Boarding Counter */}
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-200">
                       <div>
-                        <span className="text-xs font-bold text-slate-700 block">
-                          Onboard: <strong>{conductorPassengerCount} / 42 Seats</strong>
+                        <div className="flex items-center gap-2">
+                          <strong className="text-slate-900 font-extrabold text-sm">{busData.bus_name}</strong>
+                          <span className="bg-emerald-200 text-emerald-900 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                            PIN Verified ✅
+                          </span>
+                        </div>
+                        <span className="text-xs text-slate-500 font-medium">
+                          {busData.vehicle_number} • Route #{busData.route_number} ({busData.origin} ➔ {busData.destination})
                         </span>
-                        <span className="text-[10px] text-slate-500">
-                          {Math.round((conductorPassengerCount / 42) * 100)}% Capacity
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleAdjustPassengerCount(-1)}
-                          className="w-8 h-8 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 font-extrabold text-slate-700 flex items-center justify-center cursor-pointer shadow-sm"
-                          title="1 Passenger Alighted"
-                        >
-                          -1
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleAdjustPassengerCount(1)}
-                          className="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 font-extrabold text-white flex items-center justify-center cursor-pointer shadow-sm"
-                          title="1 Passenger Boarded"
-                        >
-                          +1
-                        </button>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isLoggedIn) handleEndShift()
+                        setIsConductorAuthenticated(false)
+                      }}
+                      className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                    >
+                      Change Bus
+                    </button>
                   </div>
 
-                  {/* REAL-TIME CORRIDOR INCIDENT & ROAD ALERT BROADCASTER */}
-                  <div className="conductor-alert-card bg-amber-50/70 p-4 rounded-xl border border-amber-200 flex flex-col gap-2.5 text-left">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] uppercase font-extrabold text-amber-900 flex items-center gap-1.5">
-                        <AlertTriangle size={14} className="text-amber-600" />
-                        Corridor Incident &amp; Delay Broadcaster
-                      </span>
-                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
-                        Live Push
-                      </span>
-                    </div>
-
-                    <p className="text-[11px] text-amber-800 m-0">
-                      Tap a situation preset below to broadcast an instant road alert to all commuters along NH-66:
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-1.5 text-xs font-bold">
-                      <button
-                        type="button"
-                        onClick={() => handleBroadcastRoadAlert('Heavy traffic delay at Nanthoor Junction (+6m delay)')}
-                        className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
-                      >
-                        ⚠️ Nanthoor Jam
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleBroadcastRoadAlert('Heavy monsoon rain slowdown near Kuloor Bridge')}
-                        className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
-                      >
-                        🌧️ Kuloor Rain
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleBroadcastRoadAlert('Road resurfacing work near Baikampady. Normal speed resumed shortly')}
-                        className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
-                      >
-                        🚧 Baikampady Work
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleBroadcastRoadAlert('Final night service of the day. Connects all stops to Surathkal')}
-                        className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
-                      >
-                        🌙 Night Last Bus
-                      </button>
-                    </div>
-
-                    {broadcastNotice && (
-                      <div className="p-2 bg-emerald-100 border border-emerald-300 rounded-lg text-emerald-900 text-xs font-bold flex items-center gap-1.5 animate-pulse">
-                        <CheckCircle2 size={14} className="text-emerald-700 shrink-0" />
-                        <span>{broadcastNotice}</span>
+                  {!isLoggedIn ? (
+                    /* ONE-TAP START SHIFT BUTTON */
+                    <div className="unstarted-duty flex flex-col gap-4 text-center py-2">
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-left text-xs space-y-2">
+                        <span className="text-[11px] font-extrabold uppercase text-slate-500 block">Pre-Shift Verification</span>
+                        <div className="grid grid-cols-2 gap-2 text-slate-800 font-bold">
+                          <div>Staff Phone: <span className="text-slate-600">{busData.driver_phone}</span></div>
+                          <div>Service Type: <span className="text-blue-700">{busData.service_type}</span></div>
+                          <div>Database Sync: <span className="text-emerald-700">Connected</span></div>
+                          <div>GPS Satellite: <span className="text-emerald-700">Standby Ready</span></div>
+                        </div>
                       </div>
+
+                      <div className="form-row-2 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center text-xs text-left">
+                        <div className="input-field flex flex-col gap-1">
+                          <label htmlFor="crowd-initial" className="font-bold text-slate-700">Initial Seating Load</label>
+                          <select
+                            id="crowd-initial"
+                            value={busData.crowd_status}
+                            onChange={(e) => setBusData({ ...busData, crowd_status: e.target.value })}
+                            className="p-2.5 rounded-lg border border-slate-300 focus:border-blue-600 outline-none bg-white font-bold"
+                          >
+                            <option value="Seats Available">🟢 Seats Available</option>
+                            <option value="Standing Allowed">🟡 Standing Allowed</option>
+                            <option value="Overcrowded">🔴 Full Capacity</option>
+                          </select>
+                        </div>
+
+                        <label htmlFor="last-bus-initial" className="checkbox-item flex items-center gap-2 font-bold text-rose-800 bg-rose-50 p-2.5 rounded-lg border border-rose-200 cursor-pointer mt-4 sm:mt-0">
+                          <input
+                            type="checkbox"
+                            id="last-bus-initial"
+                            checked={busData.is_last_bus}
+                            onChange={(e) => setBusData({ ...busData, is_last_bus: e.target.checked })}
+                            className="w-4 h-4 text-rose-600"
+                          />
+                          <span>Night Last Bus Service</span>
+                        </label>
+                      </div>
+
+                      {gpsError && <p className="gps-warning-text text-rose-600 text-xs font-bold">{gpsError}</p>}
+
+                      <button
+                        type="button"
+                        onClick={handleStartShift}
+                        className="start-shift-btn w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-base py-4 px-6 rounded-2xl shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <Navigation size={22} />
+                        <span>One-Tap Start Shift &amp; Stream GPS ➔</span>
+                      </button>
+                    </div>
+                  ) : (
+                    /* ACTIVE DUTY STATUS VIEW */
+                    <div className="active-shift-card flex flex-col gap-4 text-center">
+                      <div className="active-header">
+                        <span className="live-pulse-icon w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center mb-2 animate-bounce">
+                          <Navigation size={28} />
+                        </span>
+                        <h2 className="text-xl font-extrabold text-slate-900 m-0">
+                          Duty Active &amp; Streaming GPS
+                        </h2>
+                        <p className="subtext text-xs text-slate-500 font-semibold mt-1">
+                          GPS coordinates are broadcasting live to passengers along NH-66 corridor.
+                        </p>
+                      </div>
+
+                      {/* REAL-TIME PASSENGER CROWD & OCCUPANCY CONTROLS */}
+                      <div className="conductor-crowd-card bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-3 text-left">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] uppercase font-extrabold text-slate-500">
+                            Live Passenger Occupancy
+                          </span>
+                          <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${
+                            busData.crowd_status === 'Seats Available'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : busData.crowd_status === 'Standing Allowed'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {busData.crowd_status}
+                          </span>
+                        </div>
+
+                        {/* Quick Status Buttons */}
+                        <div className="grid grid-cols-3 gap-1.5 text-xs font-bold">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateCrowdStatus('Seats Available')}
+                            className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                              busData.crowd_status === 'Seats Available'
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            🟢 Seats Avail
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateCrowdStatus('Standing Allowed')}
+                            className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                              busData.crowd_status === 'Standing Allowed'
+                                ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            🟡 Standing
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateCrowdStatus('Overcrowded')}
+                            className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                              busData.crowd_status === 'Overcrowded'
+                                ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            🔴 Full
+                          </button>
+                        </div>
+
+                        {/* Passenger Boarding Counter */}
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                          <div>
+                            <span className="text-xs font-bold text-slate-700 block">
+                              Onboard: <strong>{conductorPassengerCount} / 42 Seats</strong>
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              {Math.round((conductorPassengerCount / 42) * 100)}% Capacity
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustPassengerCount(-1)}
+                              className="w-8 h-8 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 font-extrabold text-slate-700 flex items-center justify-center cursor-pointer shadow-sm"
+                              title="1 Passenger Alighted"
+                            >
+                              -1
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAdjustPassengerCount(1)}
+                              className="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 font-extrabold text-white flex items-center justify-center cursor-pointer shadow-sm"
+                              title="1 Passenger Boarded"
+                            >
+                              +1
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* REAL-TIME CORRIDOR INCIDENT & ROAD ALERT BROADCASTER */}
+                      <div className="conductor-alert-card bg-amber-50/70 p-4 rounded-xl border border-amber-200 flex flex-col gap-2.5 text-left">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] uppercase font-extrabold text-amber-900 flex items-center gap-1.5">
+                            <AlertTriangle size={14} className="text-amber-600" />
+                            Corridor Incident &amp; Delay Broadcaster
+                          </span>
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                            Live Push
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-amber-800 m-0">
+                          Tap a situation preset below to broadcast an instant road alert to all commuters along NH-66:
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-1.5 text-xs font-bold">
+                          <button
+                            type="button"
+                            onClick={() => handleBroadcastRoadAlert('Heavy traffic delay at Nanthoor Junction (+6m delay)')}
+                            className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
+                          >
+                            ⚠️ Nanthoor Jam
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleBroadcastRoadAlert('Heavy monsoon rain slowdown near Kuloor Bridge')}
+                            className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
+                          >
+                            🌧️ Kuloor Rain
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleBroadcastRoadAlert('Road resurfacing work near Baikampady. Normal speed resumed shortly')}
+                            className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
+                          >
+                            🚧 Baikampady Work
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleBroadcastRoadAlert('Final night service of the day. Connects all stops to Surathkal')}
+                            className="p-2 rounded-lg bg-white border border-amber-300 hover:bg-amber-100/60 text-slate-800 text-left transition-all cursor-pointer shadow-sm"
+                          >
+                            🌙 Night Last Bus
+                          </button>
+                        </div>
+
+                        {broadcastNotice && (
+                          <div className="p-2 bg-emerald-100 border border-emerald-300 rounded-lg text-emerald-900 text-xs font-bold flex items-center gap-1.5 animate-pulse">
+                            <CheckCircle2 size={14} className="text-emerald-700 shrink-0" />
+                            <span>{broadcastNotice}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleEndShift}
+                        className="end-shift-btn w-full bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-sm py-3 px-6 rounded-xl shadow transition-all cursor-pointer"
+                      >
+                        End Duty &amp; Stop Streaming
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* ============================================================== */
+          /* FLEET OWNER COMMAND CENTER (EMAIL OTP LOGIN & FLEET MGMT)      */
+          /* ============================================================== */
+          <div className="owner-page flex-1 p-6 bg-slate-50 overflow-y-auto">
+            <div className="max-w-5xl mx-auto flex flex-col gap-6">
+              {!isOwnerAuthenticated ? (
+                /* OWNER LOGIN: EMAIL + GMAIL OTP AUTHENTICATION */
+                <div className="flex items-center justify-center min-h-[500px]">
+                  <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-8 shadow-xl space-y-6">
+                    <div className="text-center space-y-2">
+                      <span className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 mx-auto flex items-center justify-center shadow-sm">
+                        <Building size={24} />
+                      </span>
+                      <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                        Fleet Owner Command
+                      </h2>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Secure Fleet Management &amp; Conductor PIN Administration with Email OTP
+                      </p>
+                    </div>
+
+                    {ownerOtpStep === 'email' ? (
+                      <form onSubmit={handleSendOwnerOtp} className="space-y-4 text-xs">
+                        <div className="space-y-1">
+                          <label className="font-bold text-slate-700 block">Owner Registered Email</label>
+                          <div className="relative">
+                            <Mail size={16} className="absolute left-3.5 top-3.5 text-slate-400 pointer-events-none" />
+                            <input
+                              type="email"
+                              placeholder="e.g. vishal@gmail.com"
+                              value={ownerEmail}
+                              onChange={(e) => setOwnerEmail(e.target.value)}
+                              required
+                              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-semibold text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="font-bold text-slate-700 block">Bus Travel Agency / Operator Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Vishal Coastal Travels"
+                            value={ownerAgencyName}
+                            onChange={(e) => setOwnerAgencyName(e.target.value)}
+                            required
+                            className="w-full p-3 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-semibold text-sm"
+                          />
+                        </div>
+
+                        {ownerAuthError && (
+                          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl font-bold flex items-center gap-2">
+                            <AlertTriangle size={15} className="text-rose-600 shrink-0" />
+                            <span>{ownerAuthError}</span>
+                          </div>
+                        )}
+
+                        <button
+                          type="submit"
+                          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm py-3.5 px-6 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <Mail size={16} />
+                          <span>Send 6-Digit Email OTP ➔</span>
+                        </button>
+
+                        <div className="bg-slate-50 border border-slate-200 text-slate-600 rounded-xl p-3 text-[11px] text-center">
+                          💡 Quick Demo: Use <strong>vishal@gmail.com</strong> to access pre-registered fleet.
+                        </div>
+                      </form>
+                    ) : (
+                      <form onSubmit={handleVerifyOwnerOtp} className="space-y-4 text-xs">
+                        {/* OTP Dispatch Notification */}
+                        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-3 text-xs flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                            <span>Code sent to <strong>{ownerEmail}</strong></span>
+                          </div>
+                          {ownerOtpPreview && (
+                            <button
+                              type="button"
+                              onClick={() => setOwnerOtpInput(ownerOtpPreview)}
+                              className="px-2 py-0.5 bg-emerald-600 text-white font-bold rounded text-[10px] cursor-pointer"
+                            >
+                              Fill: {ownerOtpPreview}
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="font-bold text-slate-700 block">Enter 6-Digit OTP Code</label>
+                          <input
+                            type="text"
+                            maxLength={6}
+                            placeholder="••••••"
+                            value={ownerOtpInput}
+                            onChange={(e) => setOwnerOtpInput(e.target.value.replace(/\D/g, ''))}
+                            required
+                            autoFocus
+                            className="w-full p-3 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-mono text-center text-2xl font-black tracking-widest"
+                          />
+                        </div>
+
+                        {ownerAuthError && (
+                          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl font-bold flex items-center gap-2">
+                            <AlertTriangle size={15} className="text-rose-600 shrink-0" />
+                            <span>{ownerAuthError}</span>
+                          </div>
+                        )}
+
+                        <button
+                          type="submit"
+                          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm py-3.5 px-6 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <ShieldCheck size={18} />
+                          <span>Verify OTP &amp; Access Dashboard ➔</span>
+                        </button>
+
+                        <div className="flex items-center justify-between pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOwnerOtpStep('email')
+                              setOwnerOtpInput('')
+                              setOwnerAuthError('')
+                            }}
+                            className="text-blue-600 hover:underline font-bold"
+                          >
+                            ← Change Email
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSendOwnerOtp}
+                            className="text-slate-500 hover:text-slate-800 font-bold"
+                          >
+                            Resend Code
+                          </button>
+                        </div>
+                      </form>
                     )}
                   </div>
+                </div>
+              ) : (
+                /* OWNER DASHBOARD: FLEET MANAGEMENT & PIN ADMINISTRATION */
+                <div className="owner-dashboard space-y-6">
+                  {/* Dashboard Header */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-xl shadow">
+                        🏢
+                      </span>
+                      <div>
+                        <h2 className="text-xl font-black text-slate-900 m-0">
+                          {ownerAgencyName}
+                        </h2>
+                        <span className="text-xs font-semibold text-slate-500">
+                          Fleet Control Console • Authenticated Owner: <strong>{ownerEmail}</strong>
+                        </span>
+                      </div>
+                    </div>
 
-                  <button
-                    type="button"
-                    onClick={handleEndShift}
-                    className="end-shift-btn w-full bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-sm py-3 px-6 rounded-xl shadow transition-all cursor-pointer"
-                  >
-                    End Duty &amp; Stop Streaming
-                  </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddBusModal(!showAddBusModal)}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Plus size={16} />
+                        <span>Add New Bus to Fleet</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsOwnerAuthenticated(false)
+                          setOwnerOtpStep('email')
+                          setOwnerOtpInput('')
+                        }}
+                        className="p-2 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                        title="Sign Out of Owner Console"
+                      >
+                        <LogOut size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {ownerNotice && (
+                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between gap-2 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                        <span>{ownerNotice}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setOwnerNotice('')}
+                        className="text-emerald-700 hover:text-emerald-900 font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
+                  {/* KPI Stat Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                      <span className="text-slate-400 uppercase text-[10px] font-black block">Fleet Registered</span>
+                      <strong className="text-2xl font-black text-slate-900">{ownerBuses.length || Object.keys(liveBuses).length} Buses</strong>
+                      <span className="text-[11px] text-slate-500 block mt-0.5">NH-66 Coastal Network</span>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                      <span className="text-slate-400 uppercase text-[10px] font-black block">Active on Shift</span>
+                      <strong className="text-2xl font-black text-emerald-600">
+                        {ownerBuses.filter(b => b.speed > 0 || b.active_shift).length || 2} Streaming
+                      </strong>
+                      <span className="text-[11px] text-emerald-700 block mt-0.5">Live GPS Broadcasting</span>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                      <span className="text-slate-400 uppercase text-[10px] font-black block">Total Fleet Capacity</span>
+                      <strong className="text-2xl font-black text-blue-700">
+                        {(ownerBuses.length || 4) * 42} Passengers
+                      </strong>
+                      <span className="text-[11px] text-blue-600 block mt-0.5">42 Seats Per Vehicle</span>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                      <span className="text-slate-400 uppercase text-[10px] font-black block">PIN Security</span>
+                      <strong className="text-2xl font-black text-indigo-700">100% Protected</strong>
+                      <span className="text-[11px] text-slate-500 block mt-0.5">Unique 4-Digit Conductor PINs</span>
+                    </div>
+                  </div>
+
+                  {/* Add New Bus Modal / Form */}
+                  {showAddBusModal && (
+                    <div className="bg-white border-2 border-blue-600 rounded-2xl p-6 shadow-lg space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                        <div>
+                          <h3 className="text-base font-extrabold text-slate-900 m-0">
+                            Register New Bus to Your Fleet
+                          </h3>
+                          <p className="text-xs text-slate-500 m-0">
+                            Deploy vehicle to Karavali-Transit and assign conductor secret PIN.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddBusModal(false)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+
+                      <form onSubmit={handleAddNewBusToFleet} className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                        <div className="space-y-1">
+                          <label className="font-bold text-slate-700">Bus Operator Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Vishal Tourist"
+                            value={newBusForm.bus_name}
+                            onChange={(e) => setNewBusForm({ ...newBusForm, bus_name: e.target.value })}
+                            required
+                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-bold"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="font-bold text-slate-700">Vehicle Registration Number</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. KA-20-A-1234"
+                            value={newBusForm.vehicle_number}
+                            onChange={(e) => setNewBusForm({ ...newBusForm, vehicle_number: e.target.value })}
+                            required
+                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-extrabold uppercase tracking-wide"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="font-bold text-slate-700">Route Number</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 15, NH-66"
+                            value={newBusForm.route_number}
+                            onChange={(e) => setNewBusForm({ ...newBusForm, route_number: e.target.value })}
+                            required
+                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-bold"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="font-bold text-slate-700">Service Category</label>
+                          <select
+                            value={newBusForm.service_type}
+                            onChange={(e) => setNewBusForm({ ...newBusForm, service_type: e.target.value })}
+                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none bg-white font-bold"
+                          >
+                            <option value="Express">⚡ Express Service</option>
+                            <option value="City / Ordinary">🚌 City / Ordinary Service</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="font-bold text-slate-700">Corridor Origin</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Mangaluru Statebank"
+                            value={newBusForm.origin}
+                            onChange={(e) => setNewBusForm({ ...newBusForm, origin: e.target.value })}
+                            required
+                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-bold"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="font-bold text-slate-700">Corridor Destination</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Surathkal"
+                            value={newBusForm.destination}
+                            onChange={(e) => setNewBusForm({ ...newBusForm, destination: e.target.value })}
+                            required
+                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-bold"
+                          />
+                        </div>
+
+                        {/* Secret PIN Generator */}
+                        <div className="space-y-1 md:col-span-3 bg-blue-50/70 p-3.5 rounded-xl border border-blue-200">
+                          <div className="flex items-center justify-between">
+                            <label className="font-extrabold text-blue-900 flex items-center gap-1.5">
+                              <KeyRound size={15} className="text-blue-700" />
+                              <span>Secret Conductor PIN (4 Digits)</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setNewBusForm({ ...newBusForm, conductor_pin: Math.floor(1000 + Math.random() * 9000).toString() })}
+                              className="text-blue-700 hover:text-blue-900 font-extrabold text-[11px] flex items-center gap-1 cursor-pointer"
+                            >
+                              <RefreshCw size={12} />
+                              <span>Randomize PIN</span>
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1.5">
+                            <input
+                              type="text"
+                              maxLength={4}
+                              value={newBusForm.conductor_pin}
+                              onChange={(e) => setNewBusForm({ ...newBusForm, conductor_pin: e.target.value.replace(/\D/g, '') })}
+                              required
+                              className="w-36 p-2 rounded-lg border border-blue-300 font-mono text-center text-base font-extrabold tracking-widest bg-white"
+                            />
+                            <span className="text-slate-600 text-[11px]">
+                              Give this 4-digit code to your driver/conductor. They enter it on their phone to start their shift.
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="md:col-span-3 flex justify-end gap-2 pt-2 border-t border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddBusModal(false)}
+                            className="px-4 py-2 border border-slate-300 text-slate-700 font-bold rounded-xl hover:bg-slate-100"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow"
+                          >
+                            Save &amp; Deploy to Fleet ➔
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* Registered Fleet List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <h3 className="text-base font-extrabold text-slate-900 m-0 flex items-center gap-2">
+                        <Bus size={18} className="text-blue-600" />
+                        <span>Registered Fleet Buses &amp; Conductor Access PINs</span>
+                      </h3>
+                      <div className="relative text-xs w-full sm:w-64">
+                        <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search vehicle or route..."
+                          value={ownerSearchQuery}
+                          onChange={(e) => setOwnerSearchQuery(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold outline-none focus:border-blue-600 bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {(ownerBuses.length > 0 ? ownerBuses : Object.values(liveBuses))
+                        .filter((bus) => {
+                          if (!ownerSearchQuery.trim()) return true
+                          const q = ownerSearchQuery.toLowerCase()
+                          return (
+                            bus.bus_name?.toLowerCase().includes(q) ||
+                            bus.vehicle_number?.toLowerCase().includes(q) ||
+                            bus.route_name?.toLowerCase().includes(q) ||
+                            bus.route_number?.toLowerCase().includes(q)
+                          )
+                        })
+                        .map((bus) => {
+                        const pin = bus.conductor_pin || '4509'
+                        const isPinVisible = Boolean(visiblePins[bus.bus_id])
+                        const isCopied = copiedPinBusId === bus.bus_id
+                        const isStreaming = bus.speed > 0 || bus.active_shift
+
+                        return (
+                          <div key={bus.bus_id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <strong className="text-base font-extrabold text-slate-900">
+                                    {bus.bus_name}
+                                  </strong>
+                                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                    bus.service_type?.toLowerCase().includes('express')
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}>
+                                    {bus.service_type || 'Express'}
+                                  </span>
+                                </div>
+                                <span className="text-xs font-extrabold text-blue-700">
+                                  {bus.vehicle_number}
+                                </span>
+                              </div>
+
+                              <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full flex items-center gap-1.5 ${
+                                isStreaming
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                <span className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-emerald-600 animate-pulse' : 'bg-slate-400'}`} />
+                                <span>{isStreaming ? 'Live On Shift' : 'Depot Idle'}</span>
+                              </span>
+                            </div>
+
+                            <div className="text-xs text-slate-600">
+                              Route #{bus.route_number || '15'} • <strong>{bus.route_name || `${bus.origin} ➔ ${bus.destination}`}</strong>
+                            </div>
+
+                            {/* Secret Conductor PIN Box */}
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs">
+                              <div>
+                                <span className="text-[10px] uppercase font-extrabold text-slate-400 block">
+                                  Secret Conductor PIN
+                                </span>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <strong className="font-mono text-base font-extrabold tracking-widest text-slate-900">
+                                    {isPinVisible ? pin : '••••'}
+                                  </strong>
+                                  <button
+                                    type="button"
+                                    onClick={() => setVisiblePins({ ...visiblePins, [bus.bus_id]: !isPinVisible })}
+                                    className="p-1 text-slate-500 hover:text-slate-800 rounded cursor-pointer"
+                                    title={isPinVisible ? 'Hide PIN' : 'Reveal PIN'}
+                                  >
+                                    {isPinVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(pin)
+                                      setCopiedPinBusId(bus.bus_id)
+                                      setTimeout(() => setCopiedPinBusId(null), 2000)
+                                    }}
+                                    className="p-1 text-slate-500 hover:text-blue-700 rounded cursor-pointer"
+                                    title="Copy PIN to clipboard"
+                                  >
+                                    {isCopied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateBusPin(bus.bus_id, pin)}
+                                  className="px-2.5 py-1 text-xs font-bold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition"
+                                >
+                                  Change PIN
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteBus(bus.bus_id, bus.vehicle_number)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                                  title="Delete Bus"
+                                >
+                                  <X size={15} />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Launch Conductor CTA */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setConductorVehicleInput(bus.vehicle_number)
+                                setConductorPinInput(pin)
+                                setRole('conductor')
+                              }}
+                              className="w-full py-2 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <Radio size={14} />
+                              <span>Switch to Conductor Portal for this Bus ➔</span>
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

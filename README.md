@@ -102,19 +102,23 @@ stateDiagram-v2
 
 ---
 
-## 👨‍✈️ Driver & Conductor Duty Portal
+## 👨‍✈️ Conductor Duty Terminal (PIN-Secured Real-World Startup)
 
-- **Hardware-Free GPS Streaming**: Built on native browser HTML5 Geolocation (`navigator.geolocation.watchPosition`).
+- **Real-World Bus Check-In**: Conductors board their assigned bus (e.g., `KA-19-AB-4509`), enter the **4-digit Secret PIN** (e.g., `4509`) assigned by the bus owner, and tap **"Unlock Bus & Verify PIN"**.
+- **One-Tap Shift Start**: Once authenticated, the conductor launches tracking with a single tap: **"Start Shift & Stream GPS"** without needing to configure complex route details.
+- **Hardware-Free GPS Streaming**: Built on native browser HTML5 Geolocation (`navigator.geolocation.watchPosition`) with battery-saving stationary throttling.
 - **Real-Time Passenger Load Counter**: Dynamic passenger count stepper (`-1` / `+1`) with automatic capacity percentage calculation and one-tap occupancy toggles (`🟢 Seats Available`, `🟡 Standing Allowed`, `🔴 Full / Overcrowded`).
 - **Road Incident & Delay Broadcaster**: Instant corridor incident broadcast panel with 1-tap presets (e.g., Nanthoor traffic choke, Kuloor monsoon waterlogging, Baikampady road work, Night Last Bus advisory) that streams alerts live to passenger tickers via WebSockets.
 - **Corridor Simulation Fallback**: Automatically activates a smooth, realistic 6-waypoint simulation along NH-66 for desktop/laptop evaluation.
-- **1-Click Duty Presets**: Instant prefilled profiles for quick demonstrations:
-  - `⚡ Vishal Express (Route 15: Mangaluru Statebank ➔ Surathkal)`
-  - `⚡ Canara Pinto Deluxe (Route NH-66: Mangaluru Statebank ➔ Udupi)`
-  - `🚌 Padmambika Local (Route 21: Mangaluru Statebank ➔ Kuloor)`
-  - `🚌 Coastal Star City (Route 15B: Surathkal ➔ Mangaluru Statebank)`
-- **Safety Toggles**: Conductor can mark the bus as the **"Night Last Bus"** and update crowd occupancy in real time.
-- **Live Duty Dashboard**: Confirms active streaming, vehicle registration, and SQLite database logging.
+
+---
+
+## 🏢 Fleet Owner Command Center (Gmail OTP Security)
+
+- **Owner Email OTP Authentication**: Enterprise security for transit operators. Bus owners enter their registered email (`vishal@gmail.com`) and receive a secure 6-digit OTP to access their dashboard.
+- **Fleet Management & Bus Deployment**: Owners can add, update, and remove fleet buses operating on the NH-66 corridor.
+- **Secret Conductor PIN Administration**: Owners generate and manage unique 4-digit Secret PINs for each vehicle (with 1-click randomize and clipboard copy) to issue to their drivers.
+- **Real-Time Duty Oversight**: Real-time status indicators tracking which fleet buses are currently on active shift streaming live GPS versus resting at the depot.
 
 ---
 

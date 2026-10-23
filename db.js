@@ -34,9 +34,15 @@ export function initDB() {
           origin TEXT NOT NULL,
           destination TEXT NOT NULL,
           is_last_bus INTEGER DEFAULT 0,
+          conductor_pin TEXT DEFAULT '4509',
+          owner_email TEXT DEFAULT 'vishal@gmail.com',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `)
+
+      // Add columns if table already existed without them
+      db.run("ALTER TABLE buses ADD COLUMN conductor_pin TEXT DEFAULT '4509'", () => {})
+      db.run("ALTER TABLE buses ADD COLUMN owner_email TEXT DEFAULT 'vishal@gmail.com'", () => {})
 
       // 2. Driver Shifts Table
       db.run(`
@@ -66,6 +72,27 @@ export function initDB() {
         )
       `)
 
+      // 4. Owners Table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS owners (
+          owner_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT NOT NULL UNIQUE,
+          agency_name TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+
+      // 5. Email OTPs Table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS email_otps (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT NOT NULL,
+          otp_code TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          used INTEGER DEFAULT 0
+        )
+      `)
+
       // Seed Initial Coastal Karnataka Buses if empty
       db.get('SELECT COUNT(*) AS count FROM buses', (err, row) => {
         if (err) {
@@ -76,20 +103,29 @@ export function initDB() {
 
         if (row && row.count === 0) {
           const stmt = db.prepare(`
-            INSERT INTO buses (bus_name, vehicle_number, route_number, service_type, origin, destination, is_last_bus)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO buses (bus_name, vehicle_number, route_number, service_type, origin, destination, is_last_bus, conductor_pin, owner_email)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           `)
 
-          stmt.run('Vishal Express', 'KA-19-AB-4509', '15', 'Express', 'Mangaluru Statebank', 'Surathkal', 0)
-          stmt.run('Canara Pinto Deluxe', 'KA-20-C-8812', 'NH-66', 'Express', 'Mangaluru Statebank', 'Udupi', 0)
-          stmt.run('Padmambika Local', 'KA-19-F-3304', '21', 'City / Ordinary', 'Mangaluru Statebank', 'Kuloor', 1)
+          stmt.run('Vishal Express', 'KA-19-AB-4509', '15', 'Express', 'Mangaluru Statebank', 'Surathkal', 0, '4509', 'vishal@gmail.com')
+          stmt.run('Canara Pinto Deluxe', 'KA-20-C-8812', 'NH-66', 'Express', 'Mangaluru Statebank', 'Udupi', 0, '8812', 'vishal@gmail.com')
+          stmt.run('Padmambika Local', 'KA-19-F-3304', '21', 'City / Ordinary', 'Mangaluru Statebank', 'Kuloor', 1, '3304', 'vishal@gmail.com')
           stmt.finalize(() => {
             console.log('✅ Seeded 3 coastal demo buses into SQL database (buses table)')
           })
+        } else {
+          // Ensure PINs exist on existing rows
+          db.run("UPDATE buses SET conductor_pin = '4509' WHERE vehicle_number = 'KA-19-AB-4509' AND (conductor_pin IS NULL OR conductor_pin = '')")
+          db.run("UPDATE buses SET conductor_pin = '8812' WHERE vehicle_number = 'KA-20-C-8812' AND (conductor_pin IS NULL OR conductor_pin = '')")
+          db.run("UPDATE buses SET conductor_pin = '3304' WHERE vehicle_number = 'KA-19-F-3304' AND (conductor_pin IS NULL OR conductor_pin = '')")
+          db.run("UPDATE buses SET owner_email = 'vishal@gmail.com' WHERE owner_email IS NULL OR owner_email = ''")
         }
 
+        // Seed demo owner
+        db.run("INSERT OR IGNORE INTO owners (email, agency_name) VALUES ('vishal@gmail.com', 'Vishal Coastal Travels')")
+
         isConnected = true
-        console.log('✅ SQL Database initialized (tables: buses, driver_shifts, gps_telemetry)')
+        console.log('✅ SQL Database initialized (tables: buses, driver_shifts, gps_telemetry, owners, email_otps)')
         resolve(true)
       })
     })
@@ -158,6 +194,99 @@ export function getBuses() {
       } else {
         resolve(rows || [])
       }
+    })
+  })
+}
+
+// Fetch buses for a specific owner
+export function getBusesByOwner(ownerEmail) {
+  return new Promise((resolve) => {
+    const query = 'SELECT * FROM buses WHERE LOWER(owner_email) = LOWER(?) ORDER BY bus_id ASC'
+    db.all(query, [ownerEmail], (err, rows) => {
+      if (err) {
+        console.error('Error fetching buses by owner:', err.message)
+        resolve([])
+      } else {
+        resolve(rows || [])
+      }
+    })
+  })
+}
+
+// Verify Conductor PIN for Bus Number
+export function verifyConductorPin(vehicleNumber, pin) {
+  return new Promise((resolve) => {
+    const normalized = vehicleNumber.replace(/\s+/g, '-').toUpperCase()
+    const query = 'SELECT * FROM buses WHERE UPPER(REPLACE(vehicle_number, " ", "-")) = ? LIMIT 1'
+    db.get(query, [normalized], (err, row) => {
+      if (err || !row) {
+        resolve({ success: false, error: 'Vehicle number not found in registered fleet.' })
+        return
+      }
+
+      const expectedPin = String(row.conductor_pin || '4509').trim()
+      const enteredPin = String(pin || '').trim()
+
+      if (expectedPin === enteredPin) {
+        resolve({ success: true, bus: row })
+      } else {
+        resolve({ success: false, error: 'Incorrect Secret PIN for ' + row.vehicle_number })
+      }
+    })
+  })
+}
+
+// Add or update bus in database
+export function saveBus(bus) {
+  return new Promise((resolve) => {
+    const query = `
+      INSERT INTO buses (bus_name, vehicle_number, route_number, service_type, origin, destination, is_last_bus, conductor_pin, owner_email)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+    db.run(
+      query,
+      [
+        bus.bus_name,
+        bus.vehicle_number.toUpperCase(),
+        bus.route_number,
+        bus.service_type || 'Express',
+        bus.origin || 'Mangaluru Statebank',
+        bus.destination || 'Surathkal',
+        bus.is_last_bus ? 1 : 0,
+        bus.conductor_pin || '4509',
+        bus.owner_email || 'vishal@gmail.com',
+      ],
+      function (err) {
+        if (err) {
+          console.error('Error inserting bus:', err.message)
+          resolve(null)
+        } else {
+          resolve({ bus_id: this.lastID, ...bus })
+        }
+      }
+    )
+  })
+}
+
+// Update Bus Conductor PIN
+export function updateBusPin(busId, pin) {
+  return new Promise((resolve) => {
+    const query = 'UPDATE buses SET conductor_pin = ? WHERE bus_id = ?'
+    db.run(query, [pin, busId], function (err) {
+      if (err) {
+        resolve(false)
+      } else {
+        resolve(this.changes > 0)
+      }
+    })
+  })
+}
+
+// Delete bus from database
+export function deleteBus(busId) {
+  return new Promise((resolve) => {
+    db.run('DELETE FROM buses WHERE bus_id = ?', [busId], function (err) {
+      resolve(!err && this.changes > 0)
     })
   })
 }
