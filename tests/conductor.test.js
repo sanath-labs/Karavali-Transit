@@ -5,6 +5,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { generateShiftSummary } from '../src/shiftLedger.js'
 
 // 1. Crowd Capacity & Occupancy Status Helper
 function getCrowdStatusFromLoad(passengers, capacity = 55) {
@@ -105,5 +106,31 @@ test('Proximity arrival chime threshold triggers within 1.2 km', () => {
   assert.equal(shouldTriggerChime(0.8), true, '0.8 km is within arrival radius')
   assert.equal(shouldTriggerChime(1.2), true, '1.2 km boundary should trigger arrival chime')
   assert.equal(shouldTriggerChime(1.5), false, '1.5 km is too far for arrival chime')
+})
+
+// 5. Shift Summary & Revenue Ledger Formatter
+test('Conductor shift summary generates accurate passenger count, distance, and revenue ledger', () => {
+  const startTime = Date.now() - 7200000 // 2 hours ago
+  const endTime = Date.now()
+  const summary = generateShiftSummary({
+    busName: 'Vishal Express',
+    vehicleNumber: 'KA-19-AB-4509',
+    routeNumber: '15',
+    serviceType: 'Express',
+    origin: 'Mangaluru Statebank',
+    destination: 'Surathkal',
+    startTime,
+    endTime,
+    currentPassengers: 24,
+  })
+
+  assert.ok(summary.waybillId.startsWith('KSR-'), 'Waybill ID should have official KSR prefix')
+  assert.equal(summary.busName, 'Vishal Express')
+  assert.equal(summary.vehicleNumber, 'KA-19-AB-4509')
+  assert.equal(summary.avgFare, 35, 'Express service average stage fare should be ₹35')
+  assert.ok(summary.totalPassengers >= 24, 'Total passengers should account for cumulative boarding')
+  assert.equal(summary.estimatedRevenue, summary.totalPassengers * 35, 'Revenue must equal passengers * avgFare')
+  assert.ok(summary.distanceKm > 0, 'Distance covered must be positive')
+  assert.equal(summary.durationFormatted, '2h 0m', 'Duration should format to 2h 0m')
 })
 

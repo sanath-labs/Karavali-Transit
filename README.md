@@ -79,6 +79,11 @@ stateDiagram-v2
 ### 2️⃣ Step 2: Filtered Bus List Screen
 - **Targeted Corridor Display**: Shows only the active buses operating along the chosen destination corridor.
 - **Header Navigation**: Features a **"← Change Destination"** button to jump back to Step 1 without page reloads.
+- **Multi-Criteria Bus Sorting**:
+  - `⚡ Earliest ETA`: Prioritizes nearest arriving bus.
+  - `💰 Lowest Fare`: Displays most economical service first.
+  - `💺 Most Seats`: Sorts buses by crowd comfort (`Seats Available` ➔ `Standing Allowed` ➔ `Full`).
+- **Corridor Stage Fare Estimator**: Accurate coastal Karnataka fare pricing tags (e.g. `₹35 Express` / `₹25 Ordinary` for Surathkal; `₹95 Express` / `₹75 Ordinary` for Udupi).
 - **Comprehensive Bus Cards**:
   - Route Tag & Vehicle Number (e.g., `Route #15 • KA-19-AB-4509`).
   - Classification: `⚡ Express Service` (limited stops) vs `🚌 City / Ordinary` (all stops).
@@ -94,11 +99,25 @@ stateDiagram-v2
 - **Location Permission Dialog**: Prompts *"Turn on your location to track this bus live"* before map activation, supporting native HTML5 GPS or terminal boarding stop fallback.
 - **Single-Bus Isolation**: All other fleet buses are hidden from the map view, focusing 100% on the commuter's incoming bus (identical to food delivery apps tracking your delivery partner).
 - **Passenger Pin (`🧍‍♂️ You`)**: High-contrast marker with an animated green radar wave ring showing the passenger's boarding location.
+- **Interactive Camera Controls**:
+  - `🔍 Fit Both`: Auto-frames both commuter stop and incoming bus with dynamic padding.
+  - `🚍 Follow Bus`: Locks camera tracking on the moving bus.
+  - `🎯 My Stop`: Centers viewport on passenger's boarding terminal.
+  - `⛶ Fullscreen Radar`: Expands map into an immersive full-screen tracking dashboard.
+- **1-Tap WhatsApp Live Trip Sharing & Deep-Links**:
+  - One-click WhatsApp sharing sends live arrival status, vehicle number, and ETA to family.
+  - Copyable deep-link URL parameters (`?bus=1&dest=Surathkal&lang=kn`) allow recipients to open the exact live radar view directly.
 - **Animated Royal Blue Route Polyline**: Royal blue navigation line (`#1d4ed8`) with moving dashes directly connecting the passenger pin to the approaching bus.
 - **Floating Telemetry HUD**: Displays real-time road distance (e.g. `2.4 km away from your stop`), stop arrival countdown, and vehicle speed.
 - **Native Web Audio Proximity Chime**: Automatically plays an alert chime (harmonic dual-tone `587 Hz` ➔ `880 Hz`) when the tracked bus enters the `< 1.2 km` radius of the passenger's stop, accompanied by an animated boarding banner with quick mute/unmute toggles.
 - **Docked Stop-by-Stop Corridor Progression**: Visual timeline stepper tracking 7 major NH-66 coastal highway nodes (`Statebank ➔ Hampankatta ➔ Lalbagh ➔ Nanthoor ➔ Kuloor ➔ Baikampady ➔ Surathkal`) with real-time passed (`✓`), approaching (`🚍`), and upcoming states.
 - **"← Switch Bus / Exit Map" Button**: Pinned navigation button that returns the commuter back to Step 2 to select another bus instantly without page reloading.
+
+---
+
+## 🌐 Bilingual Kannada-English (ಕನ್ನಡ/EN) Localization
+- Instant one-tap bilingual toggle in the header persistent across sessions (`localStorage`).
+- Complete translation coverage for corridor stops, government branding, bus filters, crowd occupancy statuses, delay notices, and duty terminals.
 
 ---
 
@@ -109,6 +128,7 @@ stateDiagram-v2
 - **Hardware-Free GPS Streaming**: Built on native browser HTML5 Geolocation (`navigator.geolocation.watchPosition`) with battery-saving stationary throttling.
 - **Real-Time Passenger Load Counter**: Dynamic passenger count stepper (`-1` / `+1`) with automatic capacity percentage calculation and one-tap occupancy toggles (`🟢 Seats Available`, `🟡 Standing Allowed`, `🔴 Full / Overcrowded`).
 - **Road Incident & Delay Broadcaster**: Instant corridor incident broadcast panel with 1-tap presets (e.g., Nanthoor traffic choke, Kuloor monsoon waterlogging, Baikampady road work, Night Last Bus advisory) that streams alerts live to passenger tickers via WebSockets.
+- **End-of-Shift Waybill & Revenue Ledger Modal**: When duty is completed, generates a formal government-style waybill with total commuters served, distance traversed, gross revenue collection, and 1-click printable receipt.
 - **Corridor Simulation Fallback**: Automatically activates a smooth, realistic 6-waypoint simulation along NH-66 for desktop/laptop evaluation.
 
 ---

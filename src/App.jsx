@@ -11,6 +11,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  FileText,
   KeyRound,
   Lock,
   LogOut,
@@ -20,6 +21,7 @@ import {
   Minimize2,
   Navigation,
   Plus,
+  Printer,
   Radio,
   RefreshCw,
   Search,
@@ -33,6 +35,7 @@ import {
 import io from 'socket.io-client'
 import { translations } from './translations.js'
 import { calculateEstimatedFare, sortBuses } from './fareRules.js'
+import { generateShiftSummary } from './shiftLedger.js'
 import './App.css'
 
 const TransitMap = lazy(() => import('./TransitMap.jsx'))
@@ -317,6 +320,9 @@ function App() {
     is_last_bus: false,
   })
   const [conductorPassengerCount, setConductorPassengerCount] = useState(24)
+  const [shiftStartTime, setShiftStartTime] = useState(null)
+  const [showShiftSummaryModal, setShowShiftSummaryModal] = useState(false)
+  const [shiftReportData, setShiftReportData] = useState(null)
   const [broadcastNotice, setBroadcastNotice] = useState('')
   const latestGpsRef = useRef([12.8997, 74.8530, 38, null])
   const [gpsError, setGpsError] = useState('')
@@ -748,6 +754,9 @@ function App() {
       broadcast(12.8997, 74.8530, 35)
     }
 
+    if (!shiftStartTime) {
+      setShiftStartTime(Date.now())
+    }
     setIsLoggedIn(true)
   }
 
@@ -763,7 +772,22 @@ function App() {
     lastSentCoordsRef.current = null
     lastEmitTimeRef.current = 0
     setGpsError('')
+
+    const report = generateShiftSummary({
+      busName: busData.bus_name,
+      vehicleNumber: busData.vehicle_number,
+      routeNumber: busData.route_number || '15',
+      serviceType: busData.service_type || 'Express',
+      origin: busData.origin || 'Mangaluru Statebank',
+      destination: busData.destination || 'Surathkal',
+      startTime: shiftStartTime || (Date.now() - 7200000),
+      endTime: Date.now(),
+      currentPassengers: conductorPassengerCount,
+    })
+    setShiftReportData(report)
+    setShowShiftSummaryModal(true)
     setIsLoggedIn(false)
+    setShiftStartTime(null)
   }
 
   // Conductor: Real-time passenger crowd occupancy toggle
@@ -2009,6 +2033,98 @@ function App() {
                       </button>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* CONDUCTOR SHIFT SUMMARY & REVENUE REPORT MODAL */}
+              {showShiftSummaryModal && shiftReportData && (
+                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="w-full max-w-lg bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-5 animate-in fade-in duration-200">
+                    {/* Header */}
+                    <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center">
+                          <FileText size={20} />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider">
+                            Government of Karnataka • Transit Waybill
+                          </span>
+                          <h3 className="text-lg font-black text-slate-900 m-0">
+                            Conductor Duty Settlement
+                          </h3>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowShiftSummaryModal(false)}
+                        className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-all cursor-pointer"
+                        title="Close Receipt"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    {/* Receipt Details Box */}
+                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-3 text-xs">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                        <div>
+                          <strong className="text-sm font-black text-slate-900 block">{shiftReportData.busName}</strong>
+                          <span className="text-slate-500 font-semibold">{shiftReportData.vehicleNumber} • Route #{shiftReportData.routeNumber}</span>
+                        </div>
+                        <span className="bg-blue-100 text-blue-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase">
+                          {shiftReportData.waybillId}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-xs pt-1">
+                        <div>
+                          <span className="text-slate-500 block text-[10px] uppercase font-bold">Duty Corridor</span>
+                          <strong className="text-slate-800 font-bold">{shiftReportData.route}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[10px] uppercase font-bold">Duty Duration</span>
+                          <strong className="text-slate-800 font-bold">{shiftReportData.durationFormatted} ({shiftReportData.startTime} - {shiftReportData.endTime})</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[10px] uppercase font-bold">Total Commuters Served</span>
+                          <strong className="text-blue-700 text-sm font-black">{shiftReportData.totalPassengers} Passengers</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[10px] uppercase font-bold">Distance Traversed</span>
+                          <strong className="text-slate-800 font-bold">{shiftReportData.distanceKm} km (NH-66)</strong>
+                        </div>
+                      </div>
+
+                      {/* Revenue Highlight */}
+                      <div className="pt-2 border-t border-slate-200 flex items-center justify-between bg-emerald-50 text-emerald-950 p-3 rounded-xl border border-emerald-200">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-emerald-700 block">Estimated Revenue Collection</span>
+                          <span className="text-xs text-emerald-600 font-semibold">{shiftReportData.serviceType} @ ₹{shiftReportData.avgFare} avg fare</span>
+                        </div>
+                        <strong className="text-xl font-black text-emerald-700">₹{shiftReportData.estimatedRevenue.toLocaleString()}</strong>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="flex-1 py-3 px-4 rounded-xl border border-slate-300 hover:bg-slate-100 font-bold text-xs text-slate-700 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      >
+                        <Printer size={15} />
+                        <span>Print Waybill</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowShiftSummaryModal(false)}
+                        className="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer text-center"
+                      >
+                        Complete Check-Out
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
