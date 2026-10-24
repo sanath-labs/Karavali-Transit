@@ -28,6 +28,7 @@ import {
   X,
 } from 'lucide-react'
 import io from 'socket.io-client'
+import { translations } from './translations.js'
 import './App.css'
 
 const TransitMap = lazy(() => import('./TransitMap.jsx'))
@@ -204,6 +205,25 @@ function playArrivalChime() {
 
 function App() {
   const [role, setRole] = useState('passenger') // 'passenger' | 'conductor' | 'owner'
+
+  // BILINGUAL LOCALIZATION (English & Kannada / ಕನ್ನಡ)
+  const [lang, setLang] = useState(() => {
+    try {
+      return localStorage.getItem('karavali_lang') || 'en'
+    } catch {
+      return 'en'
+    }
+  })
+
+  const t = translations[lang] || translations.en
+
+  const toggleLanguage = () => {
+    const nextLang = lang === 'en' ? 'kn' : 'en'
+    setLang(nextLang)
+    try {
+      localStorage.setItem('karavali_lang', nextLang)
+    } catch {}
+  }
 
   // STRICT 3-STEP PASSENGER JOURNEY STATE:
   // Step 1: Destination/Route Selection (Default Landing)
@@ -872,70 +892,83 @@ function App() {
       <div className="gov-topbar bg-slate-950 text-slate-300 text-xs px-6 py-2 border-b-2 border-blue-600">
         <div className="gov-topbar-content max-w-7xl mx-auto flex items-center justify-between">
           <span className="gov-title font-semibold tracking-wide">
-            ಕರ್ನಾಟಕ ಸರ್ಕಾರ • Department of Public Land Transport • Coastal Transit Network
+            {t.govTitle}
           </span>
           <span className="gov-badge bg-white/10 px-2.5 py-0.5 rounded text-blue-300 text-xs font-semibold">
-            Official Passenger Information System (PIS)
+            {t.govBadge}
           </span>
         </div>
       </div>
 
       {/* 2. OFFICIAL MAIN APP HEADER */}
-      <header className="app-header bg-white border-b border-slate-200 px-6 py-3 shadow-sm flex items-center justify-between gap-4">
+      <header className="app-header bg-white border-b border-slate-200 px-6 py-3 shadow-sm flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
         <div className="brand flex items-center gap-3">
-          <span className="brand-icon w-11 h-11 rounded-xl bg-gradient-to-br from-blue-900 to-blue-600 text-white flex items-center justify-center shadow-md">
+          <span className="brand-icon w-11 h-11 rounded-xl bg-gradient-to-br from-blue-900 to-blue-600 text-white flex items-center justify-center shadow-md shrink-0">
             <Bus size={22} aria-hidden="true" />
           </span>
           <div>
             <h1 className="app-title text-xl font-extrabold text-slate-900 tracking-tight m-0">
-              Karavali Sarige • Transit
+              {t.appTitle}
             </h1>
             <p className="brand-subtitle text-xs font-semibold text-slate-500 m-0">
-              Coastal Karnataka Real-Time Bus Radar (NH-66 Corridor)
+              {t.brandSubtitle}
             </p>
           </div>
         </div>
 
         {/* Database & GPS Live Status */}
-        <div className="system-status-badge hidden md:flex items-center gap-2 px-3.5 py-1.5 bg-green-50 border border-green-200 rounded-full text-xs font-bold text-green-800">
+        <div className="system-status-badge hidden lg:flex items-center gap-2 px-3.5 py-1.5 bg-green-50 border border-green-200 rounded-full text-xs font-bold text-green-800">
           <span className="status-dot-green w-2 h-2 rounded-full bg-green-600 shadow-sm animate-pulse" />
-          <span>{dbStatus ? 'SQL Database Connected' : 'GPS Satellite Live'}</span>
+          <span>{dbStatus ? t.dbConnected : t.gpsLive}</span>
         </div>
 
-        {/* User-Friendly Role Switcher */}
-        <nav className="role-switch flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1" aria-label="Switch User Mode">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Bilingual Language Switcher Button */}
           <button
             type="button"
-            onClick={() => {
-              setRole('passenger')
-            }}
-            className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'passenger' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            onClick={toggleLanguage}
+            className="lang-toggle-btn px-3 py-1.5 rounded-xl border border-slate-300 hover:border-blue-600 bg-white hover:bg-blue-50 text-slate-800 font-extrabold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+            title={lang === 'en' ? 'ಕನ್ನಡಕ್ಕೆ ಬದಲಾಯಿಸಿ' : 'Switch to English'}
           >
-            <Bus size={15} />
-            <span>Passenger Radar</span>
+            <span className="text-sm">🌐</span>
+            <span>{t.langToggle}</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setRole('conductor')}
-            className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'conductor' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-          >
-            <Radio size={15} />
-            <span>Conductor Terminal</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setRole('owner')
-              if (isOwnerAuthenticated) {
-                fetchOwnerBuses(ownerEmail)
-              }
-            }}
-            className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'owner' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-          >
-            <Building size={15} />
-            <span>Fleet Owner</span>
-          </button>
-        </nav>
+
+          {/* User-Friendly Role Switcher */}
+          <nav className="role-switch flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1" aria-label="Switch User Mode">
+            <button
+              type="button"
+              onClick={() => {
+                setRole('passenger')
+              }}
+              className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'passenger' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              <Bus size={15} />
+              <span>{t.passengerRadar}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('conductor')}
+              className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'conductor' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              <Radio size={15} />
+              <span>{t.conductorTerminal}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRole('owner')
+                if (isOwnerAuthenticated) {
+                  fetchOwnerBuses(ownerEmail)
+                }
+              }}
+              className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'owner' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              <Building size={15} />
+              <span>{t.fleetOwner}</span>
+            </button>
+          </nav>
+        </div>
       </header>
 
       {/* 3. ROTATING PASSENGER ADVISORY TICKER */}
@@ -978,10 +1011,10 @@ function App() {
                       Coastal Smart Transit • ಕರಾವಳಿ ಸಾರಿಗೆ
                     </span>
                     <h2 className="step1-title text-2xl font-extrabold text-slate-900 tracking-tight m-0">
-                      Where are you traveling today?
+                      {t.whereHeading}
                     </h2>
                     <p className="step1-subtitle text-slate-500 text-sm mt-1">
-                      Select your destination along the Mangaluru – Surathkal NH-66 corridor.
+                      {t.destinationSubtitle}
                     </p>
                   </div>
 
@@ -992,7 +1025,7 @@ function App() {
                     </div>
                     <div>
                       <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                        Your Boarding Station
+                        {t.boardingFrom}
                       </span>
                       <strong className="text-sm font-extrabold text-slate-900">
                         {passengerLocationName}
@@ -1003,15 +1036,15 @@ function App() {
                   {/* 1-Tap Quick Destination Pills */}
                   <div className="quick-filter-group flex flex-col gap-2">
                     <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                      Quick Select Destination:
+                      {t.popularDestinations}:
                     </label>
                     <div className="destination-pills-grid grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                       {[
-                        { id: 'Surathkal', name: 'Surathkal / NITK', desc: '10.5 km Corridor' },
-                        { id: 'Udupi', name: 'Udupi', desc: 'Coastal Express' },
-                        { id: 'Kuloor', name: 'Kuloor Bridge', desc: 'City Ordinary' },
-                        { id: 'Statebank', name: 'Statebank', desc: 'Central Terminal' },
-                        { id: 'All', name: 'All Routes', desc: 'Show All Buses' },
+                        { id: 'Surathkal', name: lang === 'kn' ? 'ಸುರತ್ಕಲ್ / ಎನ್.ಐ.ಟಿ.ಕೆ' : 'Surathkal / NITK', desc: lang === 'kn' ? '10.5 ಕಿ.ಮೀ ಕಾರಿಡಾರ್' : '10.5 km Corridor' },
+                        { id: 'Udupi', name: lang === 'kn' ? 'ಉಡುಪಿ' : 'Udupi', desc: lang === 'kn' ? 'ಕರಾವಳಿ ಎಕ್ಸ್‌ಪ್ರೆಸ್' : 'Coastal Express' },
+                        { id: 'Kuloor', name: lang === 'kn' ? 'ಕುಳೂರು ಸೇತುವೆ' : 'Kuloor Bridge', desc: lang === 'kn' ? 'ಸಿಟಿ ಸಾಮಾನ್ಯ' : 'City Ordinary' },
+                        { id: 'Statebank', name: lang === 'kn' ? 'ಸ್ಟೇಟ್‌ಬ್ಯಾಂಕ್' : 'Statebank', desc: lang === 'kn' ? 'ಕೇಂದ್ರ ನಿಲ್ದಾಣ' : 'Central Terminal' },
+                        { id: 'All', name: lang === 'kn' ? 'ಎಲ್ಲಾ ಮಾರ್ಗಗಳು' : 'All Routes', desc: lang === 'kn' ? 'ಎಲ್ಲಾ ಬಸ್‌ಗಳು' : 'Show All Buses' },
                       ].map((dest) => (
                         <button
                           key={dest.id}
@@ -1035,7 +1068,7 @@ function App() {
                     <Search size={18} className="text-slate-400 shrink-0" />
                     <input
                       type="text"
-                      placeholder="Or search by bus name (e.g., Vishal Express) or Route #..."
+                      placeholder={t.searchPlaceholder}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full bg-transparent border-0 outline-none text-sm text-slate-900 placeholder:text-slate-400"
@@ -1086,7 +1119,7 @@ function App() {
                     onClick={handleInitiateSearch}
                     className="search-incoming-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span>Search Incoming Buses</span>
+                    <span>{t.searchIncomingBuses}</span>
                     <ArrowRight size={18} />
                   </button>
                 </div>

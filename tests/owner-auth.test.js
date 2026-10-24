@@ -127,3 +127,4 @@ test('Conductor check-in unlocks bus with correct PIN and rejects incorrect PIN'
   assert.equal(validResult.bus.bus_name, 'Vishal Express')
   assert.equal(validResult.shift.status, 'ACTIVE')
 })
+
