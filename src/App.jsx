@@ -23,6 +23,7 @@ import {
   Radio,
   RefreshCw,
   Search,
+  Share2,
   ShieldCheck,
   Smartphone,
   Volume2,
@@ -212,6 +213,10 @@ function App() {
   // BILINGUAL LOCALIZATION (English & Kannada / ಕನ್ನಡ)
   const [lang, setLang] = useState(() => {
     try {
+      if (typeof window !== 'undefined') {
+        const urlLang = new URLSearchParams(window.location.search).get('lang')
+        if (urlLang === 'kn' || urlLang === 'en') return urlLang
+      }
       return localStorage.getItem('karavali_lang') || 'en'
     } catch {
       return 'en'
@@ -232,20 +237,48 @@ function App() {
   // Step 1: Destination/Route Selection (Default Landing)
   // Step 2: Filtered Bus List Screen
   // Step 3: Live Tracking Map View
-  const [passengerStep, setPassengerStep] = useState(1)
+  const [passengerStep, setPassengerStep] = useState(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const busParam = new URLSearchParams(window.location.search).get('bus')
+        if (busParam) return 3
+      }
+    } catch {}
+    return 1
+  })
   const [isAudioChimeEnabled, setIsAudioChimeEnabled] = useState(true)
   const hasChimededForBusRef = useRef(null)
-  const [selectedDestination, setSelectedDestination] = useState('Surathkal')
+  const [selectedDestination, setSelectedDestination] = useState(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const destParam = new URLSearchParams(window.location.search).get('dest')
+        if (destParam) return destParam
+      }
+    } catch {}
+    return 'Surathkal'
+  })
   const [searchQuery, setSearchQuery] = useState('')
   const [serviceTypeFilter, setServiceTypeFilter] = useState('All') // 'All' | 'Express' | 'City'
   const [sortBy, setSortBy] = useState('eta') // 'eta' | 'fare' | 'seats'
 
   // Live bus telemetry state
   const [liveBuses, setLiveBuses] = useState(defaultBuses)
-  const [selectedBusId, setSelectedBusId] = useState(null)
+  const [selectedBusId, setSelectedBusId] = useState(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const busParam = new URLSearchParams(window.location.search).get('bus')
+        if (busParam) {
+          const num = Number(busParam)
+          return isNaN(num) ? busParam : num
+        }
+      }
+    } catch {}
+    return null
+  })
   const [showLocationModal, setShowLocationModal] = useState(false)
   const [isFullscreenMap, setIsFullscreenMap] = useState(false)
   const [pendingBusToTrack, setPendingBusToTrack] = useState(null)
+  const [copiedLink, setCopiedLink] = useState(false)
 
   // Passenger location state (Default Mangaluru Statebank Central Terminal)
   const [passengerCoords, setPassengerCoords] = useState([12.8718, 74.8430])
@@ -881,6 +914,35 @@ function App() {
     ? [trackedBus.latitude, trackedBus.longitude]
     : [12.9100, 74.8300]
 
+  // 1-Tap WhatsApp Share Trip Handler
+  const handleShareTripWhatsApp = () => {
+    if (!trackedBus || typeof window === 'undefined') return
+    const origin = window.location.origin
+    const shareUrl = `${origin}/?bus=${trackedBus.bus_id}&dest=${encodeURIComponent(selectedDestination)}`
+    const distText = distanceToPassenger !== null ? `${distanceToPassenger} km away` : 'approaching'
+    const etaText = `${trackedBus.eta_minutes ?? 3} mins`
+    const message = `🚍 *Karavali Sarige Live Transit Track*\nBus: *${trackedBus.bus_name}* (${trackedBus.vehicle_number})\nRoute: ${trackedBus.route_name}\nStop ETA: ${etaText} (${distText})\n\n📍 Open Live Radar:\n${shareUrl}`
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`
+    window.open(whatsappUrl, '_blank')
+  }
+
+  // 1-Tap Copy Trip Link Handler
+  const handleCopyTripLink = async () => {
+    if (!trackedBus || typeof window === 'undefined') return
+    const origin = window.location.origin
+    const shareUrl = `${origin}/?bus=${trackedBus.bus_id}&dest=${encodeURIComponent(selectedDestination)}`
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+      }
+      setCopiedLink(true)
+      setTimeout(() => setCopiedLink(false), 2500)
+    } catch {
+      setCopiedLink(true)
+      setTimeout(() => setCopiedLink(false), 2500)
+    }
+  }
+
   // Proximity sound chime trigger when tracked bus is within 1.2 km of passenger stop
   useEffect(() => {
     if (passengerStep === 3 && trackedBus && distanceToPassenger !== null) {
@@ -1438,6 +1500,36 @@ function App() {
                           {trackedBus.delay_minutes > 0 ? `+${trackedBus.delay_minutes}m Delay` : 'On Time'}
                         </strong>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* LIVE TRIP SHARING BAR (WHATSAPP & DEEP-LINK) */}
+                  <div className="w-full pt-2 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
+                    <div className="flex items-center gap-1.5 text-slate-500 font-semibold text-[11px]">
+                      <Share2 size={13} className="text-blue-600" />
+                      <span>Share live bus arrival with family:</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyTripLink}
+                        title="Copy Live Tracking URL to clipboard"
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] flex items-center gap-1.5 transition-all border border-slate-200/80 cursor-pointer"
+                      >
+                        {copiedLink ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                        <span>{copiedLink ? 'Link Copied!' : 'Copy Link'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleShareTripWhatsApp}
+                        title="Share live tracking radar link directly via WhatsApp"
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                      >
+                        <span>💬</span>
+                        <span>Share on WhatsApp</span>
+                      </button>
                     </div>
                   </div>
 
