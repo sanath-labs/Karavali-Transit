@@ -66,6 +66,91 @@ function MapRecenter({ center }) {
   return null
 }
 
+// Interactive Map Camera Control Overlay (Center Bus, Center Me, Fit Both, Fullscreen)
+function MapCameraControlOverlay({ passengerCoords, busCoords, isFullscreen, onToggleFullscreen }) {
+  const map = useMap()
+
+  const handleCenterPassenger = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (passengerCoords && passengerCoords[0]) {
+      map.flyTo(passengerCoords, 16, { duration: 1.2 })
+    }
+  }
+
+  const handleCenterBus = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (busCoords && busCoords[0]) {
+      map.flyTo(busCoords, 16, { duration: 1.2 })
+    }
+  }
+
+  const handleFitBoth = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (passengerCoords && busCoords && busCoords[0]) {
+      const bounds = L.latLngBounds([passengerCoords, busCoords])
+      map.fitBounds(bounds, { padding: [80, 80], maxZoom: 15, animate: true })
+    } else if (passengerCoords) {
+      map.flyTo(passengerCoords, 14, { duration: 1.2 })
+    }
+  }
+
+  return (
+    <div className="leaflet-top leaflet-right !top-3 !right-3 z-[1000] pointer-events-auto">
+      <div className="flex flex-col gap-1.5 bg-white/95 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/90 shadow-xl">
+        <button
+          type="button"
+          onClick={handleFitBoth}
+          title="Fit Both: Overview of Bus and Boarding Stop"
+          className="px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer border border-slate-200/60"
+        >
+          <span className="text-sm">🔍</span>
+          <span className="hidden sm:inline font-extrabold text-[11px]">Fit Both</span>
+        </button>
+        {busCoords && (
+          <button
+            type="button"
+            onClick={handleCenterBus}
+            title="Focus & Follow Incoming Bus"
+            className="px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer border border-slate-200/60"
+          >
+            <span className="text-sm">🚍</span>
+            <span className="hidden sm:inline font-extrabold text-[11px]">Follow Bus</span>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleCenterPassenger}
+          title="Center on My Boarding Stop"
+          className="px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer border border-slate-200/60"
+        >
+          <span className="text-sm">🎯</span>
+          <span className="hidden sm:inline font-extrabold text-[11px]">My Stop</span>
+        </button>
+        {onToggleFullscreen && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onToggleFullscreen()
+            }}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Expand Fullscreen Radar'}
+            className="px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer border border-slate-200/60"
+          >
+            <span className="text-sm">{isFullscreen ? '🗗' : '⛶'}</span>
+            <span className="hidden sm:inline font-extrabold text-[11px]">
+              {isFullscreen ? 'Normal' : 'Fullscreen'}
+            </span>
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Generate the road corridor path connecting passenger and the incoming bus
 function getTrackingPath(passengerCoords, busCoords, stops = corridorStops) {
   if (!passengerCoords || !busCoords) return []
@@ -307,6 +392,8 @@ function TransitMap({
   mapCenter = [12.9100, 74.8300],
   passengerCoords = [12.8718, 74.8430],
   passengerStopName = 'Mangaluru Statebank Terminal',
+  isFullscreen = false,
+  onToggleFullscreen = null,
 }) {
   const selectedBus = buses.find((b) => b.bus_id === selectedBusId)
   const busCoords = selectedBus ? [selectedBus.latitude, selectedBus.longitude] : null
@@ -327,6 +414,14 @@ function TransitMap({
       zoom={13}
       className="transit-map"
     >
+      {/* Interactive Camera Focus & Fullscreen Controls */}
+      <MapCameraControlOverlay
+        passengerCoords={passengerCoords}
+        busCoords={busCoords}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={onToggleFullscreen}
+      />
+
       {/* Dynamic auto-framing */}
       {selectedBus ? (
         <MapTrackingFocuser passengerCoords={passengerCoords} busCoords={busCoords} />

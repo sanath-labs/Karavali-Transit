@@ -16,6 +16,8 @@ import {
   LogOut,
   Mail,
   MapPin,
+  Maximize2,
+  Minimize2,
   Navigation,
   Plus,
   Radio,
@@ -242,6 +244,7 @@ function App() {
   const [liveBuses, setLiveBuses] = useState(defaultBuses)
   const [selectedBusId, setSelectedBusId] = useState(null)
   const [showLocationModal, setShowLocationModal] = useState(false)
+  const [isFullscreenMap, setIsFullscreenMap] = useState(false)
   const [pendingBusToTrack, setPendingBusToTrack] = useState(null)
 
   // Passenger location state (Default Mangaluru Statebank Central Terminal)
@@ -1318,7 +1321,7 @@ function App() {
             {/* Centered on selected bus with prominent "Switch Bus / Exit Map"*/}
             {/* ============================================================== */}
             {passengerStep === 3 && trackedBus && (
-              <div className="step3-container flex-1 flex flex-col relative h-[calc(100vh-140px)] min-h-[500px]">
+              <div className={isFullscreenMap ? "step3-container fixed inset-0 z-50 bg-white flex flex-col w-screen h-screen overflow-hidden" : "step3-container flex-1 flex flex-col relative h-[calc(100vh-140px)] min-h-[500px]"}>
                 {/* STEP 3 TOP NAVIGATION BAR WITH "SWITCH BUS / EXIT MAP" BUTTON */}
                 <div className="step3-topbar bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between gap-4 z-10 shadow-sm">
                   <div className="flex items-center gap-3">
@@ -1327,6 +1330,7 @@ function App() {
                       type="button"
                       onClick={() => {
                         hasChimededForBusRef.current = null
+                        setIsFullscreenMap(false)
                         setPassengerStep(2)
                       }}
                       className="switch-bus-btn bg-slate-900 hover:bg-blue-600 text-white text-xs font-extrabold px-4 py-2 rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer"
@@ -1373,6 +1377,15 @@ function App() {
                     >
                       {isAudioChimeEnabled ? <Volume2 size={14} className="text-emerald-700" /> : <VolumeX size={14} className="text-slate-400" />}
                       <span className="hidden sm:inline">{isAudioChimeEnabled ? 'Chime Active' : 'Muted'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsFullscreenMap((prev) => !prev)}
+                      title={isFullscreenMap ? 'Exit Fullscreen' : 'Expand Fullscreen Radar'}
+                      className="px-2.5 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-300 cursor-pointer"
+                    >
+                      {isFullscreenMap ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                      <span className="hidden sm:inline">{isFullscreenMap ? 'Normal' : 'Fullscreen'}</span>
                     </button>
                     <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
                       ETA: {trackedBus.eta_minutes ?? 3} Mins
@@ -1460,6 +1473,8 @@ function App() {
                       mapCenter={mapCenter}
                       passengerCoords={passengerCoords}
                       passengerStopName={passengerLocationName}
+                      isFullscreen={isFullscreenMap}
+                      onToggleFullscreen={() => setIsFullscreenMap((prev) => !prev)}
                     />
                   </Suspense>
 
