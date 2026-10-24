@@ -59,6 +59,11 @@ export const translations = {
     endShift: 'End Duty & Stop Streaming',
     passengerOccupancy: 'Live Passenger Occupancy',
     corridorIncident: 'Corridor Incident & Delay Broadcaster',
+    sortByLabel: 'Sort by:',
+    sortEta: '⚡ Earliest ETA',
+    sortFare: '💰 Lowest Fare',
+    sortSeats: '💺 Most Seats',
+    stageFareEst: 'Stage Fare',
     langToggle: 'ಕನ್ನಡ',
   },
   kn: {
@@ -117,6 +122,11 @@ export const translations = {
     endShift: 'ಕರ್ತವ್ಯ ಮುಗಿಸಿ & ನಿಲ್ಲಿಸಿ',
     passengerOccupancy: 'ಲೈವ್ ಪ್ರಯಾಣಿಕರ ಆಸನ ವಿವರ',
     corridorIncident: 'ರಸ್ತೆ ಅಡಚಣೆ & ವಿಳಂಬ ಮಾಹಿತಿ ಪ್ರಸಾರ',
+    sortByLabel: 'ವಿಂಗಡಿಸಿ:',
+    sortEta: '⚡ ಮುಂಚಿತ ಆಗಮನ',
+    sortFare: '💰 ಕಡಿಮೆ ದರ',
+    sortSeats: '💺 ಹೆಚ್ಚು ಸೀಟುಗಳು',
+    stageFareEst: 'ಅಂದಾಜು ದರ',
     langToggle: 'English',
   },
 }

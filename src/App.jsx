@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import io from 'socket.io-client'
 import { translations } from './translations.js'
+import { calculateEstimatedFare, sortBuses } from './fareRules.js'
 import './App.css'
 
 const TransitMap = lazy(() => import('./TransitMap.jsx'))
@@ -235,6 +236,7 @@ function App() {
   const [selectedDestination, setSelectedDestination] = useState('Surathkal')
   const [searchQuery, setSearchQuery] = useState('')
   const [serviceTypeFilter, setServiceTypeFilter] = useState('All') // 'All' | 'Express' | 'City'
+  const [sortBy, setSortBy] = useState('eta') // 'eta' | 'fare' | 'seats'
 
   // Live bus telemetry state
   const [liveBuses, setLiveBuses] = useState(defaultBuses)
@@ -816,6 +818,9 @@ function App() {
     return true
   })
 
+  // Sort filtered buses based on user-selected criteria (ETA, Fare, Seats)
+  const sortedBuses = sortBuses(filteredBuses, sortBy, selectedDestination)
+
   // Handlers for Step Transitions
   const handleInitiateSearch = (e) => {
     e?.preventDefault()
@@ -1132,29 +1137,65 @@ function App() {
             {/* ============================================================== */}
             {passengerStep === 2 && (
               <div className="step2-container max-w-4xl w-full mx-auto p-6 flex flex-col gap-4">
-                {/* Header with Back button and count */}
-                <div className="step2-nav-header bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between flex-wrap gap-3 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setPassengerStep(1)}
-                      className="step2-back-btn flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer"
-                      title="Back to Step 1: Change Destination"
-                    >
-                      <ArrowLeft size={16} />
-                      <span>Change Destination</span>
-                    </button>
-                    <div>
-                      <h2 className="step2-destination-title text-base font-extrabold text-slate-900 m-0">
-                        Incoming Buses to: <span className="text-blue-600">{selectedDestination === 'All' ? 'All Coastal Corridors' : selectedDestination}</span>
-                      </h2>
-                      <span className="text-xs text-slate-500">Boarding at {passengerLocationName}</span>
+                {/* Header with Back button, count and multi-criteria sorting */}
+                <div className="step2-nav-header bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setPassengerStep(1)}
+                        className="step2-back-btn flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                        title="Back to Step 1: Change Destination"
+                      >
+                        <ArrowLeft size={16} />
+                        <span>{t.changeDestination || 'Change Destination'}</span>
+                      </button>
+                      <div>
+                        <h2 className="step2-destination-title text-base font-extrabold text-slate-900 m-0">
+                          {t.step2Title || 'Incoming Buses to:'} <span className="text-blue-600">{selectedDestination === 'All' ? 'All Coastal Corridors' : selectedDestination}</span>
+                        </h2>
+                        <span className="text-xs text-slate-500">Boarding at {passengerLocationName}</span>
+                      </div>
                     </div>
+
+                    <span className="step2-bus-count-badge bg-blue-50 text-blue-700 border border-blue-200 text-xs font-extrabold px-3 py-1 rounded-full">
+                      {filteredBuses.length} Active {filteredBuses.length === 1 ? 'Bus' : 'Buses'} Operating
+                    </span>
                   </div>
 
-                  <span className="step2-bus-count-badge bg-blue-50 text-blue-700 border border-blue-200 text-xs font-extrabold px-3 py-1 rounded-full">
-                    {filteredBuses.length} Active {filteredBuses.length === 1 ? 'Bus' : 'Buses'} Operating
-                  </span>
+                  {/* Multi-Criteria Bus Sorting Controls */}
+                  <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-slate-100 text-xs">
+                    <span className="text-slate-500 font-bold">{t.sortByLabel || 'Sort by:'}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSortBy('eta')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          sortBy === 'eta' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {t.sortEta || '⚡ Earliest ETA'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSortBy('fare')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          sortBy === 'fare' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {t.sortFare || '💰 Lowest Fare'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSortBy('seats')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          sortBy === 'seats' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {t.sortSeats || '💺 Most Seats'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Empty State */}
@@ -1179,16 +1220,17 @@ function App() {
                 ) : (
                   /* Filtered Bus Cards Grid */
                   <div className="step2-bus-grid flex flex-col gap-3">
-                    {filteredBuses.map((bus) => {
+                    {sortedBuses.map((bus) => {
                       const isExpress = (bus.service_type || '').toLowerCase().includes('express')
                       const isDelayed = (bus.delay_minutes || 0) > 0
+                      const estFare = calculateEstimatedFare(bus, selectedDestination)
 
                       return (
                         <article
                           key={bus.bus_id}
                           className="bus-card-simple bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-slate-300 transition-all flex flex-col gap-3"
                         >
-                          {/* Top: Route Tag, Name, Service Badge */}
+                          {/* Top: Route Tag, Name, Service Badge & Fare Pill */}
                           <div className="card-top flex items-start justify-between gap-3">
                             <div className="card-title-block flex items-center flex-wrap gap-2.5">
                               <span className="route-tag bg-slate-900 text-white text-xs font-extrabold px-2.5 py-1 rounded-md">
@@ -1202,9 +1244,15 @@ function App() {
                               </span>
                             </div>
 
-                            <span className={`service-badge text-xs font-extrabold px-3 py-1 rounded-full ${isExpress ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
-                              {isExpress ? '⚡ Express Service' : '🚌 City / Ordinary'}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="fare-badge text-xs font-black px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full flex items-center gap-1">
+                                <span>₹{estFare}</span>
+                                <span className="text-[10px] text-emerald-600 font-semibold">{t.stageFareEst || 'Fare'}</span>
+                              </span>
+                              <span className={`service-badge text-xs font-extrabold px-3 py-1 rounded-full ${isExpress ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                                {isExpress ? '⚡ Express Service' : '🚌 City / Ordinary'}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Route Corridor */}
@@ -1212,7 +1260,7 @@ function App() {
                             Corridor: <span className="text-slate-900 font-bold">{bus.route_name}</span>
                           </p>
 
-                          {/* Highlights: Arrival ETA, Schedule, Delays, Speed */}
+                          {/* Highlights: Arrival ETA, Schedule, Stage Fare, Delay Status */}
                           <div className="card-highlights grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs">
                             <div className="highlight-item flex flex-col">
                               <span className="text-slate-500 font-bold uppercase text-[10px]">Next Stop Arrival</span>
@@ -1223,14 +1271,14 @@ function App() {
                               <strong className="text-slate-900 text-sm font-bold">{bus.estimated_arrival || '1:15 PM'}</strong>
                             </div>
                             <div className="highlight-item flex flex-col">
+                              <span className="text-slate-500 font-bold uppercase text-[10px]">Corridor Fare</span>
+                              <strong className="text-emerald-700 text-sm font-black">₹{estFare} ({isExpress ? 'Express' : 'Ordinary'})</strong>
+                            </div>
+                            <div className="highlight-item flex flex-col">
                               <span className="text-slate-500 font-bold uppercase text-[10px]">Delay Status</span>
                               <strong className={`text-sm font-bold ${isDelayed ? 'text-amber-700' : 'text-emerald-700'}`}>
                                 {isDelayed ? `+${bus.delay_minutes}m Late` : 'On Time'}
                               </strong>
-                            </div>
-                            <div className="highlight-item flex flex-col">
-                              <span className="text-slate-500 font-bold uppercase text-[10px]">Live Velocity</span>
-                              <strong className="text-slate-900 text-sm font-bold">{bus.speed ?? 38} km/h</strong>
                             </div>
                           </div>
 
