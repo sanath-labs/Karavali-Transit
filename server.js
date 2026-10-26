@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import { randomInt } from 'node:crypto'
 import cors from 'cors'
 import express from 'express'
 import { createServer } from 'node:http'
@@ -8,6 +9,7 @@ import {
   getActiveShifts,
   getBuses,
   getBusesByOwner,
+  getOwnerByEmail,
   getRecentTelemetry,
   initDB,
   isDbConnected,
@@ -17,6 +19,7 @@ import {
   updateBusPin,
   verifyConductorPin,
 } from './db.js'
+import { createOwnerSessionManager, isValidOtp, toPublicBus } from './serverAuth.js'
 
 const app = express()
 app.use(cors())
@@ -25,8 +28,22 @@ app.use(express.json())
 // In-memory fast relay & OTP cache
 const activeBuses = {}
 const activeOtps = {}
-const registeredOwners = {
-  'vishal@gmail.com': { email: 'vishal@gmail.com', agency_name: 'Vishal Coastal Travels' },
+const ownerSessions = createOwnerSessionManager()
+
+function publicBusSnapshot(buses) {
+  return Object.fromEntries(
+    Object.entries(buses).map(([id, bus]) => [id, toPublicBus(bus)])
+  )
+}
+
+function requireOwnerSession(req, res, next) {
+  const token = req.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
+  const owner = token && ownerSessions.get(token)
+  if (!owner) {
+    return res.status(401).json({ success: false, error: 'Owner authentication required.' })
+  }
+  req.owner = owner
+  next()
 }
 
 // REST API Endpoints
@@ -43,41 +60,46 @@ app.get('/api/health', (req, res) => {
 // Fetch all buses from SQL database / memory
 app.get('/api/buses', async (req, res) => {
   const buses = await getBuses()
-  res.json(buses)
+  res.json(buses.map(toPublicBus))
 })
 
 // 1. OWNER AUTHENTICATION: Send 6-Digit Email OTP
-app.post('/api/owner/send-otp', (req, res) => {
+app.post('/api/owner/send-otp', async (req, res) => {
   const { email, agency_name } = req.body
-  if (!email || !email.includes('@')) {
+  if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
     return res.status(400).json({ success: false, error: 'Valid email address is required.' })
   }
 
   const cleanEmail = email.trim().toLowerCase()
-  const otp = Math.floor(100000 + Math.random() * 900000).toString()
+  const owner = await getOwnerByEmail(cleanEmail)
+  if (!owner) {
+    return res.status(403).json({ success: false, error: 'This email is not registered to a fleet owner.' })
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(503).json({ success: false, error: 'Email OTP delivery is not configured.' })
+  }
+
+  const otp = String(randomInt(100000, 1000000))
   const expiresAt = Date.now() + 10 * 60 * 1000
 
   activeOtps[cleanEmail] = {
     otp,
     expiresAt,
-    agency_name: agency_name || (registeredOwners[cleanEmail]?.agency_name) || 'Coastal Bus Line',
+    attempts: 0,
+    agency_name: owner.agency_name || agency_name || 'Coastal Bus Line',
   }
 
-  console.log(`\n======================================================`)
-  console.log(`📧 [GMAIL OTP SIMULATION] Email dispatched to: ${cleanEmail}`)
-  console.log(`🔐 6-DIGIT VERIFICATION CODE: ${otp}`)
-  console.log(`⏰ Code valid for 10 minutes.`)
-  console.log(`======================================================\n`)
+  console.log(`Development OTP for ${cleanEmail}: ${otp} (expires in 10 minutes)`)
 
   res.json({
     success: true,
-    message: `6-Digit OTP code dispatched to ${cleanEmail}. Check your inbox!`,
+    message: `Development OTP generated for ${cleanEmail}.`,
     preview_otp: otp,
   })
 })
 
 // 2. OWNER AUTHENTICATION: Verify OTP
-app.post('/api/owner/verify-otp', (req, res) => {
+app.post('/api/owner/verify-otp', async (req, res) => {
   const { email, otp } = req.body
   if (!email || !otp) {
     return res.status(400).json({ success: false, error: 'Email and OTP code are required.' })
@@ -87,18 +109,21 @@ app.post('/api/owner/verify-otp', (req, res) => {
   const cleanOtp = String(otp).trim()
   const record = activeOtps[cleanEmail]
 
-  const isValid = (record && record.otp === cleanOtp && Date.now() <= record.expiresAt) || cleanOtp === '123456'
-
-  if (!isValid) {
+  if (!isValidOtp(record, cleanOtp)) {
+    if (record) {
+      record.attempts += 1
+      if (record.attempts >= 5) delete activeOtps[cleanEmail]
+    }
     return res.status(401).json({ success: false, error: 'Invalid or expired 6-digit OTP code.' })
   }
 
-  const agencyName = record?.agency_name || registeredOwners[cleanEmail]?.agency_name || 'Coastal Transit Owner'
-  registeredOwners[cleanEmail] = {
-    email: cleanEmail,
-    agency_name: agencyName,
-    last_login: Date.now(),
+  const owner = await getOwnerByEmail(cleanEmail)
+  if (!owner) {
+    delete activeOtps[cleanEmail]
+    return res.status(403).json({ success: false, error: 'This email is not registered to a fleet owner.' })
   }
+  const agencyName = owner.agency_name || record.agency_name
+  const token = ownerSessions.create(cleanEmail, agencyName)
 
   delete activeOtps[cleanEmail]
 
@@ -108,23 +133,28 @@ app.post('/api/owner/verify-otp', (req, res) => {
     owner: {
       email: cleanEmail,
       agency_name: agencyName,
-      token: `owner_token_${Date.now()}`,
+      token,
     },
   })
 })
 
 // 3. OWNER FLEET: Get buses for this owner
-app.get('/api/owner/buses', async (req, res) => {
-  const email = (req.query.email || 'vishal@gmail.com').trim().toLowerCase()
-  const buses = await getBusesByOwner(email)
+app.get('/api/owner/buses', requireOwnerSession, async (req, res) => {
+  const buses = await getBusesByOwner(req.owner.email)
   res.json(buses)
 })
 
 // 4. OWNER FLEET: Add new bus with Secret Conductor PIN
-app.post('/api/owner/buses', async (req, res) => {
-  const { owner_email, bus_name, vehicle_number, route_number, origin, destination, service_type, conductor_pin } = req.body
-  if (!bus_name || !vehicle_number) {
+app.post('/api/owner/buses', requireOwnerSession, async (req, res) => {
+  const { bus_name, vehicle_number, route_number, origin, destination, service_type, conductor_pin } = req.body
+  if (
+    typeof bus_name !== 'string' || !bus_name.trim() ||
+    typeof vehicle_number !== 'string' || !vehicle_number.trim()
+  ) {
     return res.status(400).json({ success: false, error: 'Bus Name and Vehicle Number are required.' })
+  }
+  if (conductor_pin && !/^\d{4}$/.test(String(conductor_pin).trim())) {
+    return res.status(400).json({ success: false, error: 'Conductor PIN must contain exactly 4 digits.' })
   }
 
   const cleanVeh = vehicle_number.trim().toUpperCase().replace(/\s+/g, '-')
@@ -138,7 +168,7 @@ app.post('/api/owner/buses', async (req, res) => {
     origin: origin || 'Mangaluru Statebank',
     destination: destination || 'Surathkal',
     conductor_pin: pin,
-    owner_email: (owner_email || 'vishal@gmail.com').trim().toLowerCase(),
+    owner_email: req.owner.email,
     is_last_bus: false,
   }
 
@@ -155,33 +185,48 @@ app.post('/api/owner/buses', async (req, res) => {
     eta_minutes: 3,
   }
 
-  io.emit('sync_buses', activeBuses)
+  io.emit('sync_buses', publicBusSnapshot(activeBuses))
   res.status(201).json({ success: true, bus: created })
 })
 
 // 5. OWNER FLEET: Update Secret Conductor PIN
-app.patch('/api/owner/buses/:busId/pin', async (req, res) => {
+app.patch('/api/owner/buses/:busId/pin', requireOwnerSession, async (req, res) => {
   const busId = Number(req.params.busId)
   const { conductor_pin } = req.body
-  if (!conductor_pin) {
-    return res.status(400).json({ success: false, error: 'conductor_pin is required' })
+  if (!/^\d{4}$/.test(String(conductor_pin || '').trim())) {
+    return res.status(400).json({ success: false, error: 'Conductor PIN must contain exactly 4 digits.' })
+  }
+  const ownedBuses = await getBusesByOwner(req.owner.email)
+  if (!ownedBuses.some((bus) => bus.bus_id === busId)) {
+    return res.status(404).json({ success: false, error: 'Bus not found in this owner fleet.' })
   }
 
-  const updated = await updateBusPin(busId, String(conductor_pin).trim())
+  const pin = String(conductor_pin).trim()
+  const updated = await updateBusPin(busId, pin)
+  if (!updated) {
+    return res.status(500).json({ success: false, error: 'Failed to update conductor PIN.' })
+  }
   if (activeBuses[busId]) {
-    activeBuses[busId].conductor_pin = String(conductor_pin).trim()
+    activeBuses[busId].conductor_pin = pin
   }
 
-  res.json({ success: updated, message: 'Conductor PIN updated.' })
+  res.json({ success: true, message: 'Conductor PIN updated.' })
 })
 
 // 6. OWNER FLEET: Delete Bus
-app.delete('/api/owner/buses/:busId', async (req, res) => {
+app.delete('/api/owner/buses/:busId', requireOwnerSession, async (req, res) => {
   const busId = Number(req.params.busId)
+  const ownedBuses = await getBusesByOwner(req.owner.email)
+  if (!ownedBuses.some((bus) => bus.bus_id === busId)) {
+    return res.status(404).json({ success: false, error: 'Bus not found in this owner fleet.' })
+  }
   const deleted = await deleteBus(busId)
+  if (!deleted) {
+    return res.status(500).json({ success: false, error: 'Failed to remove bus from fleet.' })
+  }
   delete activeBuses[busId]
-  io.emit('sync_buses', activeBuses)
-  res.json({ success: deleted, message: 'Bus removed.' })
+  io.emit('sync_buses', publicBusSnapshot(activeBuses))
+  res.json({ success: true, message: 'Bus removed.' })
 })
 
 // 7. REAL-WORLD CONDUCTOR CHECK-IN: Verify Bus Number & Secret PIN
@@ -235,13 +280,13 @@ io.on('connection', (socket) => {
 
   // Send current live buses immediately to newly connected passengers
   if (Object.keys(activeBuses).length > 0) {
-    socket.emit('sync_buses', activeBuses)
-    socket.emit('initial_buses', Object.values(activeBuses))
+    socket.emit('sync_buses', publicBusSnapshot(activeBuses))
+    socket.emit('initial_buses', Object.values(activeBuses).map(toPublicBus))
   } else {
     getBuses().then((buses) => {
       buses.forEach((b) => { activeBuses[b.bus_id] = b })
-      socket.emit('sync_buses', activeBuses)
-      socket.emit('initial_buses', buses)
+      socket.emit('sync_buses', publicBusSnapshot(activeBuses))
+      socket.emit('initial_buses', buses.map(toPublicBus))
     }).catch((err) => console.error('Failed to sync buses:', err))
   }
 
@@ -264,8 +309,8 @@ io.on('connection', (socket) => {
     }
     activeBuses[data.bus_id] = payload
 
-    io.emit('live_location_broadcast', payload)
-    io.emit('bus_location_update', payload)
+    io.emit('live_location_broadcast', toPublicBus(payload))
+    io.emit('bus_location_update', toPublicBus(payload))
 
     try {
       await recordTelemetry(payload)
@@ -285,7 +330,7 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 5000
 
-server.listen(PORT, async () => {
+await initDB()
+server.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`)
-  await initDB()
 })

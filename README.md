@@ -133,9 +133,9 @@ stateDiagram-v2
 
 ---
 
-## 🏢 Fleet Owner Command Center (Gmail OTP Security)
+## 🏢 Fleet Owner Command Center (Email OTP)
 
-- **Owner Email OTP Authentication**: Enterprise security for transit operators. Bus owners enter their registered email (`vishal@gmail.com`) and receive a secure 6-digit OTP to access their dashboard.
+- **Owner Email OTP Authentication**: Registered owners enter their email (`vishal@gmail.com`) and verify a one-time code. In development, the generated code is shown in the UI and server log; production requires an email-delivery integration.
 - **Fleet Management & Bus Deployment**: Owners can add, update, and remove fleet buses operating on the NH-66 corridor.
 - **Secret Conductor PIN Administration**: Owners generate and manage unique 4-digit Secret PINs for each vehicle (with 1-click randomize and clipboard copy) to issue to their drivers.
 - **Real-Time Duty Oversight**: Real-time status indicators tracking which fleet buses are currently on active shift streaming live GPS versus resting at the depot.
@@ -204,7 +204,7 @@ npm install
 
 ### 2. Start the Backend Server (Terminal 1)
 ```bash
-node server.cjs
+node server.js
 # OR
 npm run server
 # Central fleet telemetry engine starts on http://localhost:5000
@@ -215,6 +215,8 @@ npm run server
 npm run dev
 # Vite client starts on http://localhost:5173
 ```
+
+For a remote API, set `VITE_API_URL` in the frontend environment. The local Vite development proxy defaults to `http://localhost:5000`; override it with `VITE_API_PROXY_TARGET` when needed.
 
 ### 4. Run Automated Tests & Quality Checks
 ```bash

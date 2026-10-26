@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "node server.cjs",
-    "server:cjs": "node server.cjs",
+    "server": "node server.js",
     "server:es": "node server.js",
     "build": "vite build",
     "lint": "oxlint",

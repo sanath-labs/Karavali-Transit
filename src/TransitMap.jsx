@@ -24,6 +24,16 @@ const corridorStops = [
 
 const defaultRouteCoordinates = corridorStops.map((stop) => stop.coords)
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character])
+}
+
 // Calculate geographic bearing (heading angle in degrees 0-360)
 function calculateBearing(lat1, lon1, lat2, lon2) {
   const toRad = (deg) => (deg * Math.PI) / 180
@@ -182,7 +192,7 @@ function createBusIcon(bus, isSelected, heading = 0) {
       <div class="custom-bus-marker ${pinClass}">
         ${isSelected ? '<div class="bus-radar-pulse"></div>' : ''}
         <span class="marker-bus-emoji" style="display:inline-block; transform: rotate(${Math.round(heading)}deg); transition: transform 0.4s ease;">🚍</span>
-        <span class="marker-route-badge">${bus.route_number || '15'}</span>
+        <span class="marker-route-badge">${escapeHtml(bus.route_number || '15')}</span>
       </div>
     `,
     iconSize: [44, 44],

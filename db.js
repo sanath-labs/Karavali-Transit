@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sqlite3 from 'sqlite3'
+import { matchesConductorPin } from './serverAuth.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const dbPath = path.resolve(__dirname, 'transit.db')
@@ -34,14 +35,14 @@ export function initDB() {
           origin TEXT NOT NULL,
           destination TEXT NOT NULL,
           is_last_bus INTEGER DEFAULT 0,
-          conductor_pin TEXT DEFAULT '4509',
+          conductor_pin TEXT,
           owner_email TEXT DEFAULT 'vishal@gmail.com',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `)
 
       // Add columns if table already existed without them
-      db.run("ALTER TABLE buses ADD COLUMN conductor_pin TEXT DEFAULT '4509'", () => {})
+      db.run('ALTER TABLE buses ADD COLUMN conductor_pin TEXT', () => {})
       db.run("ALTER TABLE buses ADD COLUMN owner_email TEXT DEFAULT 'vishal@gmail.com'", () => {})
 
       // 2. Driver Shifts Table
@@ -213,21 +214,39 @@ export function getBusesByOwner(ownerEmail) {
   })
 }
 
+export function getOwnerByEmail(email) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      'SELECT email, agency_name FROM owners WHERE LOWER(email) = LOWER(?) LIMIT 1',
+      [email],
+      (err, row) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve(row || null)
+        }
+      }
+    )
+  })
+}
+
 // Verify Conductor PIN for Bus Number
 export function verifyConductorPin(vehicleNumber, pin) {
   return new Promise((resolve) => {
     const normalized = vehicleNumber.replace(/\s+/g, '-').toUpperCase()
     const query = 'SELECT * FROM buses WHERE UPPER(REPLACE(vehicle_number, " ", "-")) = ? LIMIT 1'
     db.get(query, [normalized], (err, row) => {
-      if (err || !row) {
+      if (err) {
+        console.error('Error verifying conductor PIN:', err.message)
+        resolve({ success: false, error: 'Unable to verify conductor PIN.' })
+        return
+      }
+      if (!row) {
         resolve({ success: false, error: 'Vehicle number not found in registered fleet.' })
         return
       }
 
-      const expectedPin = String(row.conductor_pin || '4509').trim()
-      const enteredPin = String(pin || '').trim()
-
-      if (expectedPin === enteredPin) {
+      if (matchesConductorPin(row.conductor_pin, pin)) {
         resolve({ success: true, bus: row })
       } else {
         resolve({ success: false, error: 'Incorrect Secret PIN for ' + row.vehicle_number })
@@ -253,7 +272,7 @@ export function saveBus(bus) {
         bus.origin || 'Mangaluru Statebank',
         bus.destination || 'Surathkal',
         bus.is_last_bus ? 1 : 0,
-        bus.conductor_pin || '4509',
+        bus.conductor_pin || null,
         bus.owner_email || 'vishal@gmail.com',
       ],
       function (err) {

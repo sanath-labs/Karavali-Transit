@@ -36,11 +36,13 @@ import io from 'socket.io-client'
 import { translations } from './translations.js'
 import { calculateEstimatedFare, sortBuses } from './fareRules.js'
 import { generateShiftSummary } from './shiftLedger.js'
+import { apiUrl, ownerHeaders, socketUrl } from './api.js'
+import { matchesDestination } from './transitUtils.js'
 import './App.css'
 
 const TransitMap = lazy(() => import('./TransitMap.jsx'))
 
-const socket = io('http://localhost:5000')
+const socket = io(socketUrl)
 
 // NH-66 Coastal Highway key stops for corridor timeline progress
 const corridorStopsList = [
@@ -65,8 +67,6 @@ const defaultBuses = {
     origin: 'Mangaluru Statebank',
     destination: 'Surathkal',
     route_name: 'Mangaluru Statebank ➔ Surathkal',
-    conductor_pin: '4509',
-    owner_email: 'vishal@gmail.com',
     latitude: 12.8997,
     longitude: 74.8530,
     speed: 38,
@@ -86,8 +86,6 @@ const defaultBuses = {
     origin: 'Mangaluru Statebank',
     destination: 'Udupi',
     route_name: 'Mangaluru Statebank ➔ Udupi',
-    conductor_pin: '8812',
-    owner_email: 'vishal@gmail.com',
     latitude: 12.9271,
     longitude: 74.8415,
     speed: 46,
@@ -107,8 +105,6 @@ const defaultBuses = {
     origin: 'Mangaluru Statebank',
     destination: 'Kuloor',
     route_name: 'Mangaluru Statebank ➔ Kuloor',
-    conductor_pin: '3304',
-    owner_email: 'vishal@gmail.com',
     latitude: 12.8850,
     longitude: 74.8450,
     speed: 28,
@@ -128,8 +124,6 @@ const defaultBuses = {
     origin: 'Surathkal',
     destination: 'Mangaluru Statebank',
     route_name: 'Surathkal ➔ Mangaluru Statebank',
-    conductor_pin: '1022',
-    owner_email: 'vishal@gmail.com',
     latitude: 12.9350,
     longitude: 74.8210,
     speed: 34,
@@ -315,7 +309,6 @@ function App() {
     route_number: '15',
     origin: 'Mangaluru Statebank',
     destination: 'Surathkal',
-    conductor_pin: '4509',
     crowd_status: 'Seats Available',
     is_last_bus: false,
   })
@@ -340,6 +333,7 @@ function App() {
   const [ownerOtpPreview, setOwnerOtpPreview] = useState('')
   const [ownerAuthError, setOwnerAuthError] = useState('')
   const [isOwnerAuthenticated, setIsOwnerAuthenticated] = useState(false)
+  const [ownerToken, setOwnerToken] = useState('')
   const [ownerBuses, setOwnerBuses] = useState([])
   const [showAddBusModal, setShowAddBusModal] = useState(false)
   const [visiblePins, setVisiblePins] = useState({})
@@ -354,7 +348,7 @@ function App() {
     service_type: 'Express',
     origin: 'Mangaluru Statebank',
     destination: 'Surathkal',
-    conductor_pin: '4509',
+    conductor_pin: '',
   })
 
   // Periodic heartbeat timer for telemetry freshness checks
@@ -365,7 +359,7 @@ function App() {
 
   // Check SQL database connection on mount
   useEffect(() => {
-    fetch('http://localhost:5000/api/health')
+    fetch(apiUrl('/api/health'))
       .then((res) => res.json())
       .then((data) => setDbStatus(Boolean(data?.sql_connected || data?.database)))
       .catch(() => setDbStatus(false))
@@ -448,7 +442,7 @@ function App() {
 
     setIsCheckingPin(true)
     try {
-      const res = await fetch('http://localhost:5000/api/conductor/verify-pin', {
+      const res = await fetch(apiUrl('/api/conductor/verify-pin'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -459,7 +453,7 @@ function App() {
       })
       const data = await res.json()
 
-      if (data.success && data.bus) {
+      if (res.ok && data.success && data.bus) {
         setBusData({
           bus_id: data.bus.bus_id,
           driver_phone: conductorPhoneInput || '98451 23456',
@@ -477,37 +471,21 @@ function App() {
       } else {
         setConductorAuthError(data.error || 'Invalid Bus Registration or Secret PIN.')
       }
-    } catch {
-      // Offline fallback
-      const cleanVeh = conductorVehicleInput.trim().toUpperCase().replace(/\s+/g, '-')
-      const matched = Object.values(liveBuses).find(
-        (b) => b.vehicle_number?.toUpperCase().replace(/\s+/g, '-') === cleanVeh
-      )
-      if (matched && (conductorPinInput === '4509' || conductorPinInput === String(matched.conductor_pin))) {
-        setBusData({
-          ...matched,
-          driver_phone: conductorPhoneInput || '98451 23456',
-        })
-        setIsConductorAuthenticated(true)
-      } else {
-        setConductorAuthError('Invalid Secret PIN or vehicle registration number.')
-      }
+    } catch (error) {
+      setConductorAuthError(`Could not contact the transit server: ${error.message}`)
     } finally {
       setIsCheckingPin(false)
     }
   }
 
   // FLEET OWNER: Fetch Buses
-  const fetchOwnerBuses = async (email) => {
-    try {
-      const res = await fetch(`http://localhost:5000/api/owner/buses?email=${encodeURIComponent(email || ownerEmail)}`)
-      const data = await res.json()
-      if (Array.isArray(data)) {
-        setOwnerBuses(data)
-      }
-    } catch {
-      setOwnerBuses(Object.values(liveBuses))
-    }
+  const fetchOwnerBuses = async (token = ownerToken) => {
+    const res = await fetch(apiUrl('/api/owner/buses'), {
+      headers: ownerHeaders(token),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Failed to load fleet buses.')
+    if (Array.isArray(data)) setOwnerBuses(data)
   }
 
   // FLEET OWNER: Send 6-Digit Email OTP
@@ -520,21 +498,20 @@ function App() {
     }
 
     try {
-      const res = await fetch('http://localhost:5000/api/owner/send-otp', {
+      const res = await fetch(apiUrl('/api/owner/send-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: ownerEmail, agency_name: ownerAgencyName }),
       })
       const data = await res.json()
-      if (data.success) {
-        setOwnerOtpPreview(data.preview_otp || '123456')
+      if (res.ok && data.success) {
+        setOwnerOtpPreview(data.preview_otp || '')
         setOwnerOtpStep('otp')
       } else {
         setOwnerAuthError(data.error || 'Failed to send OTP.')
       }
-    } catch {
-      setOwnerOtpPreview('849201')
-      setOwnerOtpStep('otp')
+    } catch (error) {
+      setOwnerAuthError(`Could not contact the transit server: ${error.message}`)
     }
   }
 
@@ -548,27 +525,22 @@ function App() {
     }
 
     try {
-      const res = await fetch('http://localhost:5000/api/owner/verify-otp', {
+      const res = await fetch(apiUrl('/api/owner/verify-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: ownerEmail, otp: ownerOtpInput }),
       })
       const data = await res.json()
-      if (data.success) {
+      if (res.ok && data.success && data.owner?.token) {
+        setOwnerToken(data.owner.token)
         setIsOwnerAuthenticated(true)
         setOwnerOtpStep('dashboard')
-        fetchOwnerBuses(ownerEmail)
+        fetchOwnerBuses(data.owner.token).catch((error) => setOwnerAuthError(error.message))
       } else {
         setOwnerAuthError(data.error || 'Invalid OTP code.')
       }
-    } catch {
-      if (ownerOtpInput === ownerOtpPreview || ownerOtpInput === '123456') {
-        setIsOwnerAuthenticated(true)
-        setOwnerOtpStep('dashboard')
-        fetchOwnerBuses(ownerEmail)
-      } else {
-        setOwnerAuthError('Invalid OTP code. Please enter the 6-digit code.')
-      }
+    } catch (error) {
+      setOwnerAuthError(`Could not contact the transit server: ${error.message}`)
     }
   }
 
@@ -582,16 +554,15 @@ function App() {
     }
 
     try {
-      const res = await fetch('http://localhost:5000/api/owner/buses', {
+      const res = await fetch(apiUrl('/api/owner/buses'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ownerHeaders(ownerToken, { 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           ...newBusForm,
-          owner_email: ownerEmail,
         }),
       })
       const data = await res.json()
-      if (data.success && data.bus) {
+      if (res.ok && data.success && data.bus) {
         setOwnerBuses((prev) => [...prev, data.bus])
         setShowAddBusModal(false)
         setOwnerNotice(`Bus ${data.bus.vehicle_number} registered! Secret Conductor PIN: ${data.bus.conductor_pin}`)
@@ -607,16 +578,8 @@ function App() {
       } else {
         setOwnerNotice(data.error || 'Failed to add bus to fleet.')
       }
-    } catch {
-      const mockBus = {
-        bus_id: Date.now(),
-        ...newBusForm,
-        vehicle_number: newBusForm.vehicle_number.toUpperCase().replace(/\s+/g, '-'),
-        owner_email: ownerEmail,
-      }
-      setOwnerBuses((prev) => [...prev, mockBus])
-      setShowAddBusModal(false)
-      setOwnerNotice(`Bus registered! Secret Conductor PIN: ${mockBus.conductor_pin}`)
+    } catch (error) {
+      setOwnerNotice(`Could not contact the transit server: ${error.message}`)
     }
   }
 
@@ -629,19 +592,19 @@ function App() {
     }
 
     try {
-      await fetch(`http://localhost:5000/api/owner/buses/${busId}/pin`, {
+      const res = await fetch(apiUrl(`/api/owner/buses/${busId}/pin`), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ownerHeaders(ownerToken, { 'Content-Type': 'application/json' }),
         body: JSON.stringify({ conductor_pin: newPin.trim() }),
       })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update PIN.')
       setOwnerBuses((prev) =>
         prev.map((b) => (b.bus_id === busId ? { ...b, conductor_pin: newPin.trim() } : b))
       )
       setOwnerNotice(`Updated Secret Conductor PIN to ${newPin.trim()}`)
-    } catch {
-      setOwnerBuses((prev) =>
-        prev.map((b) => (b.bus_id === busId ? { ...b, conductor_pin: newPin.trim() } : b))
-      )
+    } catch (error) {
+      setOwnerNotice(error.message)
     }
   }
 
@@ -650,11 +613,16 @@ function App() {
     if (!window.confirm(`Are you sure you want to remove bus ${vehicleNum} from your fleet?`)) return
 
     try {
-      await fetch(`http://localhost:5000/api/owner/buses/${busId}`, { method: 'DELETE' })
+      const res = await fetch(apiUrl(`/api/owner/buses/${busId}`), {
+        method: 'DELETE',
+        headers: ownerHeaders(ownerToken),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to remove bus.')
       setOwnerBuses((prev) => prev.filter((b) => b.bus_id !== busId))
       setOwnerNotice(`Removed bus ${vehicleNum} from fleet.`)
-    } catch {
-      setOwnerBuses((prev) => prev.filter((b) => b.bus_id !== busId))
+    } catch (error) {
+      setOwnerNotice(error.message)
     }
   }
 
@@ -849,14 +817,7 @@ function App() {
 
   // Filter buses for Step 2 based on chosen route/destination
   const filteredBuses = Object.values(liveBuses).filter((bus) => {
-    if (selectedDestination !== 'All') {
-      const df = selectedDestination.toLowerCase()
-      const match =
-        bus.destination?.toLowerCase().includes(df) ||
-        bus.origin?.toLowerCase().includes(df) ||
-        bus.route_name?.toLowerCase().includes(df)
-      if (!match) return false
-    }
+    if (!matchesDestination(bus, selectedDestination)) return false
 
     if (serviceTypeFilter === 'Express') {
       if (!bus.service_type?.toLowerCase().includes('express')) return false
@@ -1053,7 +1014,7 @@ function App() {
               onClick={() => {
                 setRole('owner')
                 if (isOwnerAuthenticated) {
-                  fetchOwnerBuses(ownerEmail)
+                  fetchOwnerBuses().catch((error) => setOwnerAuthError(error.message))
                 }
               }}
               className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'owner' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
@@ -2303,8 +2264,10 @@ function App() {
                         type="button"
                         onClick={() => {
                           setIsOwnerAuthenticated(false)
+                          setOwnerToken('')
                           setOwnerOtpStep('email')
                           setOwnerOtpInput('')
+                          setOwnerBuses([])
                         }}
                         className="p-2 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
                         title="Sign Out of Owner Console"

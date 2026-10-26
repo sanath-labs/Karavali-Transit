@@ -71,6 +71,13 @@ This document details the REST endpoints, SQL database schemas, and Socket.IO re
   ]
   ```
 
+  ### 1.5 Fleet Owner Endpoints
+  - `POST /api/owner/send-otp` and `POST /api/owner/verify-otp` authenticate registered owners.
+  - Successful verification returns a short-lived bearer token. Send it as `Authorization: Bearer <token>` for all `/api/owner/buses` requests.
+  - Owners can only view or change buses belonging to their authenticated account.
+  - Development mode returns the generated OTP for local testing. Production OTP delivery is unavailable until an email provider is configured.
+  - Public bus and telemetry responses omit owner email and conductor PIN fields.
+
 ---
 
 ## 2. WebSocket Events (Socket.IO)
@@ -96,4 +103,3 @@ This document details the REST endpoints, SQL database schemas, and Socket.IO re
 - **Event**: `live_location_broadcast`
 - **Broadcast Target**: All connected clients (`io.emit`)
 - **Payload**: Contains sanitized and synchronized live GPS telemetry with millisecond timestamp.
-
