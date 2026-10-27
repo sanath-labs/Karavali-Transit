@@ -2263,7 +2263,9 @@
 /* =========================================================
    PASSENGER LANDING PAGE — coastal Karnataka visual refresh
    ========================================================= */
-.transit-app:has(.passenger-landing-page) {
+.transit-app:has(.passenger-landing-page),
+.passenger-landing-page {
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   background: #f8fafc;
 }
 .landing-header {
@@ -2553,7 +2555,7 @@
   background-color: #0284c7;
   background-image: url('/images/coastal-private-bus.jpg');
   background-size: cover;
-  background-position: center bottom;
+  background-position: center top;
   background-repeat: no-repeat;
 }
 .landing-hero:after {
@@ -2561,7 +2563,7 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(180deg, rgba(2, 24, 50, 0.18) 0%, rgba(2, 24, 50, 0.05) 45%, rgba(2, 20, 42, 0.32) 100%);
+  background: linear-gradient(180deg, rgba(2, 24, 50, 0.12) 0%, rgba(2, 24, 50, 0.03) 40%, rgba(2, 20, 42, 0.32) 100%);
   pointer-events: none;
 }
 .landing-hero-content {
@@ -2573,11 +2575,12 @@
 .landing-hero-content h2 {
   margin: 0;
   color: #ffffff;
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   font-size: clamp(38px, 6.2vw, 64px);
   line-height: 1.05;
-  font-weight: 900;
+  font-weight: 850;
   letter-spacing: -0.04em;
-  text-shadow: 0 4px 16px rgba(0, 20, 45, 0.45);
+  text-shadow: 0 4px 18px rgba(0, 20, 45, 0.5);
 }
 .landing-search-form {
   position: relative;
@@ -2875,6 +2878,9 @@
   .landing-hero {
     min-height: 480px;
     padding: 24px 14px 20px;
+  }
+  .landing-hero-art {
+    background-position: 62% top;
   }
   .landing-hero-content h2 {
     font-size: 38px;
