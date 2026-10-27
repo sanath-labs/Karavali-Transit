@@ -111,3 +111,4 @@ test('Search submission maps colloquial terms to destination IDs', () => {
   assert.equal(matchDestination('kuloor bridge'), 'Kuloor')
   assert.equal(matchDestination('unknown bus name'), null)
 })
+

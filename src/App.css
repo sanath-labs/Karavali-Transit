@@ -2528,13 +2528,13 @@
 .passenger-landing-page {
   width: 100%;
   flex: 1;
-  overflow: hidden;
+  overflow: visible;
   padding-bottom: 24px;
   background: #ffffff;
 }
 .landing-hero {
   position: relative;
-  isolation: isolate;
+  z-index: 30;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -2581,7 +2581,7 @@
 }
 .landing-search-form {
   position: relative;
-  z-index: 10;
+  z-index: 50;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2640,17 +2640,17 @@
 }
 .landing-search-suggestions {
   position: absolute;
-  z-index: 20;
+  z-index: 100;
   top: calc(100% + 8px);
   left: 12px;
   right: 12px;
-  max-height: 300px;
+  max-height: 320px;
   overflow: auto;
   padding: 8px;
   border: 1px solid #e2e8f0;
   border-radius: 18px;
   background: #ffffff;
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.25);
   color: #0f172a;
 }
 .suggestion-section-label {
@@ -2715,13 +2715,13 @@
 .landing-suggestion-dismiss {
   position: fixed;
   inset: 0;
-  z-index: 5;
+  z-index: 45;
   border: 0;
   background: transparent;
 }
 .landing-destinations-section {
   position: relative;
-  z-index: 2;
+  z-index: 1;
   width: min(100%, 820px);
   margin: 20px auto 0;
   padding: 0 clamp(14px, 3vw, 24px);
@@ -2816,6 +2816,8 @@
   text-align: center;
 }
 .landing-feature-strip {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   width: min(100%, 820px);
