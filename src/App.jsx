@@ -5,11 +5,8 @@ import {
   ArrowRight,
   Building,
   Bus,
-  BusFront,
   Check,
   CheckCircle2,
-  ChevronRight,
-  Clock3,
   Compass,
   Copy,
   Eye,
@@ -17,14 +14,10 @@ import {
   FileText,
   KeyRound,
   Lock,
-  LocateFixed,
-  LogIn,
   LogOut,
   Mail,
   MapPin,
-  MapPinned,
   Maximize2,
-  Menu,
   Minimize2,
   Navigation,
   Plus,
@@ -35,13 +28,9 @@ import {
   Share2,
   ShieldCheck,
   Smartphone,
-  Snowflake,
-  Users,
   Volume2,
   VolumeX,
-  Wifi,
   X,
-  Zap,
 } from 'lucide-react'
 import io from 'socket.io-client'
 import { translations } from './translations.js'
@@ -49,7 +38,6 @@ import { calculateEstimatedFare, sortBuses } from './fareRules.js'
 import { generateShiftSummary } from './shiftLedger.js'
 import { apiUrl, ownerHeaders, socketUrl } from './api.js'
 import { matchesDestination } from './transitUtils.js'
-import './styles.css'
 import './App.css'
 
 const TransitMap = lazy(() => import('./TransitMap.jsx'))
@@ -71,98 +59,6 @@ const corridorStopsList = [
 const defaultBuses = {
   1: {
     bus_id: 1,
-    bus_name: 'Sri Krishna Travels',
-    route_number: '15',
-    service_type: 'Express',
-    vehicle_number: 'KA-20-AB-1234',
-    driver_phone: '+91 98451 23456',
-    origin: 'Mangaluru',
-    destination: 'Udupi',
-    route_name: 'Mangaluru ➔ Udupi',
-    conductor_pin: '4829',
-    owner_email: 'vishal@gmail.com',
-    latitude: 12.8997,
-    longitude: 74.8530,
-    speed: 52,
-    delay_minutes: 0,
-    eta_minutes: 8,
-    estimated_arrival: '1:10 PM',
-    crowd_status: 'Seats Available',
-    is_last_bus: false,
-    color: 'blue',
-    amenities: ['AC Sleeper/Seater', 'Wi-Fi'],
-  },
-  2: {
-    bus_id: 2,
-    bus_name: 'Ambaari Travels',
-    route_number: '18',
-    service_type: 'Express',
-    vehicle_number: 'KA-19-CD-5678',
-    driver_phone: '+91 97410 99201',
-    origin: 'Surathkal',
-    destination: 'Udupi',
-    route_name: 'Surathkal ➔ Udupi',
-    conductor_pin: '7391',
-    owner_email: 'vishal@gmail.com',
-    latitude: 12.9350,
-    longitude: 74.8210,
-    speed: 43,
-    delay_minutes: 0,
-    eta_minutes: 12,
-    estimated_arrival: '1:22 PM',
-    crowd_status: 'Seats Available',
-    is_last_bus: false,
-    color: 'orange',
-    amenities: ['AC Seater', 'Charging'],
-  },
-  3: {
-    bus_id: 3,
-    bus_name: 'Canara Express',
-    route_number: 'NH-66',
-    service_type: 'Express',
-    vehicle_number: 'KA-20-EF-9012',
-    driver_phone: '+91 94482 11090',
-    origin: 'Mangaluru',
-    destination: 'Udupi',
-    route_name: 'Mangaluru ➔ Udupi',
-    conductor_pin: '6154',
-    owner_email: 'vishal@gmail.com',
-    latitude: 12.9271,
-    longitude: 74.8415,
-    speed: 38,
-    delay_minutes: 4,
-    eta_minutes: 18,
-    estimated_arrival: '1:32 PM',
-    crowd_status: 'Standing Allowed',
-    is_last_bus: false,
-    color: 'red',
-    amenities: ['Non AC Seater', 'Stage Carriage'],
-  },
-  4: {
-    bus_id: 4,
-    bus_name: 'Shree Durga',
-    route_number: '24',
-    service_type: 'City / Ordinary',
-    vehicle_number: 'KA-19-GH-3456',
-    driver_phone: '+91 99001 88992',
-    origin: 'Kuloor',
-    destination: 'Udupi',
-    route_name: 'Kuloor ➔ Udupi',
-    conductor_pin: '9203',
-    owner_email: 'vishal@gmail.com',
-    latitude: 12.9100,
-    longitude: 74.8350,
-    speed: 48,
-    delay_minutes: 0,
-    eta_minutes: 25,
-    estimated_arrival: '1:45 PM',
-    crowd_status: 'Seats Available',
-    is_last_bus: false,
-    color: 'green',
-    amenities: ['AC Sleeper', 'Wi-Fi'],
-  },
-  5: {
-    bus_id: 5,
     bus_name: 'Vishal Express',
     route_number: '15',
     service_type: 'Express',
@@ -171,8 +67,6 @@ const defaultBuses = {
     origin: 'Mangaluru Statebank',
     destination: 'Surathkal',
     route_name: 'Mangaluru Statebank ➔ Surathkal',
-    conductor_pin: '4509',
-    owner_email: 'vishal@gmail.com',
     latitude: 12.8997,
     longitude: 74.8530,
     speed: 38,
@@ -181,11 +75,28 @@ const defaultBuses = {
     estimated_arrival: '1:15 PM',
     crowd_status: 'Seats Available',
     is_last_bus: false,
-    color: 'blue',
-    amenities: ['Express Highway', 'Fast Passenger'],
   },
-  6: {
-    bus_id: 6,
+  2: {
+    bus_id: 2,
+    bus_name: 'Canara Pinto Deluxe',
+    route_number: 'NH-66',
+    service_type: 'Express',
+    vehicle_number: 'KA-20-C-8812',
+    driver_phone: '+91 97410 99201',
+    origin: 'Mangaluru Statebank',
+    destination: 'Udupi',
+    route_name: 'Mangaluru Statebank ➔ Udupi',
+    latitude: 12.9271,
+    longitude: 74.8415,
+    speed: 46,
+    delay_minutes: 0,
+    eta_minutes: 8,
+    estimated_arrival: '1:28 PM',
+    crowd_status: 'Standing Allowed',
+    is_last_bus: false,
+  },
+  3: {
+    bus_id: 3,
     bus_name: 'Padmambika Local',
     route_number: '21',
     service_type: 'City / Ordinary',
@@ -194,8 +105,6 @@ const defaultBuses = {
     origin: 'Mangaluru Statebank',
     destination: 'Kuloor',
     route_name: 'Mangaluru Statebank ➔ Kuloor',
-    conductor_pin: '3304',
-    owner_email: 'vishal@gmail.com',
     latitude: 12.8850,
     longitude: 74.8450,
     speed: 28,
@@ -204,8 +113,44 @@ const defaultBuses = {
     estimated_arrival: '1:40 PM',
     crowd_status: 'Seats Available',
     is_last_bus: true,
-    color: 'green',
-    amenities: ['City Ordinary', 'All Stops'],
+  },
+  4: {
+    bus_id: 4,
+    bus_name: 'Coastal Star City',
+    route_number: '15B',
+    service_type: 'City / Ordinary',
+    vehicle_number: 'KA-19-MC-1022',
+    driver_phone: '+91 98801 44520',
+    origin: 'Surathkal',
+    destination: 'Mangaluru Statebank',
+    route_name: 'Surathkal ➔ Mangaluru Statebank',
+    latitude: 12.9350,
+    longitude: 74.8210,
+    speed: 34,
+    delay_minutes: 0,
+    eta_minutes: 5,
+    estimated_arrival: '1:20 PM',
+    crowd_status: 'Seats Available',
+    is_last_bus: false,
+  },
+  5: {
+    bus_id: 5,
+    bus_name: 'Karavali Sarige Superfast',
+    route_number: '15X',
+    service_type: 'Express',
+    vehicle_number: 'KA-19-D-7701',
+    driver_phone: '+91 99002 88123',
+    origin: 'Mangaluru Statebank',
+    destination: 'Surathkal',
+    route_name: 'Mangaluru Statebank ➔ Surathkal (NITK)',
+    latitude: 12.8910,
+    longitude: 74.8465,
+    speed: 42,
+    delay_minutes: 0,
+    eta_minutes: 6,
+    estimated_arrival: '1:22 PM',
+    crowd_status: 'Seats Available',
+    is_last_bus: false,
   },
 }
 
@@ -331,8 +276,6 @@ function App() {
   const [isFullscreenMap, setIsFullscreenMap] = useState(false)
   const [pendingBusToTrack, setPendingBusToTrack] = useState(null)
   const [copiedLink, setCopiedLink] = useState(false)
-  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('All Buses') // 'All Buses' | 'On Time' | 'Delayed'
 
   // Passenger location state (Default Mangaluru Statebank Central Terminal)
   const [passengerCoords, setPassengerCoords] = useState([12.8718, 74.8430])
@@ -366,7 +309,6 @@ function App() {
     route_number: '15',
     origin: 'Mangaluru Statebank',
     destination: 'Surathkal',
-    conductor_pin: '4509',
     crowd_status: 'Seats Available',
     is_last_bus: false,
   })
@@ -406,7 +348,7 @@ function App() {
     service_type: 'Express',
     origin: 'Mangaluru Statebank',
     destination: 'Surathkal',
-    conductor_pin: '4509',
+    conductor_pin: '',
   })
 
   // Periodic heartbeat timer for telemetry freshness checks
@@ -883,19 +825,12 @@ function App() {
       if (bus.service_type?.toLowerCase().includes('express')) return false
     }
 
-    if (statusFilter === 'On Time') {
-      if ((bus.delay_minutes || 0) > 0) return false
-    } else if (statusFilter === 'Delayed') {
-      if ((bus.delay_minutes || 0) <= 0) return false
-    }
-
     if (searchQuery.trim() !== '') {
       const q = searchQuery.trim().toLowerCase()
       const searchMatch =
         bus.bus_name?.toLowerCase().includes(q) ||
         bus.route_name?.toLowerCase().includes(q) ||
         bus.route_number?.toLowerCase().includes(q) ||
-        bus.vehicle_number?.toLowerCase().includes(q) ||
         bus.destination?.toLowerCase().includes(q) ||
         bus.origin?.toLowerCase().includes(q)
       if (!searchMatch) return false
@@ -911,7 +846,6 @@ function App() {
   const handleInitiateSearch = (e) => {
     e?.preventDefault()
     setPassengerStep(2)
-    document.getElementById('buses')?.scrollIntoView({ behavior: 'smooth' })
   }
 
   const handleSelectBusToTrack = (bus) => {
@@ -1021,106 +955,74 @@ function App() {
         </div>
       </div>
 
-      {/* 2. SITE HEADER (MATCHING USER-PROVIDED DESIGN) */}
-      <header className="site-header">
-        <a
-          className="brand"
-          href="#home"
-          onClick={(e) => {
-            e.preventDefault()
-            setRole('passenger')
-            setPassengerStep(1)
-          }}
-        >
-          <span className="brand-icon">
-            <BusFront size={25} strokeWidth={2.5} />
+      {/* 2. OFFICIAL MAIN APP HEADER */}
+      <header className="app-header bg-white border-b border-slate-200 px-6 py-3 shadow-sm flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+        <div className="brand flex items-center gap-3">
+          <span className="brand-icon w-11 h-11 rounded-xl bg-gradient-to-br from-blue-900 to-blue-600 text-white flex items-center justify-center shadow-md shrink-0">
+            <Bus size={22} aria-hidden="true" />
           </span>
           <div>
-            <strong>Karavali-Transit</strong>
-            <small>Private Bus Live Tracking</small>
+            <h1 className="app-title text-xl font-extrabold text-slate-900 tracking-tight m-0">
+              {t.appTitle}
+            </h1>
+            <p className="brand-subtitle text-xs font-semibold text-slate-500 m-0">
+              {t.brandSubtitle}
+            </p>
           </div>
-        </a>
+        </div>
 
-        <nav className={isMobileNavOpen ? 'main-nav nav-open' : 'main-nav'}>
-          <button
-            type="button"
-            className={`nav-link ${role === 'passenger' && passengerStep !== 3 ? 'active' : ''}`}
-            onClick={() => {
-              setRole('passenger')
-              setPassengerStep(1)
-              setIsMobileNavOpen(false)
-            }}
-          >
-            {t.passengerRadar || 'Passenger Radar'}
-          </button>
-          <button
-            type="button"
-            className={`nav-link ${role === 'passenger' && passengerStep === 3 ? 'active' : ''}`}
-            onClick={() => {
-              setRole('passenger')
-              if (!selectedBusId) {
-                const firstId = Object.keys(liveBuses)[0] || 1
-                setSelectedBusId(Number(firstId))
-              }
-              setPassengerStep(3)
-              setIsMobileNavOpen(false)
-            }}
-          >
-            Live Map
-          </button>
-          <button
-            type="button"
-            className={`nav-link ${role === 'conductor' ? 'active' : ''}`}
-            onClick={() => {
-              setRole('conductor')
-              setIsMobileNavOpen(false)
-            }}
-          >
-            {t.conductorTerminal || 'Conductor Portal'}
-          </button>
-          <button
-            type="button"
-            className={`nav-link ${role === 'owner' ? 'active' : ''}`}
-            onClick={() => {
-              setRole('owner')
-              if (isOwnerAuthenticated) {
-                fetchOwnerBuses().catch((error) => setOwnerAuthError(error.message))
-              }
-              setIsMobileNavOpen(false)
-            }}
-          >
-            {t.fleetOwner || 'Owner Portal'}
-          </button>
-        </nav>
+        {/* Database & GPS Live Status */}
+        <div className="system-status-badge hidden lg:flex items-center gap-2 px-3.5 py-1.5 bg-green-50 border border-green-200 rounded-full text-xs font-bold text-green-800">
+          <span className="status-dot-green w-2 h-2 rounded-full bg-green-600 shadow-sm animate-pulse" />
+          <span>{dbStatus ? t.dbConnected : t.gpsLive}</span>
+        </div>
 
-        <div className="flex items-center gap-2.5 ml-auto sm:ml-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Bilingual Language Switcher Button */}
           <button
             type="button"
             onClick={toggleLanguage}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50 text-slate-700 font-extrabold text-xs transition-all flex items-center gap-1 cursor-pointer"
+            className="lang-toggle-btn px-3 py-1.5 rounded-xl border border-slate-300 hover:border-blue-600 bg-white hover:bg-blue-50 text-slate-800 font-extrabold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
             title={lang === 'en' ? 'ಕನ್ನಡಕ್ಕೆ ಬದಲಾಯಿಸಿ' : 'Switch to English'}
           >
-            <span>🌐</span>
+            <span className="text-sm">🌐</span>
             <span>{t.langToggle}</span>
           </button>
 
-          <button
-            type="button"
-            className="header-action cursor-pointer"
-            onClick={() => setRole('conductor')}
-          >
-            <LogIn size={16} />
-            <span className="hidden sm:inline">Conductor Login</span>
-          </button>
-
-          <button
-            type="button"
-            className="menu-toggle"
-            onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
-            aria-label="Toggle navigation"
-          >
-            {isMobileNavOpen ? <X size={18} /> : <Menu size={18} />}
-          </button>
+          {/* User-Friendly Role Switcher */}
+          <nav className="role-switch flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1" aria-label="Switch User Mode">
+            <button
+              type="button"
+              onClick={() => {
+                setRole('passenger')
+              }}
+              className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'passenger' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              <Bus size={15} />
+              <span>{t.passengerRadar}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('conductor')}
+              className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'conductor' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              <Radio size={15} />
+              <span>{t.conductorTerminal}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRole('owner')
+                if (isOwnerAuthenticated) {
+                  fetchOwnerBuses().catch((error) => setOwnerAuthError(error.message))
+                }
+              }}
+              className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'owner' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              <Building size={15} />
+              <span>{t.fleetOwner}</span>
+            </button>
+          </nav>
         </div>
       </header>
 
@@ -1136,358 +1038,329 @@ function App() {
       <section className="app-content flex-1 flex flex-col">
         {role === 'passenger' ? (
           <div className="passenger-flow flex-1 flex flex-col">
-            {/* FIRST PAGE HERO & PASSENGER RADAR (WHEN NOT ON MAP VIEW) */}
-            {passengerStep !== 3 && (
-              <>
-                {/* HERO BANNER SECTION */}
-                <section className="home-hero" id="home">
-                  <div className="hero-bg" />
-                  <div className="hero-overlay" />
-                  <div className="hero-inner">
-                    <div className="hero-copy">
-                      <div className="eyebrow">
-                        <span className="pulse-dot" />
-                        <span>{lang === 'kn' ? 'ಕರಾವಳಿ ಕರ್ನಾಟಕ • ಲೈವ್ ಬಸ್ ರೇಡಾರ್' : 'COASTAL KARNATAKA • LIVE BUS RADAR'}</span>
-                      </div>
-                      <h1>
-                        Track Your<br />
-                        <em>Private Bus</em><br />
-                        Live.
-                      </h1>
-                      <p>
-                        Mangaluru · Surathkal · Udupi<br />
-                        Your coastal journey, with less waiting.
-                      </p>
-                      <button
-                        type="button"
-                        className="primary-button cursor-pointer"
-                        onClick={() => document.getElementById('bus-search')?.scrollIntoView({ behavior: 'smooth' })}
-                      >
-                        <span>Find a bus</span>
-                        <ArrowRight size={17} />
-                      </button>
-                    </div>
+            {/* STEP PROGRESSION BREADCRUMB INDICATOR */}
+            <nav className="step-progress-nav bg-white border-b border-slate-200 py-2.5 px-4 flex items-center justify-center gap-2 text-xs font-bold">
+              <span className={`step-item px-3 py-1 rounded-full flex items-center gap-1.5 transition-all ${passengerStep === 1 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                <span>1</span> Destination Selection
+              </span>
+              <span className="step-divider text-slate-400">➔</span>
+              <span className={`step-item px-3 py-1 rounded-full flex items-center gap-1.5 transition-all ${passengerStep === 2 ? 'bg-blue-600 text-white' : passengerStep > 2 ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-400'}`}>
+                <span>2</span> Incoming Buses
+              </span>
+              <span className="step-divider text-slate-400">➔</span>
+              <span className={`step-item px-3 py-1 rounded-full flex items-center gap-1.5 transition-all ${passengerStep === 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                <span>3</span> Live Tracking Map
+              </span>
+            </nav>
 
-                    <div className="hero-mini-card">
-                      <div className="mini-card-top">
-                        <span className="mini-icon">
-                          <Radio size={18} />
-                        </span>
-                        <span className="live-label">
-                          <i /> LIVE RADAR
-                        </span>
-                      </div>
-                      <h3>NH-66 Coastal Corridor</h3>
-                      <div className="mini-route">
-                        <span>Mangaluru</span>
-                        <b />
-                        <span>Surathkal</span>
-                        <b />
-                        <span>Udupi</span>
-                      </div>
-                      <div className="mini-stats">
-                        <div>
-                          <strong>{Object.keys(liveBuses).length}</strong>
-                          <small>Active buses</small>
-                        </div>
-                        <div>
-                          <strong>NH-66</strong>
-                          <small>Main corridor</small>
-                        </div>
-                      </div>
+            {/* ============================================================== */}
+            {/* STEP 1: DESTINATION & ROUTE SELECTION (DEFAULT LANDING)        */}
+            {/* NO map or bus list visible at this stage                        */}
+            {/* ============================================================== */}
+            {passengerStep === 1 && (
+              <div className="step1-container flex-1 flex items-center justify-center p-6 bg-slate-50">
+                <div className="step1-card w-full max-w-xl bg-white rounded-2xl shadow-sm border border-slate-200 p-8 flex flex-col gap-6">
+                  {/* Hero Header */}
+                  <div className="step1-hero text-center">
+                    <span className="step1-badge inline-block bg-blue-50 text-blue-700 text-xs font-extrabold px-3 py-1 rounded-full border border-blue-200 mb-2">
+                      Coastal Smart Transit • ಕರಾವಳಿ ಸಾರಿಗೆ
+                    </span>
+                    <h2 className="step1-title text-2xl font-extrabold text-slate-900 tracking-tight m-0">
+                      {t.whereHeading}
+                    </h2>
+                    <p className="step1-subtitle text-slate-500 text-sm mt-1">
+                      {t.destinationSubtitle}
+                    </p>
+                  </div>
+
+                  {/* Boarding Stop Indicator */}
+                  <div className="boarding-card bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                      <MapPin size={20} />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                        {t.boardingFrom}
+                      </span>
+                      <strong className="text-sm font-extrabold text-slate-900">
+                        {passengerLocationName}
+                      </strong>
                     </div>
                   </div>
 
-                  <div className="hero-bottom">
-                    <span>
-                      <ShieldCheck size={15} /> No passenger login
-                    </span>
-                    <span>
-                      <LocateFixed size={15} /> Live GPS when shared
-                    </span>
-                    <span>
-                      <Zap size={15} /> Fast updates
-                    </span>
-                  </div>
-                </section>
-
-                {/* MAIN CONTENT AREA */}
-                <div className="main-content">
-                  {/* PASSENGER SEARCH PANEL */}
-                  <section className="search-panel" id="bus-search">
-                    <div className="section-heading">
-                      <div>
-                        <span className="kicker">PASSENGER RADAR</span>
-                        <h2>{t.whereHeading || 'Where are you heading?'}</h2>
-                        <span className="text-xs text-slate-500 font-medium block mt-1">
-                          {t.boardingFrom || 'Boarding at'} <strong>{passengerLocationName}</strong>
-                        </span>
-                      </div>
-                      <span className="public-tag">Public access</span>
-                    </div>
-
-                    <form
-                      className="search-box"
-                      onSubmit={handleInitiateSearch}
-                    >
-                      <Search size={20} />
-                      <input
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search destination, bus name (e.g. Sri Krishna, Vishal), route #..."
-                        aria-label="Search destination or bus name"
-                      />
-                      <button type="submit" className="cursor-pointer">
-                        <span>Search</span>
-                        <ArrowRight size={16} />
-                      </button>
-                    </form>
-
-                    {/* POPULAR DESTINATIONS GRID */}
-                    <div className="popular-row">
-                      <span className="kicker">{t.popularDestinations || 'POPULAR DESTINATIONS'}</span>
-                      <div className="destination-grid">
-                        {[
-                          { name: 'Mangaluru Central', short: 'Mangaluru', sub: 'Central', icon: '🌴' },
-                          { name: 'Surathkal (NITK)', short: 'Surathkal', sub: 'NITK', icon: '🌊' },
-                          { name: 'Kuloor', short: 'Kuloor', sub: 'Junction', icon: '🌉' },
-                          { name: 'Udupi City', short: 'Udupi', sub: 'City', icon: '🛕' },
-                          { name: 'All Routes', short: 'All', sub: 'All Coastal Buses', icon: '🚌' },
-                        ].map((d) => (
-                          <button
-                            key={d.name}
-                            type="button"
-                            className={`destination-card cursor-pointer ${selectedDestination === d.short ? 'selected' : ''}`}
-                            onClick={() => {
-                              setSelectedDestination(d.short)
-                              setSearchQuery('')
-                              document.getElementById('buses')?.scrollIntoView({ behavior: 'smooth' })
-                            }}
-                          >
-                            <span className="destination-photo">{d.icon}</span>
-                            <strong>{d.short === 'All' ? 'All Routes' : d.short}</strong>
-                            <small>{d.sub}</small>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* BUSES LIST SECTION */}
-                  <section className="buses-section" id="buses">
-                    <div className="section-heading list-heading">
-                      <div>
-                        <span className="kicker">PRIVATE OPERATORS • COASTAL FLEET</span>
-                        <h2>
-                          {searchQuery
-                            ? `Bus results for "${searchQuery}"`
-                            : selectedDestination === 'All'
-                              ? 'All Active Coastal Buses'
-                              : `Buses to ${selectedDestination}`}
-                        </h2>
-                        <p className="muted">
-                          Corridor: Mangaluru ➔ Surathkal ➔ Udupi (NH-66) • {filteredBuses.length} {filteredBuses.length === 1 ? 'bus' : 'buses'} operating
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className="outline-button cursor-pointer"
-                        onClick={() => {
-                          setSelectedDestination('All')
-                          setSearchQuery('')
-                          setStatusFilter('All Buses')
-                          setServiceTypeFilter('All')
-                        }}
-                      >
-                        <span>View all</span>
-                        <ArrowRight size={15} />
-                      </button>
-                    </div>
-
-                    {/* STATUS FILTER TABS */}
-                    <div className="filter-tabs">
+                  {/* 1-Tap Quick Destination Pills */}
+                  <div className="quick-filter-group flex flex-col gap-2">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                      {t.popularDestinations}:
+                    </label>
+                    <div className="destination-pills-grid grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                       {[
-                        ['All Buses', Object.keys(liveBuses).length],
-                        ['On Time', Object.values(liveBuses).filter((b) => (b.delay_minutes || 0) <= 0).length],
-                        ['Delayed', Object.values(liveBuses).filter((b) => (b.delay_minutes || 0) > 0).length],
-                      ].map(([name, count]) => (
+                        { id: 'Surathkal', name: lang === 'kn' ? 'ಸುರತ್ಕಲ್ / ಎನ್.ಐ.ಟಿ.ಕೆ' : 'Surathkal / NITK', desc: lang === 'kn' ? '10.5 ಕಿ.ಮೀ ಕಾರಿಡಾರ್' : '10.5 km Corridor' },
+                        { id: 'Udupi', name: lang === 'kn' ? 'ಉಡುಪಿ' : 'Udupi', desc: lang === 'kn' ? 'ಕರಾವಳಿ ಎಕ್ಸ್‌ಪ್ರೆಸ್' : 'Coastal Express' },
+                        { id: 'Kuloor', name: lang === 'kn' ? 'ಕುಳೂರು ಸೇತುವೆ' : 'Kuloor Bridge', desc: lang === 'kn' ? 'ಸಿಟಿ ಸಾಮಾನ್ಯ' : 'City Ordinary' },
+                        { id: 'Statebank', name: lang === 'kn' ? 'ಸ್ಟೇಟ್‌ಬ್ಯಾಂಕ್' : 'Statebank', desc: lang === 'kn' ? 'ಕೇಂದ್ರ ನಿಲ್ದಾಣ' : 'Central Terminal' },
+                        { id: 'All', name: lang === 'kn' ? 'ಎಲ್ಲಾ ಮಾರ್ಗಗಳು' : 'All Routes', desc: lang === 'kn' ? 'ಎಲ್ಲಾ ಬಸ್‌ಗಳು' : 'Show All Buses' },
+                      ].map((dest) => (
                         <button
-                          key={name}
+                          key={dest.id}
                           type="button"
-                          className={`filter-tab cursor-pointer ${statusFilter === name ? 'selected' : ''}`}
-                          onClick={() => setStatusFilter(name)}
+                          onClick={() => setSelectedDestination(dest.id)}
+                          className={`dest-select-btn p-3 rounded-xl border-2 text-left transition-all ${selectedDestination === dest.id ? 'border-blue-600 bg-blue-50/60 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}
                         >
-                          {name} ({count})
+                          <span className="dest-btn-name block text-sm font-extrabold text-slate-900">
+                            {dest.name}
+                          </span>
+                          <span className="dest-btn-desc block text-xs text-slate-500">
+                            {dest.desc}
+                          </span>
                         </button>
                       ))}
                     </div>
+                  </div>
 
-                    {/* SERVICE & SORT CONTROLS BAR */}
-                    <div className="flex items-center justify-between flex-wrap gap-2 py-2 mb-3 border-b border-slate-100 text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-500 font-bold">{t.sortByLabel || 'Sort by:'}</span>
-                        <button
-                          type="button"
-                          onClick={() => setSortBy('eta')}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                            sortBy === 'eta' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {t.sortEta || '⚡ Earliest ETA'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSortBy('fare')}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                            sortBy === 'fare' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {t.sortFare || '💰 Lowest Fare'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSortBy('seats')}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                            sortBy === 'seats' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {t.sortSeats || '💺 Most Seats'}
-                        </button>
-                      </div>
+                  {/* Optional Search Input */}
+                  <div className="search-box flex items-center bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 gap-2.5 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                    <Search size={18} className="text-slate-400 shrink-0" />
+                    <input
+                      type="text"
+                      placeholder={t.searchPlaceholder}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-transparent border-0 outline-none text-sm text-slate-900 placeholder:text-slate-400"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="text-slate-400 hover:text-slate-600"
+                        title="Clear search"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
 
-                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
-                        <button
-                          type="button"
-                          onClick={() => setServiceTypeFilter('All')}
-                          className={`px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                            serviceTypeFilter === 'All' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'
-                          }`}
-                        >
-                          All
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setServiceTypeFilter('Express')}
-                          className={`px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                            serviceTypeFilter === 'Express' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600'
-                          }`}
-                        >
-                          ⚡ Express
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setServiceTypeFilter('City')}
-                          className={`px-2.5 py-0.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                            serviceTypeFilter === 'City' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600'
-                          }`}
-                        >
-                          🚌 Ordinary
-                        </button>
-                      </div>
+                  {/* Service Classification Selector */}
+                  <div className="service-filter-row flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                    <span className="text-xs font-bold text-slate-500 uppercase">Service Category:</span>
+                    <div className="service-toggle flex bg-slate-100 p-1 rounded-lg gap-1 text-xs font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setServiceTypeFilter('All')}
+                        className={`px-3 py-1.5 rounded-md transition-all ${serviceTypeFilter === 'All' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setServiceTypeFilter('Express')}
+                        className={`px-3 py-1.5 rounded-md transition-all ${serviceTypeFilter === 'Express' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
+                      >
+                        ⚡ Express
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setServiceTypeFilter('City')}
+                        className={`px-3 py-1.5 rounded-md transition-all ${serviceTypeFilter === 'City' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600'}`}
+                      >
+                        🚌 Ordinary
+                      </button>
                     </div>
+                  </div>
 
-                    {/* BUS CARDS LIST */}
-                    <div className="bus-list">
-                      {sortedBuses.map((bus) => {
-                        const isExpress = (bus.service_type || '').toLowerCase().includes('express')
-                        const isDelayed = (bus.delay_minutes || 0) > 0
-                        const estFare = calculateEstimatedFare(bus, selectedDestination)
-
-                        return (
-                          <article className="bus-card" key={bus.bus_id}>
-                            <div className={`bus-thumb ${bus.color || 'blue'}`}>
-                              <BusFront size={29} />
-                            </div>
-
-                            <div className="bus-info">
-                              <div className="bus-title">
-                                <h3>{bus.bus_name}</h3>
-                                <span className={`status ${isDelayed ? 'amber-status' : 'green-status'}`}>
-                                  <i />
-                                  {isDelayed ? `+${bus.delay_minutes}m Late` : 'On Time'}
-                                </span>
-                              </div>
-
-                              <div className="vehicle-number">
-                                <MapPin size={13} /> {bus.vehicle_number} • Route #{bus.route_number || '15'}
-                              </div>
-
-                              <div className="route-label">
-                                {bus.origin} <span className="dash-line" /> {bus.destination}
-                              </div>
-
-                              <div className="amenity-row">
-                                <span className="font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
-                                  ₹{estFare} {t.stageFareEst || 'Stage Fare'}
-                                </span>
-                                <span className="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                                  {isExpress ? '⚡ Express' : '🚌 City / Ordinary'}
-                                </span>
-                                {bus.amenities?.map((a) => (
-                                  <span key={a}>
-                                    {a.toLowerCase().includes('ac') ? <Snowflake size={12} /> : a.toLowerCase().includes('wi-fi') ? <Wifi size={12} /> : <Zap size={12} />}
-                                    {a}
-                                  </span>
-                                ))}
-                                <span className="font-medium text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded flex items-center gap-1">
-                                  <Users size={12} /> {bus.crowd_status || 'Seats Available'}
-                                </span>
-                                {bus.is_last_bus && (
-                                  <span className="font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded flex items-center gap-1">
-                                    🌙 {t.lastBusNight || 'LAST BUS'}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="eta-block">
-                              <strong>
-                                {bus.eta_minutes ?? 5} <small>min</small>
-                              </strong>
-                              <span>ETA</span>
-                              <button
-                                type="button"
-                                className="cursor-pointer"
-                                onClick={() => handleSelectBusToTrack(bus)}
-                              >
-                                <span>Track Live</span>
-                                <ChevronRight size={14} />
-                              </button>
-                            </div>
-                          </article>
-                        )
-                      })}
-
-                      {sortedBuses.length === 0 && (
-                        <div className="empty-state">
-                          <BusFront size={30} />
-                          <h3>No buses found</h3>
-                          <p>Try searching Udupi, Surathkal, or an operator name.</p>
-                        </div>
-                      )}
-                    </div>
-                  </section>
-
-                  {/* FEATURE STRIP */}
-                  <section className="feature-strip">
-                    <div>
-                      <Clock3 />
-                      <strong>Live Tracking</strong>
-                      <small>Real-time location &amp; velocity</small>
-                    </div>
-                    <div>
-                      <Users />
-                      <strong>Private Buses</strong>
-                      <small>Multiple coastal operators</small>
-                    </div>
-                    <div>
-                      <MapPinned />
-                      <strong>Easy to Use</strong>
-                      <small>No passenger login required</small>
-                    </div>
-                  </section>
+                  {/* Primary CTA Button: Proceed to Step 2 */}
+                  <button
+                    type="button"
+                    onClick={handleInitiateSearch}
+                    className="search-incoming-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>{t.searchIncomingBuses}</span>
+                    <ArrowRight size={18} />
+                  </button>
                 </div>
-              </>
+              </div>
+            )}
+
+            {/* ============================================================== */}
+            {/* STEP 2: FILTERED BUS LIST SCREEN                               */}
+            {/* Displays clean list of ONLY operating buses for this corridor  */}
+            {/* ============================================================== */}
+            {passengerStep === 2 && (
+              <div className="step2-container max-w-4xl w-full mx-auto p-6 flex flex-col gap-4">
+                {/* Header with Back button, count and multi-criteria sorting */}
+                <div className="step2-nav-header bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setPassengerStep(1)}
+                        className="step2-back-btn flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                        title="Back to Step 1: Change Destination"
+                      >
+                        <ArrowLeft size={16} />
+                        <span>{t.changeDestination || 'Change Destination'}</span>
+                      </button>
+                      <div>
+                        <h2 className="step2-destination-title text-base font-extrabold text-slate-900 m-0">
+                          {t.step2Title || 'Incoming Buses to:'} <span className="text-blue-600">{selectedDestination === 'All' ? 'All Coastal Corridors' : selectedDestination}</span>
+                        </h2>
+                        <span className="text-xs text-slate-500">Boarding at {passengerLocationName}</span>
+                      </div>
+                    </div>
+
+                    <span className="step2-bus-count-badge bg-blue-50 text-blue-700 border border-blue-200 text-xs font-extrabold px-3 py-1 rounded-full">
+                      {filteredBuses.length} Active {filteredBuses.length === 1 ? 'Bus' : 'Buses'} Operating
+                    </span>
+                  </div>
+
+                  {/* Multi-Criteria Bus Sorting Controls */}
+                  <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-slate-100 text-xs">
+                    <span className="text-slate-500 font-bold">{t.sortByLabel || 'Sort by:'}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSortBy('eta')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          sortBy === 'eta' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {t.sortEta || '⚡ Earliest ETA'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSortBy('fare')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          sortBy === 'fare' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {t.sortFare || '💰 Lowest Fare'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSortBy('seats')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          sortBy === 'seats' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {t.sortSeats || '💺 Most Seats'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Empty State */}
+                {filteredBuses.length === 0 ? (
+                  <div className="empty-buses-box bg-white border border-dashed border-slate-300 rounded-2xl p-10 text-center flex flex-col items-center gap-3">
+                    <Bus size={36} className="text-slate-300" />
+                    <p className="text-slate-600 font-semibold text-sm m-0">
+                      No active buses currently operating towards "{selectedDestination}".
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDestination('All')
+                        setServiceTypeFilter('All')
+                        setSearchQuery('')
+                      }}
+                      className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-blue-600 transition-all cursor-pointer"
+                    >
+                      Show All Routes
+                    </button>
+                  </div>
+                ) : (
+                  /* Filtered Bus Cards Grid */
+                  <div className="step2-bus-grid flex flex-col gap-3">
+                    {sortedBuses.map((bus) => {
+                      const isExpress = (bus.service_type || '').toLowerCase().includes('express')
+                      const isDelayed = (bus.delay_minutes || 0) > 0
+                      const estFare = calculateEstimatedFare(bus, selectedDestination)
+
+                      return (
+                        <article
+                          key={bus.bus_id}
+                          className="bus-card-simple bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-slate-300 transition-all flex flex-col gap-3"
+                        >
+                          {/* Top: Route Tag, Name, Service Badge & Fare Pill */}
+                          <div className="card-top flex items-start justify-between gap-3">
+                            <div className="card-title-block flex items-center flex-wrap gap-2.5">
+                              <span className="route-tag bg-slate-900 text-white text-xs font-extrabold px-2.5 py-1 rounded-md">
+                                Route #{bus.route_number || '15'}
+                              </span>
+                              <h3 className="bus-name text-base font-extrabold text-slate-900 m-0">
+                                {bus.bus_name}
+                              </h3>
+                              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                                {bus.vehicle_number}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span className="fare-badge text-xs font-black px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full flex items-center gap-1">
+                                <span>₹{estFare}</span>
+                                <span className="text-[10px] text-emerald-600 font-semibold">{t.stageFareEst || 'Fare'}</span>
+                              </span>
+                              <span className={`service-badge text-xs font-extrabold px-3 py-1 rounded-full ${isExpress ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                                {isExpress ? '⚡ Express Service' : '🚌 City / Ordinary'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Route Corridor */}
+                          <p className="card-route text-xs font-semibold text-slate-600 m-0">
+                            Corridor: <span className="text-slate-900 font-bold">{bus.route_name}</span>
+                          </p>
+
+                          {/* Highlights: Arrival ETA, Schedule, Stage Fare, Delay Status */}
+                          <div className="card-highlights grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs">
+                            <div className="highlight-item flex flex-col">
+                              <span className="text-slate-500 font-bold uppercase text-[10px]">Next Stop Arrival</span>
+                              <strong className="text-blue-700 text-sm font-extrabold">{bus.eta_minutes ?? 3} MINS</strong>
+                            </div>
+                            <div className="highlight-item flex flex-col">
+                              <span className="text-slate-500 font-bold uppercase text-[10px]">Expected Time</span>
+                              <strong className="text-slate-900 text-sm font-bold">{bus.estimated_arrival || '1:15 PM'}</strong>
+                            </div>
+                            <div className="highlight-item flex flex-col">
+                              <span className="text-slate-500 font-bold uppercase text-[10px]">Corridor Fare</span>
+                              <strong className="text-emerald-700 text-sm font-black">₹{estFare} ({isExpress ? 'Express' : 'Ordinary'})</strong>
+                            </div>
+                            <div className="highlight-item flex flex-col">
+                              <span className="text-slate-500 font-bold uppercase text-[10px]">Delay Status</span>
+                              <strong className={`text-sm font-bold ${isDelayed ? 'text-amber-700' : 'text-emerald-700'}`}>
+                                {isDelayed ? `+${bus.delay_minutes}m Late` : 'On Time'}
+                              </strong>
+                            </div>
+                          </div>
+
+                          {/* Bottom Row: Crowd Load, Last Bus & Action CTA */}
+                          <div className="track-action-bar flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-slate-100">
+                            <div className="flex items-center gap-2">
+                              <span className="crowd-pill text-xs font-bold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md">
+                                {bus.crowd_status || 'Seats Available'}
+                              </span>
+                              {bus.is_last_bus && (
+                                <span className="lastbus-pill text-xs font-extrabold px-2.5 py-1 bg-rose-100 text-rose-800 border border-rose-200 rounded-md flex items-center gap-1">
+                                  🌙 LAST BUS OF THE NIGHT
+                                </span>
+                              )}
+                            </div>
+
+                            {/* SELECT & TRACK THIS BUS BUTTON */}
+                            <button
+                              type="button"
+                              onClick={() => handleSelectBusToTrack(bus)}
+                              className="track-action-btn bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-sm hover:shadow flex items-center gap-1.5 transition-all cursor-pointer"
+                            >
+                              <span>Select &amp; Track This Bus</span>
+                              <ArrowRight size={14} />
+                            </button>
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* ============================================================== */}
@@ -2391,8 +2264,10 @@ function App() {
                         type="button"
                         onClick={() => {
                           setIsOwnerAuthenticated(false)
+                          setOwnerToken('')
                           setOwnerOtpStep('email')
                           setOwnerOtpInput('')
+                          setOwnerBuses([])
                         }}
                         className="p-2 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
                         title="Sign Out of Owner Console"
@@ -2795,21 +2670,6 @@ function App() {
           </div>
         </div>
       )}
-      {/* 5. SITE FOOTER */}
-      <footer className="site-footer">
-        <a className="brand" href="#home" onClick={(e) => { e.preventDefault(); setRole('passenger'); setPassengerStep(1); }}>
-          <span className="brand-icon"><BusFront size={25} strokeWidth={2.5} /></span>
-          <div>
-            <strong className="text-white">Karavali-Transit</strong>
-            <small className="text-slate-400">Private Bus Live Tracking</small>
-          </div>
-        </a>
-        <span className="text-xs text-slate-400">Coastal Karnataka · Mangaluru — Surathkal — Udupi</span>
-        <span className="footer-status text-xs text-slate-300 flex items-center gap-1.5">
-          <i className={`w-1.5 h-1.5 rounded-full ${dbStatus ? 'bg-emerald-400' : 'bg-slate-400'}`} />
-          {dbStatus ? 'Database Connected' : 'Passenger access is public'}
-        </span>
-      </footer>
     </main>
   )
 }
