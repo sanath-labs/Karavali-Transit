@@ -7,6 +7,7 @@ import {
   Bus,
   Check,
   CheckCircle2,
+  ChevronRight,
   Compass,
   Copy,
   Eye,
@@ -15,6 +16,14 @@ import {
   KeyRound,
   Lock,
   LogOut,
+  Menu,
+  Home,
+  Headphones,
+  MessageSquare,
+  Phone,
+  Languages,
+  Clock,
+  Users,
   Mail,
   MapPin,
   Maximize2,
@@ -206,6 +215,12 @@ function playArrivalChime() {
 
 function App() {
   const [role, setRole] = useState('passenger') // 'passenger' | 'conductor' | 'owner'
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [searchFocused, setSearchFocused] = useState(false)
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1)
+  const [utilityPage, setUtilityPage] = useState('')
+  const [feedbackMessage, setFeedbackMessage] = useState('')
+  const [feedbackSent, setFeedbackSent] = useState(false)
 
   // BILINGUAL LOCALIZATION (English & Kannada / ಕನ್ನಡ)
   const [lang, setLang] = useState(() => {
@@ -221,6 +236,20 @@ function App() {
   })
 
   const t = translations[lang] || translations.en
+
+  useEffect(() => {
+    if (!menuOpen && !utilityPage && !searchFocused) return undefined
+    const handleOverlayEscape = (event) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false)
+        setUtilityPage('')
+        setSearchFocused(false)
+        setActiveSuggestionIndex(-1)
+      }
+    }
+    window.addEventListener('keydown', handleOverlayEscape)
+    return () => window.removeEventListener('keydown', handleOverlayEscape)
+  }, [menuOpen, utilityPage, searchFocused])
 
   const toggleLanguage = () => {
     const nextLang = lang === 'en' ? 'kn' : 'en'
@@ -943,91 +972,91 @@ function App() {
 
   return (
     <main className="transit-app min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
-      {/* 1. TOP OFFICIAL GOVERNMENT MICRO-HEADER */}
-      <div className="gov-topbar bg-slate-950 text-slate-300 text-xs px-6 py-2 border-b-2 border-blue-600">
-        <div className="gov-topbar-content max-w-7xl mx-auto flex items-center justify-between">
-          <span className="gov-title font-semibold tracking-wide">
-            {t.govTitle}
-          </span>
-          <span className="gov-badge bg-white/10 px-2.5 py-0.5 rounded text-blue-300 text-xs font-semibold">
-            {t.govBadge}
-          </span>
-        </div>
-      </div>
-
-      {/* 2. OFFICIAL MAIN APP HEADER */}
-      <header className="app-header bg-white border-b border-slate-200 px-6 py-3 shadow-sm flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
-        <div className="brand flex items-center gap-3">
-          <span className="brand-icon w-11 h-11 rounded-xl bg-gradient-to-br from-blue-900 to-blue-600 text-white flex items-center justify-center shadow-md shrink-0">
-            <Bus size={22} aria-hidden="true" />
-          </span>
-          <div>
-            <h1 className="app-title text-xl font-extrabold text-slate-900 tracking-tight m-0">
-              {t.appTitle}
-            </h1>
-            <p className="brand-subtitle text-xs font-semibold text-slate-500 m-0">
-              {t.brandSubtitle}
-            </p>
-          </div>
-        </div>
-
-        {/* Database & GPS Live Status */}
-        <div className="system-status-badge hidden lg:flex items-center gap-2 px-3.5 py-1.5 bg-green-50 border border-green-200 rounded-full text-xs font-bold text-green-800">
-          <span className="status-dot-green w-2 h-2 rounded-full bg-green-600 shadow-sm animate-pulse" />
-          <span>{dbStatus ? t.dbConnected : t.gpsLive}</span>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Bilingual Language Switcher Button */}
-          <button
-            type="button"
-            onClick={toggleLanguage}
-            className="lang-toggle-btn px-3 py-1.5 rounded-xl border border-slate-300 hover:border-blue-600 bg-white hover:bg-blue-50 text-slate-800 font-extrabold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-            title={lang === 'en' ? 'ಕನ್ನಡಕ್ಕೆ ಬದಲಾಯಿಸಿ' : 'Switch to English'}
-          >
-            <span className="text-sm">🌐</span>
-            <span>{t.langToggle}</span>
+      {/* Passenger landing header / existing operational header */}
+      {role === 'passenger' && passengerStep === 1 ? (
+        <header className="landing-header">
+          <button className="landing-brand" type="button" onClick={() => { setRole('passenger'); setPassengerStep(1); setMenuOpen(false) }} aria-label="Karavali-Transit home">
+            <span className="landing-brand-icon"><Bus size={42} strokeWidth={2.4} /></span>
+            <span className="landing-brand-copy">
+              <span className="landing-brand-title">Karavali-<strong>Transit</strong></span>
+              <span className="landing-brand-subtitle">Private Bus Live Tracking</span>
+            </span>
           </button>
+          <div className="landing-header-actions">
+            <button type="button" className="landing-menu-button" onClick={() => setMenuOpen((open) => !open)} aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={menuOpen} aria-controls="passenger-navigation-menu">
+              {menuOpen ? <X size={28} /> : <Menu size={30} />}
+            </button>
+          </div>
+          {menuOpen && (
+            <>
+              <button type="button" className="landing-menu-backdrop" aria-label="Close navigation menu" onClick={() => setMenuOpen(false)} />
+              <nav id="passenger-navigation-menu" className="landing-navigation-menu" aria-label="Main navigation">
+                <div className="landing-menu-heading">
+                  <span>Karavali-Transit</span>
+                  <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu"><X size={20} /></button>
+                </div>
+                <button type="button" className="landing-menu-item" onClick={() => { setRole('passenger'); setPassengerStep(1); setUtilityPage(''); setMenuOpen(false) }}><Home size={19} /><span>Home</span></button>
+                <button type="button" className="landing-menu-item" onClick={() => { setRole('passenger'); setSelectedDestination('All'); setSearchQuery(''); setPassengerStep(2); setUtilityPage(''); setMenuOpen(false) }}><Bus size={19} /><span>Passenger Radar</span></button>
+                <div className="landing-menu-divider" />
+                <button type="button" className="landing-menu-item" onClick={() => { setRole('conductor'); setUtilityPage(''); setMenuOpen(false) }}><Radio size={19} /><span>Conductor Login</span></button>
+                <button type="button" className="landing-menu-item" onClick={() => { setRole('owner'); setUtilityPage(''); setMenuOpen(false); if (isOwnerAuthenticated) fetchOwnerBuses().catch((error) => setOwnerAuthError(error.message)) }}><Building size={19} /><span>Fleet Owner Login</span></button>
+                <div className="landing-menu-divider" />
+                <button type="button" className="landing-menu-item" onClick={() => { setUtilityPage('Helpdesk'); setMenuOpen(false) }}><Headphones size={19} /><span>Helpdesk</span></button>
+                <button type="button" className="landing-menu-item" onClick={() => { setUtilityPage('Feedback'); setFeedbackSent(false); setMenuOpen(false) }}><MessageSquare size={19} /><span>Feedback</span></button>
+                <button type="button" className="landing-menu-item" onClick={() => { setUtilityPage('Contact Us'); setMenuOpen(false) }}><Phone size={19} /><span>Contact Us</span></button>
+                <div className="landing-menu-divider" />
+                <button type="button" className="landing-menu-item" onClick={() => { toggleLanguage(); setMenuOpen(false) }}><Languages size={19} /><span>{lang === 'en' ? 'ಕನ್ನಡಕ್ಕೆ ಬದಲಾಯಿಸಿ (Kannada)' : 'Switch to English'}</span></button>
+              </nav>
+            </>
+          )}
+        </header>
+      ) : (
+        <>
+          <div className="gov-topbar bg-slate-950 text-slate-300 text-xs px-6 py-2 border-b-2 border-blue-600">
+            <div className="gov-topbar-content max-w-7xl mx-auto flex items-center justify-between">
+              <span className="gov-title font-semibold tracking-wide">{t.govTitle}</span>
+              <span className="gov-badge bg-white/10 px-2.5 py-0.5 rounded text-blue-300 text-xs font-semibold">{t.govBadge}</span>
+            </div>
+          </div>
+          <header className="app-header bg-white border-b border-slate-200 px-6 py-3 shadow-sm flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+            <div className="brand flex items-center gap-3">
+              <span className="brand-icon w-11 h-11 rounded-xl bg-gradient-to-br from-blue-900 to-blue-600 text-white flex items-center justify-center shadow-md shrink-0"><Bus size={22} aria-hidden="true" /></span>
+              <div>
+                <h1 className="app-title text-xl font-extrabold text-slate-900 tracking-tight m-0">{t.appTitle}</h1>
+                <p className="brand-subtitle text-xs font-semibold text-slate-500 m-0">{t.brandSubtitle}</p>
+              </div>
+            </div>
+            <div className="system-status-badge hidden lg:flex items-center gap-2 px-3.5 py-1.5 bg-green-50 border border-green-200 rounded-full text-xs font-bold text-green-800">
+              <span className="status-dot-green w-2 h-2 rounded-full bg-green-600 shadow-sm animate-pulse" /><span>{dbStatus ? t.dbConnected : t.gpsLive}</span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button type="button" onClick={toggleLanguage} className="lang-toggle-btn px-3 py-1.5 rounded-xl border border-slate-300 hover:border-blue-600 bg-white hover:bg-blue-50 text-slate-800 font-extrabold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer" title={lang === 'en' ? 'ಕನ್ನಡಕ್ಕೆ ಬದಲಾಯಿಸಿ' : 'Switch to English'}><span className="text-sm">🌐</span><span>{t.langToggle}</span></button>
+              <nav className="role-switch flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1" aria-label="Switch User Mode">
+                <button type="button" onClick={() => setRole('passenger')} className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'passenger' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}><Bus size={15} /><span>{t.passengerRadar}</span></button>
+                <button type="button" onClick={() => setRole('conductor')} className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'conductor' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}><Radio size={15} /><span>{t.conductorTerminal}</span></button>
+                <button type="button" onClick={() => { setRole('owner'); if (isOwnerAuthenticated) fetchOwnerBuses().catch((error) => setOwnerAuthError(error.message)) }} className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'owner' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}><Building size={15} /><span>{t.fleetOwner}</span></button>
+              </nav>
+            </div>
+          </header>
+        </>
+      )}
 
-          {/* User-Friendly Role Switcher */}
-          <nav className="role-switch flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1" aria-label="Switch User Mode">
-            <button
-              type="button"
-              onClick={() => {
-                setRole('passenger')
-              }}
-              className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'passenger' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-              <Bus size={15} />
-              <span>{t.passengerRadar}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setRole('conductor')}
-              className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'conductor' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-              <Radio size={15} />
-              <span>{t.conductorTerminal}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setRole('owner')
-                if (isOwnerAuthenticated) {
-                  fetchOwnerBuses().catch((error) => setOwnerAuthError(error.message))
-                }
-              }}
-              className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'owner' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-              <Building size={15} />
-              <span>{t.fleetOwner}</span>
-            </button>
-          </nav>
+      {utilityPage && (
+        <div className="landing-utility-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setUtilityPage('') }}>
+          <section className="landing-utility-modal" role="dialog" aria-modal="true" aria-labelledby="utility-page-title">
+            <div className="landing-utility-title-row">
+              <h2 id="utility-page-title">{utilityPage}</h2>
+              <button type="button" onClick={() => setUtilityPage('')} aria-label="Close dialog"><X size={22} /></button>
+            </div>
+            {utilityPage === 'Helpdesk' && <div className="landing-utility-content"><p>Need help using Karavali-Transit?</p><ul><li>Choose a destination or search for a bus.</li><li>Select a bus from the incoming-bus list.</li><li>Use the live tracking map to follow the selected bus.</li><li>For conductor or fleet access, use the corresponding login option.</li></ul><p className="landing-utility-note">If you encounter a technical issue, use Contact Us to reach the project support team.</p></div>}
+            {utilityPage === 'Contact Us' && <div className="landing-utility-content"><p>Karavali-Transit Passenger Support</p><p>For assistance with destination search, bus tracking, conductor access, or fleet-owner access, contact your transit system administrator.</p><p className="landing-utility-note">A verified support phone number or email address has not been configured in this project. Add the official contact details before publishing.</p></div>}
+            {utilityPage === 'Feedback' && (feedbackSent ? <div className="landing-utility-content"><p className="feedback-success"><CheckCircle2 size={20} /> Thank you for your feedback.</p><p className="landing-utility-note">This confirmation is local to this screen. Connect a feedback API to store submissions on the server.</p></div> : <form className="landing-feedback-form" onSubmit={(event) => { event.preventDefault(); if (feedbackMessage.trim()) setFeedbackSent(true) }}><label htmlFor="landing-feedback-message">Tell us about your experience</label><textarea id="landing-feedback-message" value={feedbackMessage} onChange={(event) => setFeedbackMessage(event.target.value)} rows={4} placeholder="Write your feedback..." required /><button type="submit">Submit Feedback</button><p className="landing-utility-note">Feedback is not sent to a server yet; connect an API to persist it.</p></form>)}
+          </section>
         </div>
-      </header>
+      )}
 
       {/* 3. ROTATING PASSENGER ADVISORY TICKER */}
-      {alerts.length > 0 && role === 'passenger' && (
+      {alerts.length > 0 && role === 'passenger' && passengerStep !== 1 && (
         <div className="alert-banner bg-amber-50 border-b border-amber-200 px-6 py-2 text-xs font-semibold text-amber-900 flex items-center gap-2" role="status">
           <AlertTriangle size={15} className="text-amber-600 shrink-0" aria-hidden="true" />
           <span className="ticker-alert truncate">{alerts[currentAlertIndex]?.message}</span>
@@ -1039,7 +1068,7 @@ function App() {
         {role === 'passenger' ? (
           <div className="passenger-flow flex-1 flex flex-col">
             {/* STEP PROGRESSION BREADCRUMB INDICATOR */}
-            <nav className="step-progress-nav bg-white border-b border-slate-200 py-2.5 px-4 flex items-center justify-center gap-2 text-xs font-bold">
+            {passengerStep !== 1 && <nav className="step-progress-nav bg-white border-b border-slate-200 py-2.5 px-4 flex items-center justify-center gap-2 text-xs font-bold">
               <span className={`step-item px-3 py-1 rounded-full flex items-center gap-1.5 transition-all ${passengerStep === 1 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
                 <span>1</span> Destination Selection
               </span>
@@ -1051,135 +1080,246 @@ function App() {
               <span className={`step-item px-3 py-1 rounded-full flex items-center gap-1.5 transition-all ${passengerStep === 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
                 <span>3</span> Live Tracking Map
               </span>
-            </nav>
+            </nav>}
 
             {/* ============================================================== */}
             {/* STEP 1: DESTINATION & ROUTE SELECTION (DEFAULT LANDING)        */}
             {/* NO map or bus list visible at this stage                        */}
             {/* ============================================================== */}
-            {passengerStep === 1 && (
-              <div className="step1-container flex-1 flex items-center justify-center p-6 bg-slate-50">
-                <div className="step1-card w-full max-w-xl bg-white rounded-2xl shadow-sm border border-slate-200 p-8 flex flex-col gap-6">
-                  {/* Hero Header */}
-                  <div className="step1-hero text-center">
-                    <span className="step1-badge inline-block bg-blue-50 text-blue-700 text-xs font-extrabold px-3 py-1 rounded-full border border-blue-200 mb-2">
-                      Coastal Smart Transit • ಕರಾವಳಿ ಸಾರಿಗೆ
-                    </span>
-                    <h2 className="step1-title text-2xl font-extrabold text-slate-900 tracking-tight m-0">
-                      {t.whereHeading}
-                    </h2>
-                    <p className="step1-subtitle text-slate-500 text-sm mt-1">
-                      {t.destinationSubtitle}
-                    </p>
-                  </div>
+            {passengerStep === 1 && (() => {
+              const destinationOptions = [
+                { label: 'Mangaluru Central', sublabel: 'Statebank Central Terminal', destination: 'Statebank', type: 'destination', emoji: '🌴' },
+                { label: 'Surathkal NITK', sublabel: 'Coastal corridor', destination: 'Surathkal', type: 'destination', emoji: '🌊' },
+                { label: 'Kuloor KSRTC', sublabel: 'Kuloor Bridge / Highway', destination: 'Kuloor', type: 'destination', emoji: '🌉' },
+                { label: 'Udupi City', sublabel: 'Coastal Express', destination: 'Udupi', type: 'destination', emoji: '🛕' },
+                { label: 'All Routes', sublabel: 'Show buses on all routes', destination: 'All', type: 'destination', emoji: '🚌' },
+              ]
 
-                  {/* Boarding Stop Indicator */}
-                  <div className="boarding-card bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                      <MapPin size={20} />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                        {t.boardingFrom}
-                      </span>
-                      <strong className="text-sm font-extrabold text-slate-900">
-                        {passengerLocationName}
-                      </strong>
-                    </div>
-                  </div>
+              const busOptions = Object.values(liveBuses || {})
+                .filter((bus) => bus && (bus.bus_name || bus.route_number))
+                .map((bus) => ({
+                  label: bus.bus_name || `Route ${bus.route_number}`,
+                  sublabel: `${bus.route_number ? `Route ${bus.route_number} · ` : ''}${bus.destination || 'Coastal corridor'}`,
+                  destination: bus.destination || 'All',
+                  type: 'bus',
+                  emoji: '🚌',
+                }))
 
-                  {/* 1-Tap Quick Destination Pills */}
-                  <div className="quick-filter-group flex flex-col gap-2">
-                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                      {t.popularDestinations}:
-                    </label>
-                    <div className="destination-pills-grid grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {[
-                        { id: 'Surathkal', name: lang === 'kn' ? 'ಸುರತ್ಕಲ್ / ಎನ್.ಐ.ಟಿ.ಕೆ' : 'Surathkal / NITK', desc: lang === 'kn' ? '10.5 ಕಿ.ಮೀ ಕಾರಿಡಾರ್' : '10.5 km Corridor' },
-                        { id: 'Udupi', name: lang === 'kn' ? 'ಉಡುಪಿ' : 'Udupi', desc: lang === 'kn' ? 'ಕರಾವಳಿ ಎಕ್ಸ್‌ಪ್ರೆಸ್' : 'Coastal Express' },
-                        { id: 'Kuloor', name: lang === 'kn' ? 'ಕುಳೂರು ಸೇತುವೆ' : 'Kuloor Bridge', desc: lang === 'kn' ? 'ಸಿಟಿ ಸಾಮಾನ್ಯ' : 'City Ordinary' },
-                        { id: 'Statebank', name: lang === 'kn' ? 'ಸ್ಟೇಟ್‌ಬ್ಯಾಂಕ್' : 'Statebank', desc: lang === 'kn' ? 'ಕೇಂದ್ರ ನಿಲ್ದಾಣ' : 'Central Terminal' },
-                        { id: 'All', name: lang === 'kn' ? 'ಎಲ್ಲಾ ಮಾರ್ಗಗಳು' : 'All Routes', desc: lang === 'kn' ? 'ಎಲ್ಲಾ ಬಸ್‌ಗಳು' : 'Show All Buses' },
-                      ].map((dest) => (
+              const allOptions = [...destinationOptions, ...busOptions]
+              const normalizedQuery = searchQuery.trim().toLowerCase()
+              const matches = (option) => !normalizedQuery || `${option.label} ${option.sublabel}`.toLowerCase().includes(normalizedQuery)
+              const uniqueOptions = allOptions.filter((option, index, arr) => arr.findIndex((candidate) => candidate.label.toLowerCase() === option.label.toLowerCase()) === index)
+              const visibleSuggestions = uniqueOptions.filter(matches).slice(0, 6)
+
+              const handleSelectSuggestion = (option) => {
+                if (option.type === 'destination') {
+                  setSelectedDestination(option.destination)
+                  setSearchQuery('')
+                } else {
+                  setSelectedDestination(option.destination || 'All')
+                  setSearchQuery(option.label)
+                }
+                setSearchFocused(false)
+                setActiveSuggestionIndex(-1)
+                setPassengerStep(2)
+              }
+
+              const handleSearchSubmit = (event) => {
+                event.preventDefault()
+                if (activeSuggestionIndex >= 0 && activeSuggestionIndex < visibleSuggestions.length) {
+                  handleSelectSuggestion(visibleSuggestions[activeSuggestionIndex])
+                  return
+                }
+
+                const query = searchQuery.trim().toLowerCase()
+                const destinationMatch = [
+                  { id: 'Statebank', terms: ['mangaluru', 'mangalore', 'central', 'statebank', 'state bank'] },
+                  { id: 'Surathkal', terms: ['surathkal', 'nitk'] },
+                  { id: 'Kuloor', terms: ['kuloor', 'ksrtc', 'kulur'] },
+                  { id: 'Udupi', terms: ['udupi'] },
+                  { id: 'All', terms: ['all routes', 'all buses', 'all'] },
+                ].find((destination) => destination.terms.some((term) => query.includes(term)))
+
+                if (destinationMatch) {
+                  setSelectedDestination(destinationMatch.id)
+                  setSearchQuery('')
+                }
+                setSearchFocused(false)
+                setActiveSuggestionIndex(-1)
+                handleInitiateSearch(event)
+              }
+
+              return (
+                <div className="passenger-landing-page">
+                  <section className="landing-hero">
+                    <div className="landing-hero-art" aria-hidden="true" />
+                    <div className="landing-hero-content">
+                      <h2>
+                        {lang === 'kn' ? (
+                          <>ನೀವು ಎಲ್ಲಿಗೆ<br />ಹೋಗಲು ಬಯಸುತ್ತೀರಿ?</>
+                        ) : (
+                          <>Where do you<br />want to go?</>
+                        )}
+                      </h2>
+                    </div>
+
+                    <form className="landing-search-form" onSubmit={handleSearchSubmit}>
+                      <Search className="landing-search-icon" size={24} aria-hidden="true" />
+                      <input
+                        type="search"
+                        autoComplete="off"
+                        placeholder={lang === 'kn' ? 'ಗಮ್ಯಸ್ಥಾನ ಅಥವಾ ಬಸ್ ಹೆಸರನ್ನು ಹುಡುಕಿ...' : 'Search destination or bus name...'}
+                        value={searchQuery}
+                        onFocus={() => {
+                          setSearchFocused(true)
+                          setActiveSuggestionIndex(-1)
+                        }}
+                        onChange={(event) => {
+                          setSearchQuery(event.target.value)
+                          setSearchFocused(true)
+                          setActiveSuggestionIndex(-1)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            setSearchFocused(false)
+                            setActiveSuggestionIndex(-1)
+                          } else if (event.key === 'ArrowDown') {
+                            event.preventDefault()
+                            setActiveSuggestionIndex((prev) => (prev + 1) % (visibleSuggestions.length || 1))
+                          } else if (event.key === 'ArrowUp') {
+                            event.preventDefault()
+                            setActiveSuggestionIndex((prev) => (prev <= 0 ? (visibleSuggestions.length || 1) - 1 : prev - 1))
+                          }
+                        }}
+                        aria-label="Search destination or bus name"
+                        aria-expanded={searchFocused}
+                        aria-controls="landing-search-suggestions"
+                      />
+                      {searchQuery && (
                         <button
-                          key={dest.id}
                           type="button"
-                          onClick={() => setSelectedDestination(dest.id)}
-                          className={`dest-select-btn p-3 rounded-xl border-2 text-left transition-all ${selectedDestination === dest.id ? 'border-blue-600 bg-blue-50/60 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                          className="landing-clear-search"
+                          aria-label="Clear search"
+                          onClick={() => {
+                            setSearchQuery('')
+                            setActiveSuggestionIndex(-1)
+                          }}
                         >
-                          <span className="dest-btn-name block text-sm font-extrabold text-slate-900">
-                            {dest.name}
+                          <X size={18} />
+                        </button>
+                      )}
+                      <button type="submit" className="landing-search-submit" aria-label="Search buses">
+                        <ArrowRight size={24} />
+                      </button>
+
+                      {searchFocused && (
+                        <div className="landing-search-suggestions" id="landing-search-suggestions" role="listbox" aria-label="Suggested destinations and buses">
+                          <div className="suggestion-section-label">
+                            {searchQuery ? 'Matching destinations and buses' : 'Popular destinations'}
+                          </div>
+                          {visibleSuggestions.length ? (
+                            visibleSuggestions.map((option, index) => (
+                              <button
+                                type="button"
+                                role="option"
+                                aria-selected={activeSuggestionIndex === index}
+                                className={`landing-suggestion-option ${activeSuggestionIndex === index ? 'is-active' : ''}`}
+                                key={`${option.type}-${option.label}`}
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => handleSelectSuggestion(option)}
+                              >
+                                <span className="suggestion-emoji">{option.emoji}</span>
+                                <span className="suggestion-copy">
+                                  <strong>{option.label}</strong>
+                                  <small>{option.sublabel}</small>
+                                </span>
+                                <ChevronRight size={18} />
+                              </button>
+                            ))
+                          ) : (
+                            <p className="landing-no-suggestions">No matching destination or bus. Press the arrow to search all buses.</p>
+                          )}
+                        </div>
+                      )}
+                    </form>
+                    {searchFocused && (
+                      <button
+                        className="landing-suggestion-dismiss"
+                        type="button"
+                        aria-label="Close search suggestions"
+                        onClick={() => {
+                          setSearchFocused(false)
+                          setActiveSuggestionIndex(-1)
+                        }}
+                      />
+                    )}
+                  </section>
+
+                  <section className="landing-destinations-section">
+                    <div className="landing-section-heading">
+                      <h2>{lang === 'kn' ? 'ಜನಪ್ರಿಯ ತಾಣಗಳು' : 'Popular Destinations'}</h2>
+                      <button
+                        type="button"
+                        className="landing-view-all"
+                        onClick={() => {
+                          setSelectedDestination('All')
+                          setSearchQuery('')
+                          setPassengerStep(2)
+                        }}
+                      >
+                        <span>View All</span>
+                        <ArrowRight size={17} />
+                      </button>
+                    </div>
+                    <div className="landing-destination-grid">
+                      {[
+                        { id: 'Statebank', title: 'Mangaluru', subtitle: 'Central', image: '/images/destination-mangaluru.jpg', scene: 'mangaluru', alt: 'Mangaluru Central' },
+                        { id: 'Surathkal', title: 'Surathkal', subtitle: 'NITK', image: '/images/destination-surathkal.jpg', scene: 'surathkal', alt: 'Surathkal NITK' },
+                        { id: 'Kuloor', title: 'Kuloor', subtitle: 'KSRTC', image: '/images/destination-kuloor.jpg', scene: 'kuloor', alt: 'Kuloor KSRTC' },
+                        { id: 'Udupi', title: 'Udupi', subtitle: 'City', image: '/images/destination-udupi.jpg', scene: 'udupi', alt: 'Udupi City' },
+                      ].map((destination) => (
+                        <button
+                          type="button"
+                          key={destination.id}
+                          className={`landing-destination-card ${selectedDestination === destination.id ? 'is-selected' : ''}`}
+                          onClick={() => {
+                            setSelectedDestination(destination.id)
+                            setSearchQuery('')
+                            setSearchFocused(false)
+                            setPassengerStep(2)
+                          }}
+                          aria-label={`View buses to ${destination.title} ${destination.subtitle}`}
+                        >
+                          <span className={`destination-scene scene-${destination.scene}`} aria-hidden="true">
+                            <img src={destination.image} alt={destination.alt} loading="lazy" />
                           </span>
-                          <span className="dest-btn-desc block text-xs text-slate-500">
-                            {dest.desc}
-                          </span>
+                          <strong>{destination.title}</strong>
+                          <span className="destination-subtitle">{destination.subtitle}</span>
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </section>
 
-                  {/* Optional Search Input */}
-                  <div className="search-box flex items-center bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 gap-2.5 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-                    <Search size={18} className="text-slate-400 shrink-0" />
-                    <input
-                      type="text"
-                      placeholder={t.searchPlaceholder}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-transparent border-0 outline-none text-sm text-slate-900 placeholder:text-slate-400"
-                    />
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchQuery('')}
-                        className="text-slate-400 hover:text-slate-600"
-                        title="Clear search"
-                      >
-                        <X size={16} />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Service Classification Selector */}
-                  <div className="service-filter-row flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
-                    <span className="text-xs font-bold text-slate-500 uppercase">Service Category:</span>
-                    <div className="service-toggle flex bg-slate-100 p-1 rounded-lg gap-1 text-xs font-bold">
-                      <button
-                        type="button"
-                        onClick={() => setServiceTypeFilter('All')}
-                        className={`px-3 py-1.5 rounded-md transition-all ${serviceTypeFilter === 'All' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}
-                      >
-                        All
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setServiceTypeFilter('Express')}
-                        className={`px-3 py-1.5 rounded-md transition-all ${serviceTypeFilter === 'Express' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
-                      >
-                        ⚡ Express
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setServiceTypeFilter('City')}
-                        className={`px-3 py-1.5 rounded-md transition-all ${serviceTypeFilter === 'City' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600'}`}
-                      >
-                        🚌 Ordinary
-                      </button>
+                  <section className="landing-feature-strip" aria-label="Karavali-Transit features">
+                    <div className="landing-feature">
+                      <span className="landing-feature-icon"><Clock size={32} /></span>
+                      <strong>Live Tracking</strong>
+                      <small>Real-time</small>
                     </div>
-                  </div>
-
-                  {/* Primary CTA Button: Proceed to Step 2 */}
-                  <button
-                    type="button"
-                    onClick={handleInitiateSearch}
-                    className="search-incoming-btn w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-base py-3.5 px-6 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span>{t.searchIncomingBuses}</span>
-                    <ArrowRight size={18} />
-                  </button>
+                    <div className="landing-feature">
+                      <span className="landing-feature-icon"><Users size={32} /></span>
+                      <strong>Private Buses</strong>
+                      <small>All Operators</small>
+                    </div>
+                    <div className="landing-feature">
+                      <span className="landing-feature-icon"><MapPin size={32} fill="currentColor" /></span>
+                      <strong>Easy to Use</strong>
+                      <small>No Registration</small>
+                    </div>
+                  </section>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* ============================================================== */}
             {/* STEP 2: FILTERED BUS LIST SCREEN                               */}
