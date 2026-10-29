@@ -15,7 +15,6 @@ import {
   FileText,
   KeyRound,
   Lock,
-  LogOut,
   Menu,
   Home,
   Headphones,
@@ -24,15 +23,12 @@ import {
   Languages,
   Clock,
   Users,
-  Mail,
   MapPin,
   Maximize2,
   Minimize2,
   Navigation,
-  Plus,
   Printer,
   Radio,
-  RefreshCw,
   Search,
   Share2,
   ShieldCheck,
@@ -45,8 +41,9 @@ import io from 'socket.io-client'
 import { translations } from './translations.js'
 import { calculateEstimatedFare, sortBuses } from './fareRules.js'
 import { generateShiftSummary } from './shiftLedger.js'
-import { apiUrl, ownerHeaders, socketUrl } from './api.js'
+import { apiUrl, socketUrl } from './api.js'
 import { matchesDestination } from './transitUtils.js'
+import OwnerPortal from './OwnerPortal.jsx'
 import './App.css'
 
 const TransitMap = lazy(() => import('./TransitMap.jsx'))
@@ -354,31 +351,11 @@ function App() {
   const lastSentCoordsRef = useRef(null)
   const [currentTime, setCurrentTime] = useState(() => Date.now())
 
-  // Fleet Owner Email OTP & Fleet Management State
-  const [ownerEmail, setOwnerEmail] = useState('vishal@gmail.com')
-  const [ownerAgencyName, setOwnerAgencyName] = useState('Vishal Coastal Travels')
-  const [ownerOtpStep, setOwnerOtpStep] = useState('email') // 'email' | 'otp' | 'dashboard'
-  const [ownerOtpInput, setOwnerOtpInput] = useState('')
-  const [ownerOtpPreview, setOwnerOtpPreview] = useState('')
-  const [ownerAuthError, setOwnerAuthError] = useState('')
+  // Fleet Owner Session State
+  const [ownerEmail, setOwnerEmail] = useState('rakesh@gmail.com')
+  const [ownerAgencyName, setOwnerAgencyName] = useState('Rakesh Shetty Travels')
   const [isOwnerAuthenticated, setIsOwnerAuthenticated] = useState(false)
   const [ownerToken, setOwnerToken] = useState('')
-  const [ownerBuses, setOwnerBuses] = useState([])
-  const [showAddBusModal, setShowAddBusModal] = useState(false)
-  const [visiblePins, setVisiblePins] = useState({})
-  const [copiedPinBusId, setCopiedPinBusId] = useState(null)
-  const [ownerNotice, setOwnerNotice] = useState('')
-  const [ownerSearchQuery, setOwnerSearchQuery] = useState('')
-
-  const [newBusForm, setNewBusForm] = useState({
-    bus_name: '',
-    vehicle_number: '',
-    route_number: '15',
-    service_type: 'Express',
-    origin: 'Mangaluru Statebank',
-    destination: 'Surathkal',
-    conductor_pin: '',
-  })
 
   // Periodic heartbeat timer for telemetry freshness checks
   useEffect(() => {
@@ -507,153 +484,7 @@ function App() {
     }
   }
 
-  // FLEET OWNER: Fetch Buses
-  const fetchOwnerBuses = async (token = ownerToken) => {
-    const res = await fetch(apiUrl('/api/owner/buses'), {
-      headers: ownerHeaders(token),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Failed to load fleet buses.')
-    if (Array.isArray(data)) setOwnerBuses(data)
-  }
 
-  // FLEET OWNER: Send 6-Digit Email OTP
-  const handleSendOwnerOtp = async (e) => {
-    e?.preventDefault()
-    setOwnerAuthError('')
-    if (!ownerEmail || !ownerEmail.includes('@')) {
-      setOwnerAuthError('Please enter a valid email address.')
-      return
-    }
-
-    try {
-      const res = await fetch(apiUrl('/api/owner/send-otp'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: ownerEmail, agency_name: ownerAgencyName }),
-      })
-      const data = await res.json()
-      if (res.ok && data.success) {
-        setOwnerOtpPreview(data.preview_otp || '')
-        setOwnerOtpStep('otp')
-      } else {
-        setOwnerAuthError(data.error || 'Failed to send OTP.')
-      }
-    } catch (error) {
-      setOwnerAuthError(`Could not contact the transit server: ${error.message}`)
-    }
-  }
-
-  // FLEET OWNER: Verify 6-Digit Email OTP
-  const handleVerifyOwnerOtp = async (e) => {
-    e?.preventDefault()
-    setOwnerAuthError('')
-    if (!ownerOtpInput) {
-      setOwnerAuthError('Please enter the 6-digit OTP code.')
-      return
-    }
-
-    try {
-      const res = await fetch(apiUrl('/api/owner/verify-otp'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: ownerEmail, otp: ownerOtpInput }),
-      })
-      const data = await res.json()
-      if (res.ok && data.success && data.owner?.token) {
-        setOwnerToken(data.owner.token)
-        setIsOwnerAuthenticated(true)
-        setOwnerOtpStep('dashboard')
-        fetchOwnerBuses(data.owner.token).catch((error) => setOwnerAuthError(error.message))
-      } else {
-        setOwnerAuthError(data.error || 'Invalid OTP code.')
-      }
-    } catch (error) {
-      setOwnerAuthError(`Could not contact the transit server: ${error.message}`)
-    }
-  }
-
-  // FLEET OWNER: Add New Bus to Fleet
-  const handleAddNewBusToFleet = async (e) => {
-    e?.preventDefault()
-    setOwnerNotice('')
-    if (!newBusForm.bus_name || !newBusForm.vehicle_number) {
-      setOwnerNotice('Please enter both Bus Name and Registration Number.')
-      return
-    }
-
-    try {
-      const res = await fetch(apiUrl('/api/owner/buses'), {
-        method: 'POST',
-        headers: ownerHeaders(ownerToken, { 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          ...newBusForm,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok && data.success && data.bus) {
-        setOwnerBuses((prev) => [...prev, data.bus])
-        setShowAddBusModal(false)
-        setOwnerNotice(`Bus ${data.bus.vehicle_number} registered! Secret Conductor PIN: ${data.bus.conductor_pin}`)
-        setNewBusForm({
-          bus_name: '',
-          vehicle_number: '',
-          route_number: '15',
-          service_type: 'Express',
-          origin: 'Mangaluru Statebank',
-          destination: 'Surathkal',
-          conductor_pin: Math.floor(1000 + Math.random() * 9000).toString(),
-        })
-      } else {
-        setOwnerNotice(data.error || 'Failed to add bus to fleet.')
-      }
-    } catch (error) {
-      setOwnerNotice(`Could not contact the transit server: ${error.message}`)
-    }
-  }
-
-  // FLEET OWNER: Update Secret Conductor PIN
-  const handleUpdateBusPin = async (busId, currentPin) => {
-    const newPin = window.prompt('Enter new 4-digit Secret Conductor PIN for this bus:', currentPin || '4509')
-    if (!newPin || newPin.trim().length !== 4) {
-      if (newPin !== null) alert('PIN must be exactly 4 digits.')
-      return
-    }
-
-    try {
-      const res = await fetch(apiUrl(`/api/owner/buses/${busId}/pin`), {
-        method: 'PATCH',
-        headers: ownerHeaders(ownerToken, { 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ conductor_pin: newPin.trim() }),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update PIN.')
-      setOwnerBuses((prev) =>
-        prev.map((b) => (b.bus_id === busId ? { ...b, conductor_pin: newPin.trim() } : b))
-      )
-      setOwnerNotice(`Updated Secret Conductor PIN to ${newPin.trim()}`)
-    } catch (error) {
-      setOwnerNotice(error.message)
-    }
-  }
-
-  // FLEET OWNER: Delete Bus
-  const handleDeleteBus = async (busId, vehicleNum) => {
-    if (!window.confirm(`Are you sure you want to remove bus ${vehicleNum} from your fleet?`)) return
-
-    try {
-      const res = await fetch(apiUrl(`/api/owner/buses/${busId}`), {
-        method: 'DELETE',
-        headers: ownerHeaders(ownerToken),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to remove bus.')
-      setOwnerBuses((prev) => prev.filter((b) => b.bus_id !== busId))
-      setOwnerNotice(`Removed bus ${vehicleNum} from fleet.`)
-    } catch (error) {
-      setOwnerNotice(error.message)
-    }
-  }
 
   // Conductor: Start duty & stream coordinates (Zomato-style Smart GPS Throttling)
   const handleStartShift = (event) => {
@@ -999,7 +830,7 @@ function App() {
                 <button type="button" className="landing-menu-item" onClick={() => { setRole('passenger'); setSelectedDestination('All'); setSearchQuery(''); setPassengerStep(2); setUtilityPage(''); setMenuOpen(false) }}><Bus size={19} /><span>Passenger Radar</span></button>
                 <div className="landing-menu-divider" />
                 <button type="button" className="landing-menu-item" onClick={() => { setRole('conductor'); setUtilityPage(''); setMenuOpen(false) }}><Radio size={19} /><span>Conductor Login</span></button>
-                <button type="button" className="landing-menu-item" onClick={() => { setRole('owner'); setUtilityPage(''); setMenuOpen(false); if (isOwnerAuthenticated) fetchOwnerBuses().catch((error) => setOwnerAuthError(error.message)) }}><Building size={19} /><span>Fleet Owner Login</span></button>
+                <button type="button" className="landing-menu-item" onClick={() => { setRole('owner'); setUtilityPage(''); setMenuOpen(false) }}><Building size={19} /><span>Fleet Owner Login</span></button>
                 <div className="landing-menu-divider" />
                 <button type="button" className="landing-menu-item" onClick={() => { setUtilityPage('Helpdesk'); setMenuOpen(false) }}><Headphones size={19} /><span>Helpdesk</span></button>
                 <button type="button" className="landing-menu-item" onClick={() => { setUtilityPage('Feedback'); setFeedbackSent(false); setMenuOpen(false) }}><MessageSquare size={19} /><span>Feedback</span></button>
@@ -1034,7 +865,7 @@ function App() {
               <nav className="role-switch flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1" aria-label="Switch User Mode">
                 <button type="button" onClick={() => setRole('passenger')} className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'passenger' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}><Bus size={15} /><span>{t.passengerRadar}</span></button>
                 <button type="button" onClick={() => setRole('conductor')} className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'conductor' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}><Radio size={15} /><span>{t.conductorTerminal}</span></button>
-                <button type="button" onClick={() => { setRole('owner'); if (isOwnerAuthenticated) fetchOwnerBuses().catch((error) => setOwnerAuthError(error.message)) }} className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'owner' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}><Building size={15} /><span>{t.fleetOwner}</span></button>
+                <button type="button" onClick={() => setRole('owner')} className={`role-button px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${role === 'owner' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}><Building size={15} /><span>{t.fleetOwner}</span></button>
               </nav>
             </div>
           </header>
@@ -2232,528 +2063,23 @@ function App() {
           </div>
         ) : (
           /* ============================================================== */
-          /* FLEET OWNER COMMAND CENTER (EMAIL OTP LOGIN & FLEET MGMT)      */
+          /* FLEET OWNER COMMAND CENTER (EXACT DESIGN IMPLEMENTATION)       */
           /* ============================================================== */
-          <div className="owner-page flex-1 p-6 bg-slate-50 overflow-y-auto">
-            <div className="max-w-5xl mx-auto flex flex-col gap-6">
-              {!isOwnerAuthenticated ? (
-                /* OWNER LOGIN: EMAIL + GMAIL OTP AUTHENTICATION */
-                <div className="flex items-center justify-center min-h-[500px]">
-                  <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-8 shadow-xl space-y-6">
-                    <div className="text-center space-y-2">
-                      <span className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 mx-auto flex items-center justify-center shadow-sm">
-                        <Building size={24} />
-                      </span>
-                      <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                        Fleet Owner Command
-                      </h2>
-                      <p className="text-xs text-slate-500 font-medium">
-                        Secure Fleet Management &amp; Conductor PIN Administration with Email OTP
-                      </p>
-                    </div>
-
-                    {ownerOtpStep === 'email' ? (
-                      <form onSubmit={handleSendOwnerOtp} className="space-y-4 text-xs">
-                        <div className="space-y-1">
-                          <label className="font-bold text-slate-700 block">Owner Registered Email</label>
-                          <div className="relative">
-                            <Mail size={16} className="absolute left-3.5 top-3.5 text-slate-400 pointer-events-none" />
-                            <input
-                              type="email"
-                              placeholder="e.g. vishal@gmail.com"
-                              value={ownerEmail}
-                              onChange={(e) => setOwnerEmail(e.target.value)}
-                              required
-                              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-semibold text-sm"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-slate-700 block">Bus Travel Agency / Operator Name</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Vishal Coastal Travels"
-                            value={ownerAgencyName}
-                            onChange={(e) => setOwnerAgencyName(e.target.value)}
-                            required
-                            className="w-full p-3 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-semibold text-sm"
-                          />
-                        </div>
-
-                        {ownerAuthError && (
-                          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl font-bold flex items-center gap-2">
-                            <AlertTriangle size={15} className="text-rose-600 shrink-0" />
-                            <span>{ownerAuthError}</span>
-                          </div>
-                        )}
-
-                        <button
-                          type="submit"
-                          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm py-3.5 px-6 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <Mail size={16} />
-                          <span>Send 6-Digit Email OTP ➔</span>
-                        </button>
-
-                        <div className="bg-slate-50 border border-slate-200 text-slate-600 rounded-xl p-3 text-[11px] text-center">
-                          💡 Quick Demo: Use <strong>vishal@gmail.com</strong> to access pre-registered fleet.
-                        </div>
-                      </form>
-                    ) : (
-                      <form onSubmit={handleVerifyOwnerOtp} className="space-y-4 text-xs">
-                        {/* OTP Dispatch Notification */}
-                        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-3 text-xs flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                            <span>Code sent to <strong>{ownerEmail}</strong></span>
-                          </div>
-                          {ownerOtpPreview && (
-                            <button
-                              type="button"
-                              onClick={() => setOwnerOtpInput(ownerOtpPreview)}
-                              className="px-2 py-0.5 bg-emerald-600 text-white font-bold rounded text-[10px] cursor-pointer"
-                            >
-                              Fill: {ownerOtpPreview}
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-slate-700 block">Enter 6-Digit OTP Code</label>
-                          <input
-                            type="text"
-                            maxLength={6}
-                            placeholder="••••••"
-                            value={ownerOtpInput}
-                            onChange={(e) => setOwnerOtpInput(e.target.value.replace(/\D/g, ''))}
-                            required
-                            autoFocus
-                            className="w-full p-3 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-mono text-center text-2xl font-black tracking-widest"
-                          />
-                        </div>
-
-                        {ownerAuthError && (
-                          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl font-bold flex items-center gap-2">
-                            <AlertTriangle size={15} className="text-rose-600 shrink-0" />
-                            <span>{ownerAuthError}</span>
-                          </div>
-                        )}
-
-                        <button
-                          type="submit"
-                          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm py-3.5 px-6 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <ShieldCheck size={18} />
-                          <span>Verify OTP &amp; Access Dashboard ➔</span>
-                        </button>
-
-                        <div className="flex items-center justify-between pt-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOwnerOtpStep('email')
-                              setOwnerOtpInput('')
-                              setOwnerAuthError('')
-                            }}
-                            className="text-blue-600 hover:underline font-bold"
-                          >
-                            ← Change Email
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleSendOwnerOtp}
-                            className="text-slate-500 hover:text-slate-800 font-bold"
-                          >
-                            Resend Code
-                          </button>
-                        </div>
-                      </form>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                /* OWNER DASHBOARD: FLEET MANAGEMENT & PIN ADMINISTRATION */
-                <div className="owner-dashboard space-y-6">
-                  {/* Dashboard Header */}
-                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex items-center justify-between flex-wrap gap-4">
-                    <div className="flex items-center gap-3">
-                      <span className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-xl shadow">
-                        🏢
-                      </span>
-                      <div>
-                        <h2 className="text-xl font-black text-slate-900 m-0">
-                          {ownerAgencyName}
-                        </h2>
-                        <span className="text-xs font-semibold text-slate-500">
-                          Fleet Control Console • Authenticated Owner: <strong>{ownerEmail}</strong>
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowAddBusModal(!showAddBusModal)}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Plus size={16} />
-                        <span>Add New Bus to Fleet</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsOwnerAuthenticated(false)
-                          setOwnerToken('')
-                          setOwnerOtpStep('email')
-                          setOwnerOtpInput('')
-                          setOwnerBuses([])
-                        }}
-                        className="p-2 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
-                        title="Sign Out of Owner Console"
-                      >
-                        <LogOut size={18} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {ownerNotice && (
-                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between gap-2 shadow-sm">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                        <span>{ownerNotice}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setOwnerNotice('')}
-                        className="text-emerald-700 hover:text-emerald-900 font-bold"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-
-                  {/* KPI Stat Cards */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-                      <span className="text-slate-400 uppercase text-[10px] font-black block">Fleet Registered</span>
-                      <strong className="text-2xl font-black text-slate-900">{ownerBuses.length || Object.keys(liveBuses).length} Buses</strong>
-                      <span className="text-[11px] text-slate-500 block mt-0.5">NH-66 Coastal Network</span>
-                    </div>
-
-                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-                      <span className="text-slate-400 uppercase text-[10px] font-black block">Active on Shift</span>
-                      <strong className="text-2xl font-black text-emerald-600">
-                        {ownerBuses.filter(b => b.speed > 0 || b.active_shift).length || 2} Streaming
-                      </strong>
-                      <span className="text-[11px] text-emerald-700 block mt-0.5">Live GPS Broadcasting</span>
-                    </div>
-
-                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-                      <span className="text-slate-400 uppercase text-[10px] font-black block">Total Fleet Capacity</span>
-                      <strong className="text-2xl font-black text-blue-700">
-                        {(ownerBuses.length || 4) * 42} Passengers
-                      </strong>
-                      <span className="text-[11px] text-blue-600 block mt-0.5">42 Seats Per Vehicle</span>
-                    </div>
-
-                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-                      <span className="text-slate-400 uppercase text-[10px] font-black block">PIN Security</span>
-                      <strong className="text-2xl font-black text-indigo-700">100% Protected</strong>
-                      <span className="text-[11px] text-slate-500 block mt-0.5">Unique 4-Digit Conductor PINs</span>
-                    </div>
-                  </div>
-
-                  {/* Add New Bus Modal / Form */}
-                  {showAddBusModal && (
-                    <div className="bg-white border-2 border-blue-600 rounded-2xl p-6 shadow-lg space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                        <div>
-                          <h3 className="text-base font-extrabold text-slate-900 m-0">
-                            Register New Bus to Your Fleet
-                          </h3>
-                          <p className="text-xs text-slate-500 m-0">
-                            Deploy vehicle to Karavali-Transit and assign conductor secret PIN.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowAddBusModal(false)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                        >
-                          <X size={18} />
-                        </button>
-                      </div>
-
-                      <form onSubmit={handleAddNewBusToFleet} className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                        <div className="space-y-1">
-                          <label className="font-bold text-slate-700">Bus Operator Name</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Vishal Tourist"
-                            value={newBusForm.bus_name}
-                            onChange={(e) => setNewBusForm({ ...newBusForm, bus_name: e.target.value })}
-                            required
-                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-bold"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-slate-700">Vehicle Registration Number</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. KA-20-A-1234"
-                            value={newBusForm.vehicle_number}
-                            onChange={(e) => setNewBusForm({ ...newBusForm, vehicle_number: e.target.value })}
-                            required
-                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-extrabold uppercase tracking-wide"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-slate-700">Route Number</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. 15, NH-66"
-                            value={newBusForm.route_number}
-                            onChange={(e) => setNewBusForm({ ...newBusForm, route_number: e.target.value })}
-                            required
-                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-bold"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-slate-700">Service Category</label>
-                          <select
-                            value={newBusForm.service_type}
-                            onChange={(e) => setNewBusForm({ ...newBusForm, service_type: e.target.value })}
-                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none bg-white font-bold"
-                          >
-                            <option value="Express">⚡ Express Service</option>
-                            <option value="City / Ordinary">🚌 City / Ordinary Service</option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-slate-700">Corridor Origin</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Mangaluru Statebank"
-                            value={newBusForm.origin}
-                            onChange={(e) => setNewBusForm({ ...newBusForm, origin: e.target.value })}
-                            required
-                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-bold"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-slate-700">Corridor Destination</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Surathkal"
-                            value={newBusForm.destination}
-                            onChange={(e) => setNewBusForm({ ...newBusForm, destination: e.target.value })}
-                            required
-                            className="w-full p-2.5 rounded-xl border border-slate-300 focus:border-blue-600 outline-none font-bold"
-                          />
-                        </div>
-
-                        {/* Secret PIN Generator */}
-                        <div className="space-y-1 md:col-span-3 bg-blue-50/70 p-3.5 rounded-xl border border-blue-200">
-                          <div className="flex items-center justify-between">
-                            <label className="font-extrabold text-blue-900 flex items-center gap-1.5">
-                              <KeyRound size={15} className="text-blue-700" />
-                              <span>Secret Conductor PIN (4 Digits)</span>
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => setNewBusForm({ ...newBusForm, conductor_pin: Math.floor(1000 + Math.random() * 9000).toString() })}
-                              className="text-blue-700 hover:text-blue-900 font-extrabold text-[11px] flex items-center gap-1 cursor-pointer"
-                            >
-                              <RefreshCw size={12} />
-                              <span>Randomize PIN</span>
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-3 mt-1.5">
-                            <input
-                              type="text"
-                              maxLength={4}
-                              value={newBusForm.conductor_pin}
-                              onChange={(e) => setNewBusForm({ ...newBusForm, conductor_pin: e.target.value.replace(/\D/g, '') })}
-                              required
-                              className="w-36 p-2 rounded-lg border border-blue-300 font-mono text-center text-base font-extrabold tracking-widest bg-white"
-                            />
-                            <span className="text-slate-600 text-[11px]">
-                              Give this 4-digit code to your driver/conductor. They enter it on their phone to start their shift.
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="md:col-span-3 flex justify-end gap-2 pt-2 border-t border-slate-200">
-                          <button
-                            type="button"
-                            onClick={() => setShowAddBusModal(false)}
-                            className="px-4 py-2 border border-slate-300 text-slate-700 font-bold rounded-xl hover:bg-slate-100"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="submit"
-                            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow"
-                          >
-                            Save &amp; Deploy to Fleet ➔
-                          </button>
-                        </div>
-                      </form>
-                    </div>
-                  )}
-
-                  {/* Registered Fleet List */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <h3 className="text-base font-extrabold text-slate-900 m-0 flex items-center gap-2">
-                        <Bus size={18} className="text-blue-600" />
-                        <span>Registered Fleet Buses &amp; Conductor Access PINs</span>
-                      </h3>
-                      <div className="relative text-xs w-full sm:w-64">
-                        <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-                        <input
-                          type="text"
-                          placeholder="Search vehicle or route..."
-                          value={ownerSearchQuery}
-                          onChange={(e) => setOwnerSearchQuery(e.target.value)}
-                          className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold outline-none focus:border-blue-600 bg-white"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {(ownerBuses.length > 0 ? ownerBuses : Object.values(liveBuses))
-                        .filter((bus) => {
-                          if (!ownerSearchQuery.trim()) return true
-                          const q = ownerSearchQuery.toLowerCase()
-                          return (
-                            bus.bus_name?.toLowerCase().includes(q) ||
-                            bus.vehicle_number?.toLowerCase().includes(q) ||
-                            bus.route_name?.toLowerCase().includes(q) ||
-                            bus.route_number?.toLowerCase().includes(q)
-                          )
-                        })
-                        .map((bus) => {
-                        const pin = bus.conductor_pin || '4509'
-                        const isPinVisible = Boolean(visiblePins[bus.bus_id])
-                        const isCopied = copiedPinBusId === bus.bus_id
-                        const isStreaming = bus.speed > 0 || bus.active_shift
-
-                        return (
-                          <div key={bus.bus_id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <strong className="text-base font-extrabold text-slate-900">
-                                    {bus.bus_name}
-                                  </strong>
-                                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                                    bus.service_type?.toLowerCase().includes('express')
-                                      ? 'bg-blue-100 text-blue-800'
-                                      : 'bg-slate-100 text-slate-700'
-                                  }`}>
-                                    {bus.service_type || 'Express'}
-                                  </span>
-                                </div>
-                                <span className="text-xs font-extrabold text-blue-700">
-                                  {bus.vehicle_number}
-                                </span>
-                              </div>
-
-                              <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full flex items-center gap-1.5 ${
-                                isStreaming
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}>
-                                <span className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-emerald-600 animate-pulse' : 'bg-slate-400'}`} />
-                                <span>{isStreaming ? 'Live On Shift' : 'Depot Idle'}</span>
-                              </span>
-                            </div>
-
-                            <div className="text-xs text-slate-600">
-                              Route #{bus.route_number || '15'} • <strong>{bus.route_name || `${bus.origin} ➔ ${bus.destination}`}</strong>
-                            </div>
-
-                            {/* Secret Conductor PIN Box */}
-                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs">
-                              <div>
-                                <span className="text-[10px] uppercase font-extrabold text-slate-400 block">
-                                  Secret Conductor PIN
-                                </span>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <strong className="font-mono text-base font-extrabold tracking-widest text-slate-900">
-                                    {isPinVisible ? pin : '••••'}
-                                  </strong>
-                                  <button
-                                    type="button"
-                                    onClick={() => setVisiblePins({ ...visiblePins, [bus.bus_id]: !isPinVisible })}
-                                    className="p-1 text-slate-500 hover:text-slate-800 rounded cursor-pointer"
-                                    title={isPinVisible ? 'Hide PIN' : 'Reveal PIN'}
-                                  >
-                                    {isPinVisible ? <EyeOff size={14} /> : <Eye size={14} />}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(pin)
-                                      setCopiedPinBusId(bus.bus_id)
-                                      setTimeout(() => setCopiedPinBusId(null), 2000)
-                                    }}
-                                    className="p-1 text-slate-500 hover:text-blue-700 rounded cursor-pointer"
-                                    title="Copy PIN to clipboard"
-                                  >
-                                    {isCopied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateBusPin(bus.bus_id, pin)}
-                                  className="px-2.5 py-1 text-xs font-bold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition"
-                                >
-                                  Change PIN
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteBus(bus.bus_id, bus.vehicle_number)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
-                                  title="Delete Bus"
-                                >
-                                  <X size={15} />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Launch Conductor CTA */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setConductorVehicleInput(bus.vehicle_number)
-                                setConductorPinInput(pin)
-                                setRole('conductor')
-                              }}
-                              className="w-full py-2 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
-                            >
-                              <Radio size={14} />
-                              <span>Switch to Conductor Portal for this Bus ➔</span>
-                            </button>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <OwnerPortal
+            ownerEmail={ownerEmail}
+            setOwnerEmail={setOwnerEmail}
+            ownerAgencyName={ownerAgencyName}
+            setOwnerAgencyName={setOwnerAgencyName}
+            isOwnerAuthenticated={isOwnerAuthenticated}
+            setIsOwnerAuthenticated={setIsOwnerAuthenticated}
+            ownerToken={ownerToken}
+            setOwnerToken={setOwnerToken}
+            onSwitchToConductor={(vehicleNumber, pin) => {
+              setConductorVehicleInput(vehicleNumber)
+              setConductorPinInput(pin)
+              setRole('conductor')
+            }}
+          />
         )}
       </section>
 

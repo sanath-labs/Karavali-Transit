@@ -5,17 +5,24 @@ import express from 'express'
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import {
+  createOwner,
   deleteBus,
+  deleteConductor,
   getActiveShifts,
   getBuses,
   getBusesByOwner,
+  getConductorsByOwner,
+  getOwnerActivities,
   getOwnerByEmail,
+  getOwnerDashboardData,
   getRecentTelemetry,
   initDB,
+  insertOwnerActivity,
   isDbConnected,
   recordShift,
   recordTelemetry,
   saveBus,
+  saveConductor,
   updateBusPin,
   verifyConductorPin,
 } from './db.js'
@@ -63,7 +70,7 @@ app.get('/api/buses', async (req, res) => {
   res.json(buses.map(toPublicBus))
 })
 
-// 1. OWNER AUTHENTICATION: Send 6-Digit Email OTP
+// 1. OWNER AUTHENTICATION: Send 6-Digit Email OTP (Handles both Sign-Up and Login)
 app.post('/api/owner/send-otp', async (req, res) => {
   const { email, agency_name } = req.body
   if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -71,10 +78,18 @@ app.post('/api/owner/send-otp', async (req, res) => {
   }
 
   const cleanEmail = email.trim().toLowerCase()
-  const owner = await getOwnerByEmail(cleanEmail)
+  let owner = await getOwnerByEmail(cleanEmail)
+
+  // Derive a friendly agency name if registering a new owner
+  const defaultAgency =
+    agency_name ||
+    `${cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} Travels`
+
   if (!owner) {
-    return res.status(403).json({ success: false, error: 'This email is not registered to a fleet owner.' })
+    await createOwner(cleanEmail, defaultAgency)
+    owner = { email: cleanEmail, agency_name: defaultAgency }
   }
+
   if (process.env.NODE_ENV === 'production') {
     return res.status(503).json({ success: false, error: 'Email OTP delivery is not configured.' })
   }
@@ -86,7 +101,7 @@ app.post('/api/owner/send-otp', async (req, res) => {
     otp,
     expiresAt,
     attempts: 0,
-    agency_name: owner.agency_name || agency_name || 'Coastal Bus Line',
+    agency_name: owner.agency_name || defaultAgency,
   }
 
   console.log(`Development OTP for ${cleanEmail}: ${otp} (expires in 10 minutes)`)
@@ -117,14 +132,14 @@ app.post('/api/owner/verify-otp', async (req, res) => {
     return res.status(401).json({ success: false, error: 'Invalid or expired 6-digit OTP code.' })
   }
 
-  const owner = await getOwnerByEmail(cleanEmail)
+  let owner = await getOwnerByEmail(cleanEmail)
+  const agencyName = owner?.agency_name || record.agency_name || 'Coastal Bus Line'
   if (!owner) {
-    delete activeOtps[cleanEmail]
-    return res.status(403).json({ success: false, error: 'This email is not registered to a fleet owner.' })
+    await createOwner(cleanEmail, agencyName)
+    owner = { email: cleanEmail, agency_name: agencyName }
   }
-  const agencyName = owner.agency_name || record.agency_name
-  const token = ownerSessions.create(cleanEmail, agencyName)
 
+  const token = ownerSessions.create(cleanEmail, agencyName)
   delete activeOtps[cleanEmail]
 
   res.json({
@@ -138,15 +153,45 @@ app.post('/api/owner/verify-otp', async (req, res) => {
   })
 })
 
-// 3. OWNER FLEET: Get buses for this owner
+// 3. OWNER DASHBOARD: Dynamic KPI counts and recent activity
+app.get('/api/owner/dashboard', requireOwnerSession, async (req, res) => {
+  try {
+    const dashboardData = await getOwnerDashboardData(req.owner.email, activeBuses)
+    res.json({
+      success: true,
+      owner: req.owner,
+      ...dashboardData,
+    })
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error)
+    res.status(500).json({ success: false, error: 'Failed to load dashboard data.' })
+  }
+})
+
+// 4. OWNER FLEET: Get buses for this owner
 app.get('/api/owner/buses', requireOwnerSession, async (req, res) => {
   const buses = await getBusesByOwner(req.owner.email)
   res.json(buses)
 })
 
-// 4. OWNER FLEET: Add new bus with Secret Conductor PIN
+// 5. OWNER FLEET: Add new bus with multi-stop route and schedule
 app.post('/api/owner/buses', requireOwnerSession, async (req, res) => {
-  const { bus_name, vehicle_number, route_number, origin, destination, service_type, conductor_pin } = req.body
+  const {
+    bus_name,
+    vehicle_number,
+    route_number,
+    origin,
+    destination,
+    service_type,
+    conductor_pin,
+    total_seats,
+    photo_url,
+    departure_time,
+    frequency,
+    journey_duration,
+    stops,
+  } = req.body
+
   if (
     typeof bus_name !== 'string' || !bus_name.trim() ||
     typeof vehicle_number !== 'string' || !vehicle_number.trim()
@@ -163,19 +208,33 @@ app.post('/api/owner/buses', requireOwnerSession, async (req, res) => {
   const busPayload = {
     bus_name: bus_name.trim(),
     vehicle_number: cleanVeh,
-    route_number: route_number || '15',
+    route_number: route_number ? String(route_number).trim() : '001',
     service_type: service_type || 'Express',
-    origin: origin || 'Mangaluru Statebank',
-    destination: destination || 'Surathkal',
+    origin: origin ? String(origin).trim() : 'Mangaluru',
+    destination: destination ? String(destination).trim() : 'Udupi',
     conductor_pin: pin,
     owner_email: req.owner.email,
     is_last_bus: false,
+    total_seats: Number(total_seats) || 45,
+    photo_url: photo_url || '/images/coastal-private-bus.jpg',
+    departure_time: departure_time || '06:30 AM',
+    frequency: frequency || 'Daily',
+    journey_duration: journey_duration || '3 hours 30 minutes',
+    stops: Array.isArray(stops) ? stops : [],
   }
 
   const created = await saveBus(busPayload)
   if (!created) {
-    return res.status(500).json({ success: false, error: 'Failed to register bus in database.' })
+    return res.status(500).json({ success: false, error: 'Failed to register bus in database. Vehicle number might already exist.' })
   }
+
+  // Record recent activity for dashboard
+  await insertOwnerActivity(
+    req.owner.email,
+    'bus_added',
+    `Bus ${created.vehicle_number} added`,
+    `Added ${created.bus_name} on route #${created.route_number}`
+  )
 
   activeBuses[created.bus_id] = {
     ...created,
@@ -189,7 +248,7 @@ app.post('/api/owner/buses', requireOwnerSession, async (req, res) => {
   res.status(201).json({ success: true, bus: created })
 })
 
-// 5. OWNER FLEET: Update Secret Conductor PIN
+// 6. OWNER FLEET: Update Secret Conductor PIN
 app.patch('/api/owner/buses/:busId/pin', requireOwnerSession, async (req, res) => {
   const busId = Number(req.params.busId)
   const { conductor_pin } = req.body
@@ -213,7 +272,7 @@ app.patch('/api/owner/buses/:busId/pin', requireOwnerSession, async (req, res) =
   res.json({ success: true, message: 'Conductor PIN updated.' })
 })
 
-// 6. OWNER FLEET: Delete Bus
+// 7. OWNER FLEET: Delete Bus
 app.delete('/api/owner/buses/:busId', requireOwnerSession, async (req, res) => {
   const busId = Number(req.params.busId)
   const ownedBuses = await getBusesByOwner(req.owner.email)
@@ -229,7 +288,57 @@ app.delete('/api/owner/buses/:busId', requireOwnerSession, async (req, res) => {
   res.json({ success: true, message: 'Bus removed.' })
 })
 
-// 7. REAL-WORLD CONDUCTOR CHECK-IN: Verify Bus Number & Secret PIN
+// 8. OWNER CONDUCTORS: List Conductors
+app.get('/api/owner/conductors', requireOwnerSession, async (req, res) => {
+  const conductors = await getConductorsByOwner(req.owner.email)
+  res.json({ success: true, conductors })
+})
+
+// 9. OWNER CONDUCTORS: Assign / Authorize Conductor
+app.post('/api/owner/conductors', requireOwnerSession, async (req, res) => {
+  const { name, phone, assigned_bus_id } = req.body
+  if (!name || !phone) {
+    return res.status(400).json({ success: false, error: 'Conductor name and phone number are required.' })
+  }
+
+  const created = await saveConductor({
+    owner_email: req.owner.email,
+    name: name.trim(),
+    phone: phone.trim(),
+    assigned_bus_id: assigned_bus_id ? Number(assigned_bus_id) : null,
+  })
+
+  if (!created) {
+    return res.status(500).json({ success: false, error: 'Failed to authorize conductor.' })
+  }
+
+  await insertOwnerActivity(
+    req.owner.email,
+    'conductor_assigned',
+    `Conductor ${created.name} assigned`,
+    `Contact: ${created.phone}`
+  )
+
+  res.status(201).json({ success: true, conductor: created })
+})
+
+// 10. OWNER CONDUCTORS: Remove Conductor
+app.delete('/api/owner/conductors/:id', requireOwnerSession, async (req, res) => {
+  const id = Number(req.params.id)
+  const deleted = await deleteConductor(id, req.owner.email)
+  if (!deleted) {
+    return res.status(404).json({ success: false, error: 'Conductor not found or access denied.' })
+  }
+  res.json({ success: true, message: 'Conductor authorization revoked.' })
+})
+
+// 11. OWNER RECENT ACTIVITY
+app.get('/api/owner/activities', requireOwnerSession, async (req, res) => {
+  const activities = await getOwnerActivities(req.owner.email, 20)
+  res.json({ success: true, activities })
+})
+
+// 12. REAL-WORLD CONDUCTOR CHECK-IN: Verify Bus Number & Secret PIN
 app.post('/api/conductor/verify-pin', async (req, res) => {
   const { vehicle_number, conductor_pin, driver_phone } = req.body
   if (!vehicle_number || !conductor_pin) {
