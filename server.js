@@ -13,6 +13,7 @@ import {
   getBusesByOwner,
   getBusByVehicleNumber,
   getConductorsByOwner,
+  getDatabaseType,
   getOwnerActivities,
   getOwnerByEmail,
   getOwnerDashboardData,
@@ -59,7 +60,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
     sql_connected: isDbConnected(),
-    database_type: 'SQL (SQLite transit.db)',
+    database_type: getDatabaseType(),
     active_buses: Object.keys(activeBuses).length,
     timestamp: new Date().toISOString(),
   })
