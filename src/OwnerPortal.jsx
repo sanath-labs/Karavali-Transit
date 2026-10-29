@@ -60,6 +60,9 @@ export default function OwnerPortal({
     conductors: [],
   })
   const [buses, setBuses] = useState([])
+  const [busesLoading, setBusesLoading] = useState(false)
+  const [busesError, setBusesError] = useState('')
+  const [selectedBusForTimetable, setSelectedBusForTimetable] = useState(null)
   const [conductors, setConductors] = useState([])
   const [visiblePins, setVisiblePins] = useState({})
   const [copiedPinBusId, setCopiedPinBusId] = useState(null)
@@ -114,6 +117,8 @@ export default function OwnerPortal({
   // Fetch Dashboard data when authenticated
   const fetchDashboard = async (token = ownerToken) => {
     if (!token) return
+    setBusesLoading(true)
+    setBusesError('')
     try {
       const res = await fetch(apiUrl('/api/owner/dashboard'), {
         headers: ownerHeaders(token),
@@ -123,27 +128,40 @@ export default function OwnerPortal({
         setDashboardData(data)
         setBuses(data.buses || [])
         setConductors(data.conductors || [])
+      } else {
+        setBusesError(data.error || 'Failed to load fleet buses from database.')
       }
     } catch (err) {
       console.error('Failed to load owner dashboard:', err)
+      setBusesError(`Could not reach transit server: ${err.message}`)
+    } finally {
+      setBusesLoading(false)
     }
   }
 
   useEffect(() => {
     let ignore = false
     if (isOwnerAuthenticated && ownerToken) {
-      fetch(apiUrl('/api/owner/dashboard'), {
-        headers: ownerHeaders(ownerToken),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (!ignore && data.success) {
-            setDashboardData(data)
-            setBuses(data.buses || [])
-            setConductors(data.conductors || [])
+      const load = async () => {
+        try {
+          const res = await fetch(apiUrl('/api/owner/dashboard'), {
+            headers: ownerHeaders(ownerToken),
+          })
+          const data = await res.json()
+          if (!ignore) {
+            if (res.ok && data.success) {
+              setDashboardData(data)
+              setBuses(data.buses || [])
+              setConductors(data.conductors || [])
+            } else {
+              setBusesError(data.error || 'Failed to load fleet buses from database.')
+            }
           }
-        })
-        .catch((err) => console.error('Dashboard load error:', err))
+        } catch (err) {
+          if (!ignore) setBusesError(`Could not reach transit server: ${err.message}`)
+        }
+      }
+      load()
     }
     return () => {
       ignore = true
@@ -404,8 +422,29 @@ export default function OwnerPortal({
       if (res.ok && data.success && data.bus) {
         setNotice(`Bus ${data.bus.vehicle_number} (${data.bus.bus_name}) registered successfully!`)
         setViewMode('dashboard')
-        setActiveTab('dashboard')
+        setActiveTab('buses')
         setWizardStep(1)
+        // Reset wizard form cleanly for registering another bus
+        setWizardForm({
+          vehicle_number: '',
+          bus_name: '',
+          service_type: 'Non AC',
+          total_seats: 45,
+          photo_url: '/images/coastal-private-bus.jpg',
+          photo_preview: null,
+          route_number: '',
+          origin: 'Mangaluru',
+          destination: 'Udupi',
+          stops: [
+            { id: 1, stop_name: 'Mangaluru', planned_arrival: '06:30 AM' },
+            { id: 2, stop_name: 'Surathkal', planned_arrival: '07:05 AM' },
+            { id: 3, stop_name: 'Kundapura', planned_arrival: '09:00 AM' },
+            { id: 4, stop_name: 'Udupi', planned_arrival: '10:00 AM' },
+          ],
+          departure_time: '06:30 AM',
+          frequency: 'Daily',
+          journey_duration: '3 hours 30 minutes',
+        })
         fetchDashboard(ownerToken)
       } else {
         setWizardError(data.error || 'Failed to register bus in database.')
@@ -1460,134 +1499,259 @@ export default function OwnerPortal({
         {/* TAB 2: MY BUSES */}
         {activeTab === 'buses' && (
           <div className="space-y-4">
+            {/* Top Toolbar */}
             <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="relative text-xs w-full sm:w-72">
-                <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search bus name or number..."
-                  value={busSearchQuery}
-                  onChange={(e) => setBusSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold outline-none focus:border-blue-600 bg-white"
-                />
+              <div>
+                <h2 className="text-lg font-black text-slate-900 m-0">My Registered Buses</h2>
+                <p className="text-xs text-slate-500 m-0 font-medium">
+                  {buses.length} {buses.length === 1 ? 'bus' : 'buses'} permanently registered in database
+                </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode('add-bus')
-                  setWizardStep(1)
-                }}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus size={15} />
-                <span>Add New Bus</span>
-              </button>
+              <div className="flex items-center gap-3">
+                <div className="relative text-xs w-56 sm:w-64">
+                  <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Filter by name, number, route..."
+                    value={busSearchQuery}
+                    onChange={(e) => setBusSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold outline-none focus:border-blue-600 bg-white"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWizardError('')
+                    setWizardStep(1)
+                    setViewMode('add-bus')
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus size={16} />
+                  <span>+ Add New Bus</span>
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {buses
-                .filter((b) => {
-                  if (!busSearchQuery.trim()) return true
-                  const q = busSearchQuery.toLowerCase()
-                  return (
-                    b.bus_name?.toLowerCase().includes(q) ||
-                    b.vehicle_number?.toLowerCase().includes(q) ||
-                    b.route_number?.toLowerCase().includes(q)
-                  )
-                })
-                .map((bus) => {
-                  const pin = bus.conductor_pin || '4509'
-                  const isVisible = Boolean(visiblePins[bus.bus_id])
-                  const isCopied = copiedPinBusId === bus.bus_id
+            {/* Loading State */}
+            {busesLoading && (
+              <div className="p-12 text-center bg-white border border-slate-200 rounded-2xl shadow-sm">
+                <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-xs font-extrabold text-slate-600">Loading fleet buses from database...</p>
+              </div>
+            )}
 
-                  return (
-                    <div key={bus.bus_id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <strong className="text-base font-extrabold text-slate-900">{bus.bus_name}</strong>
-                            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                              {bus.service_type || 'Express'}
+            {/* Error State */}
+            {!busesLoading && busesError && (
+              <div className="p-5 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between gap-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle size={22} className="text-rose-600 shrink-0" />
+                  <div>
+                    <h4 className="text-sm font-extrabold text-rose-900 m-0">Failed to load buses</h4>
+                    <p className="text-xs text-rose-700 m-0 mt-0.5">{busesError}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchDashboard(ownerToken)}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold rounded-xl transition cursor-pointer"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!busesLoading && !busesError && buses.length === 0 && (
+              <div className="p-12 text-center bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-100">
+                  <Bus size={32} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 m-0">No buses registered yet</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
+                    Add your first private bus to begin live GPS tracking, route scheduling, and conductor assignments across coastal Karnataka.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWizardError('')
+                    setWizardStep(1)
+                    setViewMode('add-bus')
+                  }}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus size={16} />
+                  <span>+ Add Your First Bus</span>
+                </button>
+              </div>
+            )}
+
+            {/* Bus Cards Grid */}
+            {!busesLoading && !busesError && buses.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {buses
+                  .filter((b) => {
+                    if (!busSearchQuery.trim()) return true
+                    const q = busSearchQuery.toLowerCase()
+                    return (
+                      b.bus_name?.toLowerCase().includes(q) ||
+                      b.vehicle_number?.toLowerCase().includes(q) ||
+                      b.route_number?.toLowerCase().includes(q) ||
+                      b.origin?.toLowerCase().includes(q) ||
+                      b.destination?.toLowerCase().includes(q)
+                    )
+                  })
+                  .map((bus) => {
+                    const pin = bus.conductor_pin || '4509'
+                    const isVisible = Boolean(visiblePins[bus.bus_id])
+                    const isCopied = copiedPinBusId === bus.bus_id
+                    const isLive = Boolean(bus.is_live)
+
+                    return (
+                      <div
+                        key={bus.bus_id}
+                        className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3.5 hover:shadow-md transition"
+                      >
+                        {/* Header: Name, Type, Status, Route # */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <strong className="text-base font-extrabold text-slate-900">
+                                {bus.bus_name}
+                              </strong>
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                {bus.service_type || 'Non AC'}
+                              </span>
+                              {isLive ? (
+                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  Live On Shift
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                  Offline / Not Started
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs font-extrabold text-blue-700 font-mono tracking-wide mt-0.5 block">
+                              {bus.vehicle_number}
                             </span>
                           </div>
-                          <span className="text-xs font-extrabold text-blue-700">{bus.vehicle_number}</span>
+
+                          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 shrink-0">
+                            Route #{bus.route_number || '001'}
+                          </span>
                         </div>
 
-                        <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
-                          Route #{bus.route_number || '001'}
-                        </span>
-                      </div>
-
-                      <div className="text-xs text-slate-600">
-                        Corridor: <strong>{bus.origin || 'Mangaluru'} ➔ {bus.destination || 'Udupi'}</strong> • {bus.total_seats || 45} Seats
-                      </div>
-
-                      {/* Secret Conductor PIN Box */}
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs">
-                        <div>
-                          <span className="text-[10px] uppercase font-extrabold text-slate-400 block">
-                            Secret Conductor PIN
-                          </span>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <strong className="font-mono text-base font-extrabold tracking-widest text-slate-900">
-                              {isVisible ? pin : '••••'}
+                        {/* Corridor & Details */}
+                        <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Corridor</span>
+                            <strong className="text-slate-800 font-extrabold">
+                              {bus.origin || 'Mangaluru'} ➔ {bus.destination || 'Udupi'}
                             </strong>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Stops &amp; Seats</span>
+                            <span className="text-slate-800 font-bold">
+                              {bus.stops?.length || 2} Stops • {bus.total_seats || 45} Seats
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Departure</span>
+                            <span className="text-slate-800 font-bold">
+                              {bus.departure_time || '06:30 AM'} (from {bus.origin || 'Mangaluru'})
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Frequency &amp; Duration</span>
+                            <span className="text-slate-800 font-bold">
+                              {bus.frequency || 'Daily'} • {bus.journey_duration || '3h 30m'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* View Timetable Button */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBusForTimetable(bus)}
+                          className="w-full py-1.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl border border-blue-200 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Clock size={13} />
+                          <span>View Planned Stop Timetable ({bus.stops?.length || 2} stops)</span>
+                        </button>
+
+                        {/* Secret Conductor PIN Box */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-[10px] uppercase font-extrabold text-slate-400 block">
+                              Secret Conductor PIN
+                            </span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <strong className="font-mono text-base font-extrabold tracking-widest text-slate-900">
+                                {isVisible ? pin : '••••'}
+                              </strong>
+                              <button
+                                type="button"
+                                onClick={() => setVisiblePins({ ...visiblePins, [bus.bus_id]: !isVisible })}
+                                className="p-1 text-slate-500 hover:text-slate-800 rounded cursor-pointer"
+                                title={isVisible ? 'Hide PIN' : 'Reveal PIN'}
+                              >
+                                {isVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(pin)
+                                  setCopiedPinBusId(bus.bus_id)
+                                  setTimeout(() => setCopiedPinBusId(null), 2000)
+                                }}
+                                className="p-1 text-slate-500 hover:text-blue-700 rounded cursor-pointer"
+                                title="Copy PIN"
+                              >
+                                {isCopied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
                             <button
                               type="button"
-                              onClick={() => setVisiblePins({ ...visiblePins, [bus.bus_id]: !isVisible })}
-                              className="p-1 text-slate-500 hover:text-slate-800 rounded cursor-pointer"
-                              title={isVisible ? 'Hide PIN' : 'Reveal PIN'}
+                              onClick={() => handleUpdatePin(bus.bus_id, pin)}
+                              className="px-2.5 py-1 text-xs font-bold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition cursor-pointer"
                             >
-                              {isVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                              Change PIN
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(pin)
-                                setCopiedPinBusId(bus.bus_id)
-                                setTimeout(() => setCopiedPinBusId(null), 2000)
-                              }}
-                              className="p-1 text-slate-500 hover:text-blue-700 rounded cursor-pointer"
-                              title="Copy PIN"
+                              onClick={() => handleDeleteBus(bus.bus_id, bus.vehicle_number)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+                              title="Delete Bus"
                             >
-                              {isCopied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                              <Trash2 size={15} />
                             </button>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdatePin(bus.bus_id, pin)}
-                            className="px-2.5 py-1 text-xs font-bold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition cursor-pointer"
-                          >
-                            Change PIN
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteBus(bus.bus_id, bus.vehicle_number)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
-                            title="Delete Bus"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
+                        {/* Launch Conductor CTA */}
+                        <button
+                          type="button"
+                          onClick={() => onSwitchToConductor?.(bus.vehicle_number, pin)}
+                          className="w-full py-2 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Radio size={14} />
+                          <span>Switch to Conductor Portal for this Bus ➔</span>
+                        </button>
                       </div>
-
-                      {/* Launch Conductor CTA */}
-                      <button
-                        type="button"
-                        onClick={() => onSwitchToConductor?.(bus.vehicle_number, pin)}
-                        className="w-full py-2 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <Radio size={14} />
-                        <span>Switch to Conductor Portal for this Bus ➔</span>
-                      </button>
-                    </div>
-                  )
-                })}
-            </div>
+                    )
+                  })}
+              </div>
+            )}
           </div>
         )}
 
@@ -1819,6 +1983,93 @@ export default function OwnerPortal({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Planned Stop Timetable Modal */}
+      {selectedBusForTimetable && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedBusForTimetable(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-black text-slate-900 m-0">
+                  {selectedBusForTimetable.bus_name}
+                </h3>
+                <div className="flex items-center gap-2 mt-0.5 text-xs text-blue-700 font-extrabold">
+                  <span className="font-mono">{selectedBusForTimetable.vehicle_number}</span>
+                  <span>•</span>
+                  <span>Route #{selectedBusForTimetable.route_number}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedBusForTimetable(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Origin ➔ Destination</span>
+                <strong className="text-slate-800">
+                  {selectedBusForTimetable.origin} ➔ {selectedBusForTimetable.destination}
+                </strong>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Service Frequency</span>
+                <strong className="text-slate-800">{selectedBusForTimetable.frequency || 'Daily'}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Departure Time</span>
+                <strong className="text-slate-800">{selectedBusForTimetable.departure_time || '06:30 AM'}</strong>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Estimated Duration</span>
+                <strong className="text-slate-800">{selectedBusForTimetable.journey_duration || '3h 30m'}</strong>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
+                Planned Stop-Wise Arrival Times
+              </h4>
+              <table className="wizard-stops-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '48px' }}>#</th>
+                    <th>Stop Name</th>
+                    <th>Planned Arrival</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(selectedBusForTimetable.stops || []).map((stop, idx) => (
+                    <tr key={idx}>
+                      <td className="font-bold text-slate-400">{stop.stop_order || idx + 1}</td>
+                      <td className="font-extrabold text-slate-900">{stop.stop_name}</td>
+                      <td className="font-mono font-bold text-blue-700">{stop.planned_arrival}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedBusForTimetable(null)}
+                className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold rounded-xl transition cursor-pointer"
+              >
+                Close Timetable
+              </button>
+            </div>
           </div>
         </div>
       )}

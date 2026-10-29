@@ -293,15 +293,58 @@ export function recordTelemetry(data) {
   })
 }
 
-// Fetch all registered buses from SQL
+// Fetch all registered buses from SQL, including route stops
 export function getBuses() {
   return new Promise((resolve) => {
-    db.all('SELECT * FROM buses ORDER BY bus_id ASC', (err, rows) => {
+    db.all('SELECT * FROM buses ORDER BY bus_id ASC', async (err, rows) => {
       if (err) {
         console.error('Error fetching buses from SQL:', err.message)
         resolve([])
       } else {
-        resolve(rows || [])
+        const busesWithStops = await Promise.all(
+          (rows || []).map(async (bus) => {
+            const stops = await getBusRouteStops(bus.bus_id)
+            return {
+              ...bus,
+              stops: stops.length > 0 ? stops : [
+                { stop_order: 1, stop_name: bus.origin || 'Mangaluru', planned_arrival: bus.departure_time || '06:30 AM' },
+                { stop_order: 2, stop_name: bus.destination || 'Udupi', planned_arrival: '10:00 AM' },
+              ],
+            }
+          })
+        )
+        resolve(busesWithStops)
+      }
+    })
+  })
+}
+
+// Fetch single bus by vehicle registration number
+export function getBusByVehicleNumber(vehicleNumber) {
+  return new Promise((resolve) => {
+    const normalized = vehicleNumber.replace(/\s+/g, '-').toUpperCase()
+    db.get(
+      'SELECT * FROM buses WHERE UPPER(REPLACE(vehicle_number, " ", "-")) = ? LIMIT 1',
+      [normalized],
+      async (err, row) => {
+        if (err || !row) resolve(null)
+        else {
+          const stops = await getBusRouteStops(row.bus_id)
+          resolve({ ...row, stops })
+        }
+      }
+    )
+  })
+}
+
+// Fetch single bus by ID
+export function getBusById(busId) {
+  return new Promise((resolve) => {
+    db.get('SELECT * FROM buses WHERE bus_id = ? LIMIT 1', [busId], async (err, row) => {
+      if (err || !row) resolve(null)
+      else {
+        const stops = await getBusRouteStops(busId)
+        resolve({ ...row, stops })
       }
     })
   })
@@ -386,8 +429,8 @@ export function createOwner(email, agencyName) {
   })
 }
 
-// Verify Conductor PIN for Bus Number
-export function verifyConductorPin(vehicleNumber, pin) {
+// Verify Conductor PIN for Bus Number with optional conductor duty check
+export function verifyConductorPin(vehicleNumber, pin, driverPhone = null) {
   return new Promise((resolve) => {
     const normalized = vehicleNumber.replace(/\s+/g, '-').toUpperCase()
     const query = 'SELECT * FROM buses WHERE UPPER(REPLACE(vehicle_number, " ", "-")) = ? LIMIT 1'
@@ -402,10 +445,29 @@ export function verifyConductorPin(vehicleNumber, pin) {
         return
       }
 
-      if (matchesConductorPin(row.conductor_pin, pin)) {
-        resolve({ success: true, bus: row })
-      } else {
+      if (!matchesConductorPin(row.conductor_pin, pin)) {
         resolve({ success: false, error: 'Incorrect Secret PIN for ' + row.vehicle_number })
+        return
+      }
+
+      if (driverPhone) {
+        const cleanPhone = String(driverPhone).replace(/\D/g, '')
+        db.all(
+          'SELECT * FROM conductors WHERE (assigned_bus_id = ? OR assigned_bus_id IS NULL) AND LOWER(owner_email) = LOWER(?)',
+          [row.bus_id, row.owner_email],
+          (cErr, conductors) => {
+            if (!cErr && conductors && conductors.length > 0) {
+              const matching = conductors.find((c) => c.phone.replace(/\D/g, '').includes(cleanPhone))
+              if (matching && matching.status !== 'Active') {
+                resolve({ success: false, error: 'Conductor duty authorization has been revoked.' })
+                return
+              }
+            }
+            resolve({ success: true, bus: row })
+          }
+        )
+      } else {
+        resolve({ success: true, bus: row })
       }
     })
   })
@@ -621,8 +683,18 @@ export async function getOwnerDashboardData(ownerEmail, activeBuses = {}) {
   const distinctRoutes = new Set(buses.map((b) => b.route_number).filter(Boolean))
   const liveCount = buses.filter((b) => {
     const active = activeBuses[b.bus_id]
-    return active && (active.speed > 0 || active.active_shift)
+    return active && (active.speed > 0 || active.active_shift || active.is_on_shift)
   }).length
+
+  const busesWithStatus = buses.map((b) => {
+    const active = activeBuses[b.bus_id]
+    const isLive = Boolean(active && (active.speed > 0 || active.active_shift || active.is_on_shift))
+    return {
+      ...b,
+      is_live: isLive,
+      tracking_status: isLive ? 'Live On Shift' : 'Offline / Not Started',
+    }
+  })
 
   return {
     stats: {
@@ -632,7 +704,7 @@ export async function getOwnerDashboardData(ownerEmail, activeBuses = {}) {
       live_buses: liveCount,
     },
     recent_activity: activities,
-    buses,
+    buses: busesWithStatus,
     conductors,
   }
 }

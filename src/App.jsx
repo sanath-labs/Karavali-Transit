@@ -351,11 +351,49 @@ function App() {
   const lastSentCoordsRef = useRef(null)
   const [currentTime, setCurrentTime] = useState(() => Date.now())
 
-  // Fleet Owner Session State
-  const [ownerEmail, setOwnerEmail] = useState('rakesh@gmail.com')
-  const [ownerAgencyName, setOwnerAgencyName] = useState('Rakesh Shetty Travels')
-  const [isOwnerAuthenticated, setIsOwnerAuthenticated] = useState(false)
-  const [ownerToken, setOwnerToken] = useState('')
+  // Fleet Owner Session State (persisted across page reloads)
+  const [ownerEmail, setOwnerEmail] = useState(() => {
+    try {
+      return localStorage.getItem('karavali_owner_email') || 'rakesh@gmail.com'
+    } catch {
+      return 'rakesh@gmail.com'
+    }
+  })
+  const [ownerAgencyName, setOwnerAgencyName] = useState(() => {
+    try {
+      return localStorage.getItem('karavali_owner_agency') || 'Rakesh Shetty Travels'
+    } catch {
+      return 'Rakesh Shetty Travels'
+    }
+  })
+  const [ownerToken, setOwnerToken] = useState(() => {
+    try {
+      return localStorage.getItem('karavali_owner_token') || ''
+    } catch {
+      return ''
+    }
+  })
+  const [isOwnerAuthenticated, setIsOwnerAuthenticated] = useState(() => {
+    try {
+      return Boolean(localStorage.getItem('karavali_owner_token'))
+    } catch {
+      return false
+    }
+  })
+
+  useEffect(() => {
+    try {
+      if (ownerToken) {
+        localStorage.setItem('karavali_owner_token', ownerToken)
+        localStorage.setItem('karavali_owner_email', ownerEmail)
+        localStorage.setItem('karavali_owner_agency', ownerAgencyName)
+      } else {
+        localStorage.removeItem('karavali_owner_token')
+      }
+    } catch (e) {
+      console.warn('Could not persist owner session to localStorage:', e)
+    }
+  }, [ownerToken, ownerEmail, ownerAgencyName])
 
   // Periodic heartbeat timer for telemetry freshness checks
   useEffect(() => {

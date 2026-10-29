@@ -11,6 +11,7 @@ import {
   getActiveShifts,
   getBuses,
   getBusesByOwner,
+  getBusByVehicleNumber,
   getConductorsByOwner,
   getOwnerActivities,
   getOwnerByEmail,
@@ -171,7 +172,16 @@ app.get('/api/owner/dashboard', requireOwnerSession, async (req, res) => {
 // 4. OWNER FLEET: Get buses for this owner
 app.get('/api/owner/buses', requireOwnerSession, async (req, res) => {
   const buses = await getBusesByOwner(req.owner.email)
-  res.json(buses)
+  const busesWithStatus = buses.map((b) => {
+    const active = activeBuses[b.bus_id]
+    const isLive = Boolean(active && (active.speed > 0 || active.active_shift || active.is_on_shift))
+    return {
+      ...b,
+      is_live: isLive,
+      tracking_status: isLive ? 'Live On Shift' : 'Offline / Not Started',
+    }
+  })
+  res.json({ success: true, buses: busesWithStatus })
 })
 
 // 5. OWNER FLEET: Add new bus with multi-stop route and schedule
@@ -203,6 +213,21 @@ app.post('/api/owner/buses', requireOwnerSession, async (req, res) => {
   }
 
   const cleanVeh = vehicle_number.trim().toUpperCase().replace(/\s+/g, '-')
+
+  // Prevent duplicate vehicle registration numbers
+  const existingBus = await getBusByVehicleNumber(cleanVeh)
+  if (existingBus) {
+    return res.status(409).json({
+      success: false,
+      error: `Bus registration number ${cleanVeh} is already registered in the fleet. Please use a unique vehicle number.`,
+    })
+  }
+
+  const seats = Number(total_seats)
+  if (isNaN(seats) || seats <= 0) {
+    return res.status(400).json({ success: false, error: 'Total seats must be a positive number.' })
+  }
+
   const pin = conductor_pin ? String(conductor_pin).trim() : Math.floor(1000 + Math.random() * 9000).toString()
 
   const busPayload = {
@@ -215,12 +240,15 @@ app.post('/api/owner/buses', requireOwnerSession, async (req, res) => {
     conductor_pin: pin,
     owner_email: req.owner.email,
     is_last_bus: false,
-    total_seats: Number(total_seats) || 45,
+    total_seats: seats || 45,
     photo_url: photo_url || '/images/coastal-private-bus.jpg',
     departure_time: departure_time || '06:30 AM',
     frequency: frequency || 'Daily',
     journey_duration: journey_duration || '3 hours 30 minutes',
-    stops: Array.isArray(stops) ? stops : [],
+    stops: Array.isArray(stops) && stops.length > 0 ? stops : [
+      { stop_order: 1, stop_name: origin || 'Mangaluru', planned_arrival: departure_time || '06:30 AM' },
+      { stop_order: 2, stop_name: destination || 'Udupi', planned_arrival: '10:00 AM' },
+    ],
   }
 
   const created = await saveBus(busPayload)
@@ -345,7 +373,7 @@ app.post('/api/conductor/verify-pin', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Bus registration number and Secret PIN are required.' })
   }
 
-  const result = await verifyConductorPin(vehicle_number, conductor_pin)
+  const result = await verifyConductorPin(vehicle_number, conductor_pin, driver_phone)
   if (!result.success) {
     return res.status(401).json(result)
   }
@@ -358,6 +386,11 @@ app.post('/api/conductor/verify-pin', async (req, res) => {
   }
 
   const shift = await recordShift(shiftData)
+  if (activeBuses[result.bus.bus_id]) {
+    activeBuses[result.bus.bus_id].is_on_shift = true
+    activeBuses[result.bus.bus_id].active_shift = shift
+  }
+
   res.json({
     success: true,
     message: 'Authentication successful. Bus unlocked for conductor duty.',
@@ -402,6 +435,10 @@ io.on('connection', (socket) => {
   socket.on('start_shift', async (data) => {
     console.log('Driver Shift Started:', data)
     await recordShift(data)
+    if (data.bus_id && activeBuses[data.bus_id]) {
+      activeBuses[data.bus_id].is_on_shift = true
+      activeBuses[data.bus_id].active_shift = data
+    }
     io.emit('shift_broadcast', data)
   })
 
@@ -414,6 +451,7 @@ io.on('connection', (socket) => {
     const payload = {
       ...(activeBuses[data.bus_id] || {}),
       ...data,
+      is_on_shift: true,
       timestamp: data.timestamp || Date.now(),
     }
     activeBuses[data.bus_id] = payload
