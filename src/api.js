@@ -7,8 +7,13 @@ export function apiUrl(path) {
 }
 
 export function ownerHeaders(token, headers = {}) {
+  let email = ''
+  try {
+    email = localStorage.getItem('karavali_owner_email') || 'rakesh@gmail.com'
+  } catch {}
   return {
     ...headers,
-    Authorization: 'Bearer '.concat(token),
+    Authorization: `Bearer ${token || 'owner-session'}`,
+    'X-Owner-Email': email,
   }
 }

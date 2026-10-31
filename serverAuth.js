@@ -15,6 +15,9 @@ export function createOwnerSessionManager() {
       })
       return token
     },
+    set(token, sessionData) {
+      sessions.set(token, sessionData)
+    },
     get(token, now = Date.now()) {
       const session = sessions.get(token)
       if (!session) return null
