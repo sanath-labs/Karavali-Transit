@@ -10,7 +10,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node --test --test-concurrency=1 tests/*.test.js",
+    "test": "node --test --experimental-test-isolation=none tests/*.test.js",
     "simulate": "node scripts/simulate-bus.js",
     "check": "node scripts/health-check.js"
   },
