@@ -13,6 +13,9 @@ import {
   getOwnerDashboardData,
   createOwner,
   getOwnerByEmail,
+  getBusById,
+  updateBus,
+  deleteBus,
 } from '../db.js'
 import { matchesDestination } from '../src/transitUtils.js'
 
@@ -210,5 +213,106 @@ test('Multi-Bus Registration & Listing: Register multiple buses under same owner
   assert.ok(found)
   assert.equal(found.bus_id, bus1.bus_id)
 })
+
+test('Edit Bus and Delete Bus: Transactional updates, route stops replacement, and cascading cleanup', async () => {
+  await initDB()
+  const ownerEmail = `edit_delete_${Date.now()}@gmail.com`
+  const intruderEmail = `intruder_${Date.now()}@gmail.com`
+  await createOwner(ownerEmail, 'Sri Durgamba Lines')
+  await createOwner(intruderEmail, 'Malicious Fleet')
+
+  // 1. Create a bus to edit and delete
+  const initialVeh = `KA-19-ED-${Math.floor(1000 + Math.random() * 9000)}`
+  const createdBus = await saveBus({
+    bus_name: 'Durgamba Original',
+    vehicle_number: initialVeh,
+    route_number: '201',
+    service_type: 'Non AC',
+    origin: 'Mangaluru',
+    destination: 'Udupi',
+    total_seats: 42,
+    departure_time: '06:30 AM',
+    frequency: 'Daily',
+    journey_duration: '3 hours',
+    conductor_pin: '4455',
+    owner_email: ownerEmail,
+    stops: [
+      { stop_name: 'Mangaluru', planned_arrival: '06:30 AM' },
+      { stop_name: 'Surathkal', planned_arrival: '07:15 AM' },
+      { stop_name: 'Udupi', planned_arrival: '08:30 AM' },
+    ],
+  })
+  assert.ok(createdBus?.bus_id)
+  const busId = createdBus.bus_id
+
+  // Assign a conductor to this bus
+  const conductor = await saveConductor({
+    owner_email: ownerEmail,
+    name: 'Ramesh Gowda',
+    phone: '98450 11223',
+    assigned_bus_id: busId,
+  })
+  assert.ok(conductor?.conductor_id)
+
+  // 2. Transactional Update: change specs and replace stops
+  const updated = await updateBus(busId, {
+    bus_name: 'Durgamba Super Deluxe',
+    vehicle_number: initialVeh,
+    route_number: '201-EX',
+    service_type: 'AC',
+    origin: 'Mangaluru',
+    destination: 'Kundapura',
+    total_seats: 48,
+    photo_url: '/images/coastal-private-bus.jpg',
+    departure_time: '07:00 AM',
+    frequency: 'Daily',
+    journey_duration: '3 hours 45 minutes',
+    owner_email: ownerEmail,
+    stops: [
+      { stop_name: 'Mangaluru', planned_arrival: '07:00 AM' },
+      { stop_name: 'Mulki', planned_arrival: '07:45 AM' },
+      { stop_name: 'Udupi', planned_arrival: '08:30 AM' },
+      { stop_name: 'Kundapura', planned_arrival: '09:30 AM' },
+    ],
+  })
+  assert.ok(updated, 'Bus should be updated')
+  assert.equal(updated.bus_name, 'Durgamba Super Deluxe')
+  assert.equal(updated.service_type, 'AC')
+  assert.equal(updated.total_seats, 48)
+
+  // Verify updated stops replaced previous stops in database
+  const newStops = await getBusRouteStops(busId)
+  assert.equal(newStops.length, 4)
+  assert.equal(newStops[0].stop_name, 'Mangaluru')
+  assert.equal(newStops[1].stop_name, 'Mulki')
+  assert.equal(newStops[3].stop_name, 'Kundapura')
+
+  // Verify owner isolation: intruder cannot view bus
+  const intruderBusView = await getBusById(busId, intruderEmail)
+  assert.equal(intruderBusView, null, 'Intruder must not access another owner bus')
+
+  // Verify owner isolation: intruder cannot delete bus
+  const intruderDelete = await deleteBus(busId, intruderEmail)
+  assert.equal(intruderDelete, false, 'Intruder cannot delete another owner bus')
+
+  // 3. Legitimate Owner Delete: transactional cascade
+  const ownerDelete = await deleteBus(busId, ownerEmail)
+  assert.equal(ownerDelete, true, 'Legitimate owner should successfully delete the bus')
+
+  // Verify bus is gone from database
+  const deletedBusCheck = await getBusById(busId, ownerEmail)
+  assert.equal(deletedBusCheck, null)
+
+  // Verify route stops were deleted
+  const deletedStops = await getBusRouteStops(busId)
+  assert.equal(deletedStops.length, 0)
+
+  // Verify conductor was unlinked (assigned_bus_id set to null)
+  const ownerConductors = await getConductorsByOwner(ownerEmail)
+  const unlinkedConductor = ownerConductors.find((c) => c.conductor_id === conductor.conductor_id)
+  assert.ok(unlinkedConductor)
+  assert.equal(unlinkedConductor.assigned_bus_id, null)
+})
+
 
 
