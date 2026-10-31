@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  Edit3,
   Eye,
   EyeOff,
   FileText,
@@ -52,7 +53,7 @@ export default function OwnerPortal({
 
   // Dashboard & Navigation state
   const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard' | 'buses' | 'conductors' | 'routes' | 'reports' | 'settings'
-  const [viewMode, setViewMode] = useState('dashboard') // 'dashboard' | 'add-bus'
+  const [viewMode, setViewMode] = useState('dashboard') // 'dashboard' | 'add-bus' | 'save-confirmation'
   const [dashboardData, setDashboardData] = useState({
     stats: { total_buses: 0, total_conductors: 0, total_routes: 0, live_buses: 0 },
     recent_activity: [],
@@ -68,6 +69,14 @@ export default function OwnerPortal({
   const [copiedPinBusId, setCopiedPinBusId] = useState(null)
   const [notice, setNotice] = useState('')
   const [busSearchQuery, setBusSearchQuery] = useState('')
+
+  // Bus Management & Selection State (Screens 8 & 9)
+  const [isEditingBus, setIsEditingBus] = useState(false)
+  const [editingBusId, setEditingBusId] = useState(null)
+  const [savedConfirmationBus, setSavedConfirmationBus] = useState(null)
+  const [selectedBusForView, setSelectedBusForView] = useState(null)
+  const [deleteConfirmBus, setDeleteConfirmBus] = useState(null)
+  const [isDeletingBus, setIsDeletingBus] = useState(false)
 
   // Conductor Modal state
   const [showConductorModal, setShowConductorModal] = useState(false)
@@ -126,8 +135,17 @@ export default function OwnerPortal({
       const data = await res.json()
       if (res.ok && data.success) {
         setDashboardData(data)
-        setBuses(data.buses || [])
+        const busList = data.buses || []
+        setBuses(busList)
         setConductors(data.conductors || [])
+        setSelectedBusForView((prev) => {
+          if (!prev && busList.length > 0) return busList[0]
+          if (prev) {
+            const found = busList.find((b) => b.bus_id === prev.bus_id)
+            return found || (busList.length > 0 ? busList[0] : null)
+          }
+          return null
+        })
       } else {
         setBusesError(data.error || 'Failed to load fleet buses from database.')
       }
@@ -151,8 +169,17 @@ export default function OwnerPortal({
           if (!ignore) {
             if (res.ok && data.success) {
               setDashboardData(data)
-              setBuses(data.buses || [])
+              const busList = data.buses || []
+              setBuses(busList)
               setConductors(data.conductors || [])
+              setSelectedBusForView((prev) => {
+                if (!prev && busList.length > 0) return busList[0]
+                if (prev) {
+                  const found = busList.find((b) => b.bus_id === prev.bus_id)
+                  return found || (busList.length > 0 ? busList[0] : null)
+                }
+                return null
+              })
             } else {
               setBusesError(data.error || 'Failed to load fleet buses from database.')
             }
@@ -389,7 +416,7 @@ export default function OwnerPortal({
     }
   }
 
-  // 10. Persist Bus to SQLite via backend
+  // 10. Persist Bus to PostgreSQL/SQLite via transactional backend API
   const handleSaveBus = async () => {
     setWizardError('')
     setIsSavingBus(true)
@@ -413,41 +440,29 @@ export default function OwnerPortal({
         })),
       }
 
-      const res = await fetch(apiUrl('/api/owner/buses'), {
-        method: 'POST',
+      const url = isEditingBus && editingBusId
+        ? apiUrl(`/api/owner/buses/${editingBusId}`)
+        : apiUrl('/api/owner/buses')
+      const method = isEditingBus && editingBusId ? 'PUT' : 'POST'
+
+      const res = await fetch(url, {
+        method,
         headers: ownerHeaders(ownerToken, { 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (res.ok && data.success && data.bus) {
-        setNotice(`Bus ${data.bus.vehicle_number} (${data.bus.bus_name}) registered successfully!`)
-        setViewMode('dashboard')
-        setActiveTab('buses')
-        setWizardStep(1)
-        // Reset wizard form cleanly for registering another bus
-        setWizardForm({
-          vehicle_number: '',
-          bus_name: '',
-          service_type: 'Non AC',
-          total_seats: 45,
-          photo_url: '/images/coastal-private-bus.jpg',
-          photo_preview: null,
-          route_number: '',
-          origin: 'Mangaluru',
-          destination: 'Udupi',
-          stops: [
-            { id: 1, stop_name: 'Mangaluru', planned_arrival: '06:30 AM' },
-            { id: 2, stop_name: 'Surathkal', planned_arrival: '07:05 AM' },
-            { id: 3, stop_name: 'Kundapura', planned_arrival: '09:00 AM' },
-            { id: 4, stop_name: 'Udupi', planned_arrival: '10:00 AM' },
-          ],
-          departure_time: '06:30 AM',
-          frequency: 'Daily',
-          journey_duration: '3 hours 30 minutes',
-        })
+        setSavedConfirmationBus(data.bus)
+        setSelectedBusForView(data.bus)
+        setViewMode('save-confirmation')
+        setNotice(
+          isEditingBus
+            ? `Bus ${data.bus.vehicle_number} (${data.bus.bus_name}) updated successfully!`
+            : `Bus ${data.bus.vehicle_number} (${data.bus.bus_name}) registered successfully!`
+        )
         fetchDashboard(ownerToken)
       } else {
-        setWizardError(data.error || 'Failed to register bus in database.')
+        setWizardError(data.error || 'Failed to save bus in database.')
       }
     } catch (err) {
       setWizardError(`Could not reach transit server: ${err.message}`)
@@ -456,24 +471,116 @@ export default function OwnerPortal({
     }
   }
 
-  // 11. Delete Bus from Fleet
-  const handleDeleteBus = async (busId, vehicleNum) => {
-    if (!window.confirm(`Are you sure you want to remove bus ${vehicleNum} from your fleet?`)) return
+  // 11. Add New Bus Action Handler
+  const handleAddNewBus = () => {
+    setIsEditingBus(false)
+    setEditingBusId(null)
+    setWizardError('')
+    setWizardStep(1)
+    setWizardForm({
+      vehicle_number: '',
+      bus_name: '',
+      service_type: 'Non AC',
+      total_seats: 45,
+      photo_url: '/images/coastal-private-bus.jpg',
+      photo_preview: null,
+      route_number: '',
+      origin: 'Mangaluru',
+      destination: 'Udupi',
+      stops: [
+        { id: 1, stop_name: 'Mangaluru', planned_arrival: '06:30 AM' },
+        { id: 2, stop_name: 'Surathkal', planned_arrival: '07:05 AM' },
+        { id: 3, stop_name: 'Kundapura', planned_arrival: '09:00 AM' },
+        { id: 4, stop_name: 'Udupi', planned_arrival: '10:00 AM' },
+      ],
+      departure_time: '06:30 AM',
+      frequency: 'Daily',
+      journey_duration: '3 hours 30 minutes',
+    })
+    setViewMode('add-bus')
+  }
+
+  // 12. Edit Bus Action Handler
+  const handleEditBus = (bus) => {
+    if (!bus) return
+    setIsEditingBus(true)
+    setEditingBusId(bus.bus_id)
+    setWizardError('')
+    setWizardStep(1)
+    setWizardForm({
+      vehicle_number: bus.vehicle_number || '',
+      bus_name: bus.bus_name || '',
+      service_type: bus.service_type || 'Non AC',
+      total_seats: bus.total_seats || 45,
+      photo_url: bus.photo_url || '/images/coastal-private-bus.jpg',
+      photo_preview: null,
+      route_number: bus.route_number || '001',
+      origin: bus.origin || 'Mangaluru',
+      destination: bus.destination || 'Udupi',
+      departure_time: bus.departure_time || '06:30 AM',
+      frequency: bus.frequency || 'Daily',
+      journey_duration: bus.journey_duration || '3 hours 30 minutes',
+      stops: Array.isArray(bus.stops) && bus.stops.length > 0
+        ? bus.stops.map((s, idx) => ({ id: idx + 1, stop_name: s.stop_name, planned_arrival: s.planned_arrival }))
+        : [
+            { id: 1, stop_name: bus.origin || 'Mangaluru', planned_arrival: bus.departure_time || '06:30 AM' },
+            { id: 2, stop_name: bus.destination || 'Udupi', planned_arrival: '10:00 AM' },
+          ],
+    })
+    setViewMode('add-bus')
+  }
+
+  // 13. Delete Bus Handlers with Confirmation Modal
+  const handlePromptDelete = (bus) => {
+    if (!bus) return
+    setDeleteConfirmBus(bus)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmBus) return
+    setIsDeletingBus(true)
     try {
-      const res = await fetch(apiUrl(`/api/owner/buses/${busId}`), {
+      const res = await fetch(apiUrl(`/api/owner/buses/${deleteConfirmBus.bus_id}`), {
         method: 'DELETE',
         headers: ownerHeaders(ownerToken),
       })
       const data = await res.json()
       if (res.ok && data.success) {
-        setNotice(`Bus ${vehicleNum} removed from fleet.`)
+        setNotice(`Bus ${deleteConfirmBus.vehicle_number} removed from fleet.`)
+        if (selectedBusForView?.bus_id === deleteConfirmBus.bus_id) {
+          const remaining = buses.filter((b) => b.bus_id !== deleteConfirmBus.bus_id)
+          setSelectedBusForView(remaining.length > 0 ? remaining[0] : null)
+        }
+        setDeleteConfirmBus(null)
         fetchDashboard(ownerToken)
       } else {
         setNotice(data.error || 'Failed to remove bus.')
       }
     } catch (err) {
       setNotice(`Server error: ${err.message}`)
+    } finally {
+      setIsDeletingBus(false)
     }
+  }
+
+  const handleGoToDashboard = () => {
+    setViewMode('dashboard')
+    setActiveTab('dashboard')
+    if (savedConfirmationBus) {
+      setSelectedBusForView(savedConfirmationBus)
+    }
+  }
+
+  const handleViewAddedBus = () => {
+    setViewMode('dashboard')
+    setActiveTab('dashboard')
+    if (savedConfirmationBus) {
+      setSelectedBusForView(savedConfirmationBus)
+    }
+    setTimeout(() => {
+      const el = document.getElementById('view-bus-panel-anchor')
+      if (el) el.scrollIntoView({ behavior: 'smooth' })
+    }, 100)
   }
 
   // 12. Update Conductor PIN
@@ -737,7 +844,114 @@ export default function OwnerPortal({
   }
 
   // =========================================================================
-  // VIEW RENDER: ADD NEW BUS WIZARD (SCREENS 4, 5, 6, 7)
+  // VIEW RENDER: SAVE CONFIRMATION (SCREEN 8)
+  // =========================================================================
+  if (viewMode === 'save-confirmation') {
+    const displayBus = savedConfirmationBus || wizardForm
+    return (
+      <div className="owner-portal-root p-6 overflow-y-auto">
+        <div className="save-confirmation-container">
+          <div className="save-confirmation-badge">
+            <Check size={14} />
+            <span>8 Save Confirmation</span>
+          </div>
+
+          <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3 border border-emerald-100 shadow-sm">
+            <CheckCircle2 size={44} className="text-emerald-500" />
+          </div>
+
+          <h1 className="text-2xl font-black text-slate-900 m-0">
+            {isEditingBus ? 'Bus Updated Successfully!' : 'Bus Added Successfully!'}
+          </h1>
+          <p className="text-xs font-semibold text-slate-500 mt-2 mb-6">
+            Your bus has been {isEditingBus ? 'updated' : 'registered and saved'} successfully in Karavali-Transit system.
+          </p>
+
+          {/* Bus Details Summary Box */}
+          <div className="save-confirmation-card">
+            <div className="flex items-center gap-2 text-blue-600 font-extrabold text-sm mb-3">
+              <Bus size={18} />
+              <span>Bus Details</span>
+            </div>
+
+            <div className="save-bus-detail-row">
+              <span className="save-bus-detail-label">Bus Number</span>
+              <span className="save-bus-detail-value font-mono">: {displayBus.vehicle_number}</span>
+            </div>
+            <div className="save-bus-detail-row">
+              <span className="save-bus-detail-label">Bus Name</span>
+              <span className="save-bus-detail-value">: {displayBus.bus_name}</span>
+            </div>
+            <div className="save-bus-detail-row">
+              <span className="save-bus-detail-label">Bus Type</span>
+              <span className="save-bus-detail-value">: {displayBus.service_type || 'Non AC'}</span>
+            </div>
+            <div className="save-bus-detail-row">
+              <span className="save-bus-detail-label">Total Seats</span>
+              <span className="save-bus-detail-value">: {displayBus.total_seats || 45}</span>
+            </div>
+            <div className="save-bus-detail-row">
+              <span className="save-bus-detail-label">Route</span>
+              <span className="save-bus-detail-value">: {displayBus.origin || 'Mangaluru'} ➔ {displayBus.destination || 'Udupi'}</span>
+            </div>
+            <div className="save-bus-detail-row">
+              <span className="save-bus-detail-label">Departure Time</span>
+              <span className="save-bus-detail-value">: {displayBus.departure_time || '06:30 AM'} ({displayBus.frequency || 'Daily'})</span>
+            </div>
+            <div className="save-bus-detail-row">
+              <span className="save-bus-detail-label">Stops</span>
+              <span className="save-bus-detail-value">: {displayBus.stops?.length || 4} Stops</span>
+            </div>
+          </div>
+
+          <h3 className="text-sm font-black text-slate-800 mt-5 mb-4">
+            What would you like to do next?
+          </h3>
+
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleGoToDashboard}
+              className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition"
+            >
+              <Bus size={16} />
+              <span>Go to Owner Dashboard</span>
+              <ArrowRight size={14} />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleAddNewBus}
+              className="w-full py-3 px-4 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
+            >
+              <Plus size={16} className="text-blue-600" />
+              <span>Add Another Bus</span>
+              <ArrowRight size={14} className="text-slate-400" />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleViewAddedBus}
+              className="w-full py-3 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs rounded-xl border border-blue-200 flex items-center justify-center gap-2 cursor-pointer transition"
+            >
+              <Eye size={16} />
+              <span>View Added Bus Details</span>
+              <ArrowRight size={14} />
+            </button>
+          </div>
+
+          <img
+            src="/images/coastal-private-bus.jpg"
+            alt="Karavali-Transit Bus"
+            className="save-confirmation-bus-img"
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // =========================================================================
+  // VIEW RENDER: ADD / EDIT BUS WIZARD (SCREENS 4, 5, 6, 7)
   // =========================================================================
   if (viewMode === 'add-bus') {
     return (
@@ -745,12 +959,12 @@ export default function OwnerPortal({
         <div className="wizard-container">
           {/* Header */}
           <div className="wizard-header">
-            <h1 className="wizard-title">Add New Bus</h1>
+            <h1 className="wizard-title">{isEditingBus ? 'Edit Bus' : 'Add New Bus'}</h1>
             <p className="wizard-subtitle">
-              {wizardStep === 1 && 'Enter the basic information about your bus'}
+              {wizardStep === 1 && (isEditingBus ? 'Update the basic information about your bus' : 'Enter the basic information about your bus')}
               {wizardStep === 2 && 'Enter route details and stop by stop arrival times'}
               {wizardStep === 3 && 'Enter schedule and service information'}
-              {wizardStep === 4 && 'Review all the details before saving'}
+              {wizardStep === 4 && (isEditingBus ? 'Review all changes before saving' : 'Review all the details before saving')}
             </p>
           </div>
 
@@ -1090,28 +1304,28 @@ export default function OwnerPortal({
           {wizardStep === 4 && (
             <div className="space-y-6">
               {/* Bus Details Summary Box */}
-              <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50 flex flex-col md:flex-row gap-5 items-center">
+              <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50 flex flex-col sm:flex-row gap-5 items-center">
                 <img
                   src={wizardForm.photo_preview || wizardForm.photo_url || '/images/coastal-private-bus.jpg'}
                   alt="Bus preview"
-                  className="w-44 h-28 object-cover rounded-xl shadow-sm border border-slate-200"
+                  className="w-48 h-32 object-cover rounded-xl shadow-xs border border-slate-200 shrink-0"
                 />
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs flex-1">
-                  <div>
-                    <span className="text-slate-400 block font-bold">Bus Number</span>
-                    <strong className="text-slate-900 text-sm font-black">{wizardForm.vehicle_number}</strong>
+                <div className="grid grid-cols-2 gap-3 text-xs flex-1 w-full">
+                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
+                    <span className="text-slate-400 block font-bold text-[10px] uppercase tracking-wider mb-1">Bus Number</span>
+                    <strong className="text-slate-900 text-sm font-black font-mono">{wizardForm.vehicle_number}</strong>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block font-bold">Bus Name</span>
+                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
+                    <span className="text-slate-400 block font-bold text-[10px] uppercase tracking-wider mb-1">Bus Name</span>
                     <strong className="text-slate-900 text-sm font-black">{wizardForm.bus_name}</strong>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block font-bold">Bus Type</span>
-                    <strong className="text-slate-700 font-bold">{wizardForm.service_type}</strong>
+                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
+                    <span className="text-slate-400 block font-bold text-[10px] uppercase tracking-wider mb-1">Bus Type</span>
+                    <strong className="text-slate-800 font-bold">{wizardForm.service_type}</strong>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block font-bold">Total Seats</span>
-                    <strong className="text-slate-700 font-bold">{wizardForm.total_seats}</strong>
+                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
+                    <span className="text-slate-400 block font-bold text-[10px] uppercase tracking-wider mb-1">Total Seats</span>
+                    <strong className="text-slate-800 font-bold">{wizardForm.total_seats}</strong>
                   </div>
                 </div>
               </div>
@@ -1182,6 +1396,13 @@ export default function OwnerPortal({
             </div>
           )}
 
+          {wizardError && (
+            <div className="mt-4 mb-2 p-3.5 bg-rose-50 border border-rose-200 text-rose-900 rounded-xl text-xs font-bold flex items-center gap-2">
+              <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+              <span>{wizardError}</span>
+            </div>
+          )}
+
           {/* Wizard Action Buttons */}
           <div className="wizard-actions-bar">
             {wizardStep === 1 ? (
@@ -1223,7 +1444,7 @@ export default function OwnerPortal({
                 className="px-7 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition"
               >
                 <Check size={16} />
-                <span>{isSavingBus ? 'Saving Bus...' : 'Save Bus'}</span>
+                <span>{isSavingBus ? (isEditingBus ? 'Saving Changes...' : 'Saving Bus...') : (isEditingBus ? 'Save Changes' : 'Save Bus')}</span>
               </button>
             )}
           </div>
@@ -1402,109 +1623,17 @@ export default function OwnerPortal({
           </div>
         </div>
 
-        {/* TAB 1: MAIN DASHBOARD VIEW (SCREEN 3) */}
-        {activeTab === 'dashboard' && (
-          <div className="owner-two-col">
-            {/* Left Column: Recent Activity */}
-            <div className="owner-card-panel">
-              <div className="owner-panel-header">
-                <h2 className="owner-panel-title">Recent Activity</h2>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('reports')}
-                  className="owner-panel-link"
-                >
-                  View All →
-                </button>
-              </div>
-
+        {/* ============================================================== */}
+        {/* SCREEN 9: MY BUSES SECTION (DASHBOARD & MY BUSES TABS)          */}
+        {/* ============================================================== */}
+        {(activeTab === 'dashboard' || activeTab === 'buses') && (
+          <div className="space-y-6">
+            {/* Header Toolbar matching Screen 9 */}
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
-                {(dashboardData.recent_activity?.length > 0
-                  ? dashboardData.recent_activity
-                  : [
-                      {
-                        action_type: 'bus_added',
-                        title: 'Bus KA 19 AB 1234 added',
-                        created_at: '2 hours ago',
-                      },
-                      {
-                        action_type: 'conductor_assigned',
-                        title: 'Conductor Manjunath assigned',
-                        created_at: '4 hours ago',
-                      },
-                      {
-                        action_type: 'route_updated',
-                        title: 'Route Mangaluru - Udupi updated',
-                        created_at: '6 hours ago',
-                      },
-                    ]
-                ).map((act, index) => (
-                  <div key={index} className="owner-activity-row">
-                    <div
-                      className={`owner-activity-icon ${
-                        act.action_type === 'bus_added'
-                          ? 'bg-emerald-50 text-emerald-600'
-                          : act.action_type === 'conductor_assigned'
-                          ? 'bg-purple-50 text-purple-600'
-                          : 'bg-amber-50 text-amber-600'
-                      }`}
-                    >
-                      {act.action_type === 'bus_added' ? (
-                        <Bus size={18} />
-                      ) : act.action_type === 'conductor_assigned' ? (
-                        <Users size={18} />
-                      ) : (
-                        <Share2 size={18} />
-                      )}
-                    </div>
-                    <div>
-                      <h4 className="owner-activity-text">{act.title}</h4>
-                      <p className="owner-activity-time">{act.created_at || 'Just now'}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Right Column: + Add New Bus and Efficiency Card */}
-            <div>
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode('add-bus')
-                  setWizardStep(1)
-                  setWizardError('')
-                }}
-                className="owner-cta-add-bus"
-              >
-                <Plus size={18} />
-                <span>+ Add New Bus</span>
-              </button>
-
-              <div className="owner-efficiency-card">
-                <img
-                  src="/images/coastal-private-bus.jpg"
-                  alt="Fleet Efficiency"
-                  className="owner-efficiency-img"
-                />
-                <h3 className="owner-efficiency-title">Manage your fleet efficiently</h3>
-                <p className="owner-efficiency-desc">
-                  Add buses, assign conductors and keep your services running smoothly.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: MY BUSES */}
-        {activeTab === 'buses' && (
-          <div className="space-y-4">
-            {/* Top Toolbar */}
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <h2 className="text-lg font-black text-slate-900 m-0">My Registered Buses</h2>
-                <p className="text-xs text-slate-500 m-0 font-medium">
-                  {buses.length} {buses.length === 1 ? 'bus' : 'buses'} permanently registered in database
+                <h2 className="text-xl font-black text-slate-900 m-0">My Buses</h2>
+                <p className="text-xs text-slate-500 m-0 mt-0.5 font-medium">
+                  Manage your buses, view details, edit or delete buses.
                 </p>
               </div>
 
@@ -1522,15 +1651,11 @@ export default function OwnerPortal({
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setWizardError('')
-                    setWizardStep(1)
-                    setViewMode('add-bus')
-                  }}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                  onClick={handleAddNewBus}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer"
                 >
-                  <Plus size={16} />
-                  <span>+ Add New Bus</span>
+                  <Bus size={15} />
+                  <span>Add New Bus</span>
                 </button>
               </div>
             </div>
@@ -1577,12 +1702,8 @@ export default function OwnerPortal({
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setWizardError('')
-                    setWizardStep(1)
-                    setViewMode('add-bus')
-                  }}
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition inline-flex items-center gap-1.5 cursor-pointer"
+                  onClick={handleAddNewBus}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition inline-flex items-center gap-2 cursor-pointer"
                 >
                   <Plus size={16} />
                   <span>+ Add Your First Bus</span>
@@ -1590,104 +1711,392 @@ export default function OwnerPortal({
               </div>
             )}
 
-            {/* Bus Cards Grid */}
+            {/* SCREEN 9 TABLE: Full Responsive Table */}
             {!busesLoading && !busesError && buses.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {buses
-                  .filter((b) => {
-                    if (!busSearchQuery.trim()) return true
-                    const q = busSearchQuery.toLowerCase()
-                    return (
-                      b.bus_name?.toLowerCase().includes(q) ||
-                      b.vehicle_number?.toLowerCase().includes(q) ||
-                      b.route_number?.toLowerCase().includes(q) ||
-                      b.origin?.toLowerCase().includes(q) ||
-                      b.destination?.toLowerCase().includes(q)
-                    )
-                  })
-                  .map((bus) => {
+              <div className="owner-buses-table-wrapper">
+                <table className="owner-buses-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}>#</th>
+                      <th style={{ width: '90px' }}>Bus Photo</th>
+                      <th>Bus Number</th>
+                      <th>Bus Name</th>
+                      <th>Type</th>
+                      <th>Seats</th>
+                      <th>Route</th>
+                      <th>Schedule</th>
+                      <th>Status</th>
+                      <th style={{ width: '190px', textAlign: 'center' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {buses
+                      .filter((b) => {
+                        if (!busSearchQuery.trim()) return true
+                        const q = busSearchQuery.toLowerCase()
+                        return (
+                          b.bus_name?.toLowerCase().includes(q) ||
+                          b.vehicle_number?.toLowerCase().includes(q) ||
+                          b.route_number?.toLowerCase().includes(q) ||
+                          b.origin?.toLowerCase().includes(q) ||
+                          b.destination?.toLowerCase().includes(q)
+                        )
+                      })
+                      .map((bus, idx) => {
+                        const isSelected = selectedBusForView?.bus_id === bus.bus_id
+                        return (
+                          <tr
+                            key={bus.bus_id}
+                            className={isSelected ? 'selected-row' : ''}
+                            onClick={() => setSelectedBusForView(bus)}
+                          >
+                            <td className="font-bold text-slate-400">{idx + 1}</td>
+                            <td>
+                              <img
+                                src={bus.photo_url || '/images/coastal-private-bus.jpg'}
+                                alt={bus.bus_name}
+                                className="w-14 h-9 object-cover rounded-lg shadow-xs border border-slate-200"
+                              />
+                            </td>
+                            <td className="font-mono font-black text-slate-900 text-xs">
+                              {bus.vehicle_number}
+                            </td>
+                            <td className="font-extrabold text-slate-800 text-xs">
+                              {bus.bus_name}
+                            </td>
+                            <td className="font-bold text-slate-600 text-xs">
+                              {bus.service_type || 'Non AC'}
+                            </td>
+                            <td className="font-extrabold text-slate-800 text-xs">
+                              {bus.total_seats || 45}
+                            </td>
+                            <td className="font-bold text-slate-700 text-xs">
+                              {bus.origin || 'Mangaluru'} ➔ {bus.destination || 'Udupi'}
+                            </td>
+                            <td className="font-semibold text-slate-600 text-xs">
+                              {bus.departure_time || '06:30 AM'} {bus.frequency || 'Daily'}
+                            </td>
+                            <td>
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-extrabold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                Active
+                              </span>
+                            </td>
+                            <td>
+                              <div
+                                className="flex items-center justify-center gap-1.5"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedBusForView(bus)
+                                    const el = document.getElementById('view-bus-panel-anchor')
+                                    if (el) el.scrollIntoView({ behavior: 'smooth' })
+                                  }}
+                                  className="btn-action-view"
+                                  title="View Details"
+                                >
+                                  <Eye size={12} />
+                                  <span>View</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditBus(bus)}
+                                  className="btn-action-edit"
+                                  title="Edit Bus"
+                                >
+                                  <Edit3 size={12} />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handlePromptDelete(bus)}
+                                  className="btn-action-delete"
+                                  title="Delete Bus"
+                                >
+                                  <Trash2 size={12} />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* SCREEN 9 BOTTOM TWO-PANEL GRID: View Bus Details & Options */}
+            {!busesLoading && buses.length > 0 && (
+              <div id="view-bus-panel-anchor" className="dashboard-bottom-grid">
+                {/* Left Panel: View Bus Details */}
+                {selectedBusForView ? (
+                  <div className="view-bus-panel">
+                    <div className="view-bus-header">
+                      <h3 className="text-base font-black text-slate-900 m-0">View Bus Details</h3>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBusForView(null)}
+                        className="text-slate-400 hover:text-slate-700 cursor-pointer p-1 rounded-lg"
+                        title="Close details"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      {/* Left: Thumbnail & Specs */}
+                      <div>
+                        <img
+                          src={selectedBusForView.photo_url || '/images/coastal-private-bus.jpg'}
+                          alt={selectedBusForView.bus_name}
+                          className="view-bus-panel-img mb-3"
+                        />
+                        <div className="mb-3">
+                          <h4 className="text-base font-black text-slate-900 font-mono m-0">
+                            {selectedBusForView.vehicle_number}
+                          </h4>
+                          <p className="text-xs font-extrabold text-slate-600 m-0 mt-0.5">
+                            {selectedBusForView.bus_name}
+                          </p>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold mt-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Active
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-slate-400 font-bold">Bus Type</span>
+                            <span className="font-extrabold text-slate-800">
+                              {selectedBusForView.service_type || 'Non AC'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-slate-400 font-bold">Total Seats</span>
+                            <span className="font-extrabold text-slate-800">
+                              {selectedBusForView.total_seats || 45}
+                            </span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-100">
+                            <span className="text-slate-400 font-bold">Route</span>
+                            <span className="font-extrabold text-slate-800">
+                              {selectedBusForView.origin || 'Mangaluru'} ➔ {selectedBusForView.destination || 'Udupi'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between py-1">
+                            <span className="text-slate-400 font-bold">Departure Time</span>
+                            <span className="font-extrabold text-slate-800">
+                              {selectedBusForView.departure_time || '06:30 AM'} ({selectedBusForView.frequency || 'Daily'})
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Route Stops Vertical Timeline */}
+                      <div>
+                        <div className="flex items-center gap-1.5 text-blue-600 font-extrabold text-xs mb-3">
+                          <Radio size={14} />
+                          <span>Route Stops</span>
+                        </div>
+
+                        <div className="route-stops-timeline">
+                          {(selectedBusForView.stops && selectedBusForView.stops.length > 0
+                            ? selectedBusForView.stops
+                            : [
+                                { stop_name: selectedBusForView.origin || 'Mangaluru', planned_arrival: selectedBusForView.departure_time || '06:30 AM' },
+                                { stop_name: selectedBusForView.destination || 'Udupi', planned_arrival: '10:00 AM' },
+                              ]
+                          ).map((stop, sIdx) => (
+                            <div key={sIdx} className="route-stop-node">
+                              <span className="font-extrabold text-slate-800 text-xs">
+                                {stop.stop_name}
+                              </span>
+                              <span className="font-mono font-bold text-blue-600 text-xs">
+                                - {stop.planned_arrival}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="view-bus-panel flex items-center justify-center p-8 text-center text-slate-400">
+                    <div>
+                      <Bus size={32} className="mx-auto mb-2 text-slate-300" />
+                      <p className="text-xs font-bold">Select any bus from the table to view its details and planned route stops.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Right Panel: Options (Screen 9) */}
+                <div className="options-panel">
+                  <h3 className="text-base font-black text-slate-900 mb-4 m-0">Options</h3>
+
+                  <div className="space-y-3">
+                    <div onClick={handleAddNewBus} className="option-action-item blue">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-black shrink-0 shadow-xs">
+                          <Plus size={18} />
+                        </div>
+                        <div>
+                          <strong className="text-xs font-black text-slate-900 block">Add New Bus</strong>
+                          <p className="text-[11px] text-slate-500 font-bold m-0 mt-0.5">Register another bus for your fleet</p>
+                        </div>
+                      </div>
+                      <ArrowRight size={16} className="text-blue-600 shrink-0" />
+                    </div>
+
+                    <div onClick={() => handleEditBus(selectedBusForView || buses[0])} className="option-action-item green">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black shrink-0 shadow-xs">
+                          <Edit3 size={16} />
+                        </div>
+                        <div>
+                          <strong className="text-xs font-black text-slate-900 block">Edit Bus Details</strong>
+                          <p className="text-[11px] text-slate-500 font-bold m-0 mt-0.5">Update bus information, route or schedule</p>
+                        </div>
+                      </div>
+                      <ArrowRight size={16} className="text-emerald-600 shrink-0" />
+                    </div>
+
+                    <div onClick={() => handlePromptDelete(selectedBusForView || buses[0])} className="option-action-item red">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-rose-600 text-white flex items-center justify-center font-black shrink-0 shadow-xs">
+                          <Trash2 size={16} />
+                        </div>
+                        <div>
+                          <strong className="text-xs font-black text-slate-900 block">Delete Bus</strong>
+                          <p className="text-[11px] text-slate-500 font-bold m-0 mt-0.5">Remove bus from your fleet (with confirmation)</p>
+                        </div>
+                      </div>
+                      <ArrowRight size={16} className="text-rose-600 shrink-0" />
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        if (!selectedBusForView && buses.length > 0) {
+                          setSelectedBusForView(buses[0])
+                        }
+                        const el = document.getElementById('view-bus-panel-anchor')
+                        if (el) el.scrollIntoView({ behavior: 'smooth' })
+                      }}
+                      className="option-action-item purple"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-purple-600 text-white flex items-center justify-center font-black shrink-0 shadow-xs">
+                          <Eye size={16} />
+                        </div>
+                        <div>
+                          <strong className="text-xs font-black text-slate-900 block">View Bus Details</strong>
+                          <p className="text-[11px] text-slate-500 font-bold m-0 mt-0.5">See complete bus information and route stops</p>
+                        </div>
+                      </div>
+                      <ArrowRight size={16} className="text-purple-600 shrink-0" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Extra Section: Recent Activity (if activeTab === 'dashboard') */}
+            {activeTab === 'dashboard' && (
+              <div className="owner-card-panel mt-6">
+                <div className="owner-panel-header">
+                  <h2 className="owner-panel-title">Recent Activity</h2>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('reports')}
+                    className="owner-panel-link"
+                  >
+                    View All →
+                  </button>
+                </div>
+
+                <div>
+                  {(dashboardData.recent_activity?.length > 0
+                    ? dashboardData.recent_activity
+                    : [
+                        {
+                          action_type: 'bus_added',
+                          title: 'Bus KA 19 AB 1234 added',
+                          created_at: '2 hours ago',
+                        },
+                        {
+                          action_type: 'conductor_assigned',
+                          title: 'Conductor Manjunath assigned',
+                          created_at: '4 hours ago',
+                        },
+                        {
+                          action_type: 'route_updated',
+                          title: 'Route Mangaluru - Udupi updated',
+                          created_at: '6 hours ago',
+                        },
+                      ]
+                  ).map((act, index) => (
+                    <div key={index} className="owner-activity-row">
+                      <div
+                        className={`owner-activity-icon ${
+                          act.action_type === 'bus_added'
+                            ? 'bg-emerald-50 text-emerald-600'
+                            : act.action_type === 'conductor_assigned'
+                            ? 'bg-purple-50 text-purple-600'
+                            : 'bg-amber-50 text-amber-600'
+                        }`}
+                      >
+                        {act.action_type === 'bus_added' ? (
+                          <Bus size={18} />
+                        ) : act.action_type === 'conductor_assigned' ? (
+                          <Users size={18} />
+                        ) : (
+                          <Share2 size={18} />
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="owner-activity-text">{act.title}</h4>
+                        <p className="owner-activity-time">{act.created_at || 'Just now'}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Extra Section: Conductor PIN & Tracking Cards (if activeTab === 'buses') */}
+            {activeTab === 'buses' && buses.length > 0 && (
+              <div className="mt-6 space-y-4">
+                <h3 className="text-sm font-black text-slate-800 m-0">
+                  Secret Conductor PINs &amp; Direct Portal Switch
+                </h3>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {buses.map((bus) => {
                     const pin = bus.conductor_pin || '4509'
                     const isVisible = Boolean(visiblePins[bus.bus_id])
                     const isCopied = copiedPinBusId === bus.bus_id
-                    const isLive = Boolean(bus.is_live)
-
                     return (
                       <div
                         key={bus.bus_id}
-                        className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3.5 hover:shadow-md transition"
+                        className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3"
                       >
-                        {/* Header: Name, Type, Status, Route # */}
-                        <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center justify-between">
                           <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <strong className="text-base font-extrabold text-slate-900">
-                                {bus.bus_name}
-                              </strong>
-                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                                {bus.service_type || 'Non AC'}
-                              </span>
-                              {isLive ? (
-                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                  Live On Shift
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                                  Offline / Not Started
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-xs font-extrabold text-blue-700 font-mono tracking-wide mt-0.5 block">
+                            <strong className="text-sm font-extrabold text-slate-900 block">
+                              {bus.bus_name}
+                            </strong>
+                            <span className="font-mono text-xs font-bold text-blue-700">
                               {bus.vehicle_number}
                             </span>
                           </div>
-
-                          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 shrink-0">
+                          <span className="text-[11px] font-bold text-slate-500">
                             Route #{bus.route_number || '001'}
                           </span>
                         </div>
 
-                        {/* Corridor & Details */}
-                        <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Corridor</span>
-                            <strong className="text-slate-800 font-extrabold">
-                              {bus.origin || 'Mangaluru'} ➔ {bus.destination || 'Udupi'}
-                            </strong>
-                          </div>
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Stops &amp; Seats</span>
-                            <span className="text-slate-800 font-bold">
-                              {bus.stops?.length || 2} Stops • {bus.total_seats || 45} Seats
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Departure</span>
-                            <span className="text-slate-800 font-bold">
-                              {bus.departure_time || '06:30 AM'} (from {bus.origin || 'Mangaluru'})
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Frequency &amp; Duration</span>
-                            <span className="text-slate-800 font-bold">
-                              {bus.frequency || 'Daily'} • {bus.journey_duration || '3h 30m'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* View Timetable Button */}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedBusForTimetable(bus)}
-                          className="w-full py-1.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl border border-blue-200 transition flex items-center justify-center gap-1.5 cursor-pointer"
-                        >
-                          <Clock size={13} />
-                          <span>View Planned Stop Timetable ({bus.stops?.length || 2} stops)</span>
-                        </button>
-
-                        {/* Secret Conductor PIN Box */}
-                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs">
+                        {/* Secret PIN Box */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between text-xs">
                           <div>
                             <span className="text-[10px] uppercase font-extrabold text-slate-400 block">
                               Secret Conductor PIN
@@ -1719,26 +2128,15 @@ export default function OwnerPortal({
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleUpdatePin(bus.bus_id, pin)}
-                              className="px-2.5 py-1 text-xs font-bold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition cursor-pointer"
-                            >
-                              Change PIN
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteBus(bus.bus_id, bus.vehicle_number)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
-                              title="Delete Bus"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdatePin(bus.bus_id, pin)}
+                            className="px-2.5 py-1 text-xs font-bold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition cursor-pointer"
+                          >
+                            Change PIN
+                          </button>
                         </div>
 
-                        {/* Launch Conductor CTA */}
                         <button
                           type="button"
                           onClick={() => onSwitchToConductor?.(bus.vehicle_number, pin)}
@@ -1750,6 +2148,7 @@ export default function OwnerPortal({
                       </div>
                     )
                   })}
+                </div>
               </div>
             )}
           </div>
@@ -2068,6 +2467,41 @@ export default function OwnerPortal({
                 className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold rounded-xl transition cursor-pointer"
               >
                 Close Timetable
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Bus Confirmation Modal */}
+      {deleteConfirmBus && (
+        <div className="delete-modal-backdrop" onClick={() => setDeleteConfirmBus(null)}>
+          <div className="delete-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="delete-modal-icon">
+              <Trash2 size={26} />
+            </div>
+            <h3 className="delete-modal-title">Delete Bus</h3>
+            <p className="delete-modal-desc">
+              Are you sure you want to delete this bus? Its associated route and schedule information may also be removed.
+            </p>
+            <div className="delete-modal-bus-badge">
+              {deleteConfirmBus.vehicle_number} — {deleteConfirmBus.bus_name}
+            </div>
+            <div className="delete-modal-actions">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmBus(null)}
+                className="btn-modal-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeletingBus}
+                className="btn-modal-delete"
+              >
+                {isDeletingBus ? 'Deleting...' : 'Delete Bus'}
               </button>
             </div>
           </div>
