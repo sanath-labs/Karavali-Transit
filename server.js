@@ -13,6 +13,8 @@ import {
   getBusesByOwner,
   getBusById,
   getBusByVehicleNumber,
+  getBusRouteStops,
+  getConductorByPhoneAndOwner,
   getConductorsByOwner,
   getDatabaseType,
   getOwnerActivities,
@@ -532,7 +534,190 @@ app.get('/api/owner/activities', requireOwnerSession, async (req, res) => {
   res.json({ success: true, activities })
 })
 
-// 12. REAL-WORLD CONDUCTOR CHECK-IN: Verify Bus Number & Secret PIN
+// 12. CONDUCTOR AUTHENTICATION — STEP 1: Send 6-Digit Email OTP to Travel Agency
+app.post('/api/conductor/send-otp', async (req, res) => {
+  const { email } = req.body
+  if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    return res.status(400).json({ success: false, error: 'Valid travel agency email address is required.' })
+  }
+
+  const cleanEmail = email.trim().toLowerCase()
+  let owner = await getOwnerByEmail(cleanEmail)
+
+  // In development, if owner does not exist yet, initialize default
+  if (!owner) {
+    const defaultAgency = `${cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} Travels`
+    await createOwner(cleanEmail, defaultAgency)
+    owner = { email: cleanEmail, agency_name: defaultAgency }
+  }
+
+  const otp = String(randomInt(100000, 1000000))
+  const expiresAt = Date.now() + 10 * 60 * 1000
+
+  activeOtps[cleanEmail] = {
+    otp,
+    expiresAt,
+    attempts: 0,
+    agency_name: owner.agency_name || 'Coastal Travels',
+  }
+
+  console.log(`Conductor Auth OTP for ${cleanEmail}: ${otp} (expires in 10 minutes)`)
+
+  res.json({
+    success: true,
+    message: `6-digit verification code sent to ${cleanEmail}.`,
+    agency_name: owner.agency_name,
+    preview_otp: otp,
+  })
+})
+
+// 13. CONDUCTOR AUTHENTICATION — STEP 2: Verify Travel Agency OTP
+app.post('/api/conductor/verify-otp', async (req, res) => {
+  const { email, otp } = req.body
+  if (!email || !otp) {
+    return res.status(400).json({ success: false, error: 'Travel agency email and OTP code are required.' })
+  }
+
+  const cleanEmail = email.trim().toLowerCase()
+  const cleanOtp = String(otp).trim()
+  const record = activeOtps[cleanEmail]
+
+  if (!isValidOtp(record, cleanOtp)) {
+    if (record) {
+      record.attempts += 1
+      if (record.attempts >= 5) delete activeOtps[cleanEmail]
+    }
+    return res.status(401).json({ success: false, error: 'Invalid or expired 6-digit OTP code.' })
+  }
+
+  const owner = await getOwnerByEmail(cleanEmail)
+  const agencyName = owner?.agency_name || record.agency_name || 'Coastal Fleet Line'
+  const token = ownerSessions.create(cleanEmail, agencyName)
+  delete activeOtps[cleanEmail]
+
+  res.json({
+    success: true,
+    message: 'Travel agency verified successfully.',
+    agency: {
+      email: cleanEmail,
+      agency_name: agencyName,
+      token,
+    },
+  })
+})
+
+// 14. CONDUCTOR AUTHENTICATION — STEP 3 & 4: Conductor Status Lookup & Bus List
+app.post('/api/conductor/lookup', async (req, res) => {
+  const { agency_email, phone } = req.body
+  if (!agency_email || !phone) {
+    return res.status(400).json({ success: false, error: 'Agency email and conductor phone are required.' })
+  }
+
+  const cleanEmail = agency_email.trim().toLowerCase()
+  const cleanPhone = String(phone).replace(/\D/g, '')
+
+  if (cleanPhone.length < 10) {
+    return res.status(400).json({ success: false, error: 'Please enter a valid 10-digit mobile number.' })
+  }
+
+  const conductor = await getConductorByPhoneAndOwner(cleanEmail, cleanPhone)
+  const buses = await getBusesByOwner(cleanEmail)
+
+  res.json({
+    success: true,
+    exists: Boolean(conductor),
+    conductor: conductor || null,
+    buses: buses || [],
+    agency_email: cleanEmail,
+  })
+})
+
+// 15. CONDUCTOR AUTHENTICATION — STEP 4: Quick Register New Conductor
+app.post('/api/conductor/register', async (req, res) => {
+  const { agency_email, name, phone, assigned_bus_id } = req.body
+  if (!agency_email || !name?.trim() || !phone?.trim()) {
+    return res.status(400).json({ success: false, error: 'Agency email, conductor name, and mobile number are required.' })
+  }
+
+  const cleanEmail = agency_email.trim().toLowerCase()
+  const cleanPhone = String(phone).replace(/\D/g, '')
+
+  const existing = await getConductorByPhoneAndOwner(cleanEmail, cleanPhone)
+  if (existing) {
+    return res.json({ success: true, conductor: existing, message: 'Conductor already registered.' })
+  }
+
+  const created = await saveConductor({
+    owner_email: cleanEmail,
+    name: name.trim(),
+    phone: cleanPhone,
+    assigned_bus_id: assigned_bus_id ? Number(assigned_bus_id) : null,
+    status: 'Active',
+  })
+
+  await insertOwnerActivity(
+    cleanEmail,
+    'CONDUCTOR_SELF_REG',
+    `New crew conductor ${name.trim()} signed up via Conductor Terminal`
+  )
+
+  const updatedConductor = await getConductorByPhoneAndOwner(cleanEmail, cleanPhone)
+
+  res.json({
+    success: true,
+    message: 'Conductor registered successfully.',
+    conductor: updatedConductor || created,
+  })
+})
+
+// 16. CONDUCTOR DUTY: Start Shift & Link to Telemetry
+app.post('/api/conductor/start-duty', async (req, res) => {
+  const { bus_id, vehicle_number, driver_phone, conductor_name } = req.body
+  if (!bus_id) {
+    return res.status(400).json({ success: false, error: 'Bus ID is required to start duty.' })
+  }
+
+  const bus = await getBusById(Number(bus_id))
+  if (!bus) {
+    return res.status(404).json({ success: false, error: 'Bus record not found.' })
+  }
+
+  const shiftData = {
+    driver_phone: driver_phone || '98451 00000',
+    vehicle_number: bus.vehicle_number || vehicle_number,
+    bus_name: bus.bus_name,
+    route_name: `${bus.origin} ➔ ${bus.destination}`,
+  }
+
+  const shift = await recordShift(shiftData)
+  if (activeBuses[bus.bus_id]) {
+    activeBuses[bus.bus_id].is_on_shift = true
+    activeBuses[bus.bus_id].active_shift = shift
+    activeBuses[bus.bus_id].conductor_name = conductor_name || 'Conductor'
+  }
+
+  io.emit('shift_broadcast', {
+    ...shiftData,
+    bus_id: bus.bus_id,
+    conductor_name,
+  })
+
+  res.json({
+    success: true,
+    message: 'Conductor duty active. Live GPS streaming initialized.',
+    bus,
+    shift,
+  })
+})
+
+// 17. CONDUCTOR ROUTE STOPS: Get Timetable Stops for Active Bus
+app.get('/api/conductor/buses/:busId/stops', async (req, res) => {
+  const busId = Number(req.params.busId)
+  const stops = await getBusRouteStops(busId)
+  res.json({ success: true, stops: stops || [] })
+})
+
+// 18. REAL-WORLD CONDUCTOR CHECK-IN: Verify Bus Number & Secret PIN (Legacy Backward Compatibility)
 app.post('/api/conductor/verify-pin', async (req, res) => {
   const { vehicle_number, conductor_pin, driver_phone } = req.body
   if (!vehicle_number || !conductor_pin) {
