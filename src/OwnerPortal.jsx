@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react'
 import { apiUrl, ownerHeaders } from './api.js'
+import { formatIndianMobile, isValidIndianMobile } from './transitUtils.js'
 
 export default function OwnerPortal({
   ownerEmail,
@@ -588,6 +589,10 @@ export default function OwnerPortal({
     e?.preventDefault()
     if (!conductorForm.name.trim() || !conductorForm.phone.trim()) {
       alert('Conductor name and phone are required.')
+      return
+    }
+    if (!isValidIndianMobile(conductorForm.phone)) {
+      alert('Please enter a valid 10-digit Indian mobile number (e.g. 98451 12345).')
       return
     }
     setConductorSaving(true)
@@ -2169,7 +2174,7 @@ export default function OwnerPortal({
                         </div>
                         <div className="conductor-meta">
                           <strong className="conductor-name">{cond.name}</strong>
-                          <span className="conductor-phone">{cond.phone}</span>
+                          <span className="conductor-phone">{formatIndianMobile(cond.phone)}</span>
                         </div>
                       </div>
                       <span className="conductor-status-pill">
