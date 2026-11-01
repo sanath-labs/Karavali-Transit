@@ -4539,5 +4539,65 @@
   margin: 2px 0 0 0;
 }
 
+/* ========================================================================= */
+/* RESPONSIVE MEDIA QUERIES FOR FLEET OWNER SCREENS                          */
+/* ========================================================================= */
+
+@media (max-width: 900px) {
+  .owner-portal-root {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .owner-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #1e293b;
+    padding: 16px 20px;
+    gap: 12px;
+  }
+
+  .owner-nav-list {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+
+  .owner-nav-item {
+    white-space: nowrap;
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+
+  .dashboard-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .owner-main-content {
+    padding: 16px 14px;
+  }
+
+  .owner-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .owner-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .conductor-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wizard-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 
