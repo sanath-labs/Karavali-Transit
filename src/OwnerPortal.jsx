@@ -25,7 +25,6 @@ import {
   Share2,
   ShieldCheck,
   Trash2,
-  Upload,
   Users,
   X,
 } from 'lucide-react'
@@ -92,8 +91,6 @@ export default function OwnerPortal({
     bus_name: 'Shri Durga Prasad',
     service_type: 'Non AC',
     total_seats: 45,
-    photo_url: '/images/coastal-private-bus.jpg',
-    photo_preview: null,
     route_number: '001',
     origin: 'Mangaluru',
     destination: 'Udupi',
@@ -345,27 +342,7 @@ export default function OwnerPortal({
     }))
   }
 
-  // 8. Photo Upload Handler
-  const handlePhotoUpload = (e) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setWizardError('File size exceeds the 5MB limit.')
-        return
-      }
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        setWizardForm((prev) => ({
-          ...prev,
-          photo_url: event.target?.result,
-          photo_preview: event.target?.result,
-        }))
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  // 9. Wizard Step Validation & Navigation
+  // 8. Wizard Step Validation & Navigation
   const handleNextStep = () => {
     setWizardError('')
     if (wizardStep === 1) {
@@ -429,7 +406,7 @@ export default function OwnerPortal({
         origin: wizardForm.origin.trim(),
         destination: wizardForm.destination.trim(),
         total_seats: Number(wizardForm.total_seats) || 45,
-        photo_url: wizardForm.photo_preview || wizardForm.photo_url || '/images/coastal-private-bus.jpg',
+        photo_url: null,
         departure_time: wizardForm.departure_time,
         frequency: wizardForm.frequency,
         journey_duration: wizardForm.journey_duration,
@@ -482,8 +459,6 @@ export default function OwnerPortal({
       bus_name: '',
       service_type: 'Non AC',
       total_seats: 45,
-      photo_url: '/images/coastal-private-bus.jpg',
-      photo_preview: null,
       route_number: '',
       origin: 'Mangaluru',
       destination: 'Udupi',
@@ -512,8 +487,6 @@ export default function OwnerPortal({
       bus_name: bus.bus_name || '',
       service_type: bus.service_type || 'Non AC',
       total_seats: bus.total_seats || 45,
-      photo_url: bus.photo_url || '/images/coastal-private-bus.jpg',
-      photo_preview: null,
       route_number: bus.route_number || '001',
       origin: bus.origin || 'Mangaluru',
       destination: bus.destination || 'Udupi',
@@ -939,12 +912,6 @@ export default function OwnerPortal({
               <ArrowRight size={14} />
             </button>
           </div>
-
-          <img
-            src="/images/coastal-private-bus.jpg"
-            alt="Karavali-Transit Bus"
-            className="save-confirmation-bus-img"
-          />
         </div>
       </div>
     )
@@ -1002,53 +969,54 @@ export default function OwnerPortal({
 
           {/* STEP 1: Basic Details (Screen 4) */}
           {wizardStep === 1 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 mb-1">
-                    Bus Number <span className="text-rose-500">*</span>
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+                    Bus Registration Number <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     placeholder="KA 19 AB 1234"
                     value={wizardForm.vehicle_number}
                     onChange={(e) => setWizardForm({ ...wizardForm, vehicle_number: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-extrabold text-slate-900 uppercase focus:border-blue-600 outline-none"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-extrabold text-slate-900 uppercase font-mono focus:border-blue-600 outline-none transition"
                   />
-                  <span className="text-[11px] text-slate-400 mt-0.5 block">Example: KA 19 AB 1234</span>
+                  <span className="text-[11px] text-slate-400 mt-1 block">Example: KA 19 AB 1234, KA 20 CD 5678</span>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 mb-1">
-                    Bus Name / Service Name <span className="text-rose-500">*</span>
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+                    Bus / Service Name <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     placeholder="Shri Durga Prasad"
                     value={wizardForm.bus_name}
                     onChange={(e) => setWizardForm({ ...wizardForm, bus_name: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 focus:border-blue-600 outline-none"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 focus:border-blue-600 outline-none transition"
                   />
+                  <span className="text-[11px] text-slate-400 mt-1 block">Travel agency brand or route fleet name</span>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 mb-1">
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
                     Bus Type <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={wizardForm.service_type}
                     onChange={(e) => setWizardForm({ ...wizardForm, service_type: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-white focus:border-blue-600 outline-none"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-white focus:border-blue-600 outline-none transition cursor-pointer"
                   >
-                    <option value="Non AC">Non AC</option>
-                    <option value="AC">AC</option>
-                    <option value="Express">Express</option>
+                    <option value="Non AC">Non AC (Ordinary / Coastal Express)</option>
+                    <option value="AC">AC (Air Conditioned)</option>
+                    <option value="Express">Express (Limited Stop Highway)</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 mb-1">
-                    Total Seats <span className="text-rose-500">*</span>
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+                    Total Passenger Seats <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1056,41 +1024,19 @@ export default function OwnerPortal({
                     max={120}
                     value={wizardForm.total_seats}
                     onChange={(e) => setWizardForm({ ...wizardForm, total_seats: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 focus:border-blue-600 outline-none"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 focus:border-blue-600 outline-none transition"
                   />
+                  <span className="text-[11px] text-slate-400 mt-1 block">Default capacity is 45 seats</span>
                 </div>
               </div>
 
-              {/* Photo Upload Box */}
-              <div>
-                <label className="block text-xs font-extrabold text-slate-700 mb-1">
-                  Bus Photo (Optional)
-                </label>
-                <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center bg-slate-50 flex flex-col items-center justify-center min-h-[260px] relative overflow-hidden group">
-                  {wizardForm.photo_preview || wizardForm.photo_url ? (
-                    <img
-                      src={wizardForm.photo_preview || wizardForm.photo_url}
-                      alt="Bus preview"
-                      className="w-full h-40 object-cover rounded-xl mb-3 shadow-sm"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center mb-3">
-                      <Upload size={22} />
-                    </div>
-                  )}
-
-                  <label className="cursor-pointer text-xs font-extrabold text-blue-600 hover:text-blue-800">
-                    <span>Click to upload or drag and drop</span>
-                    <input
-                      type="file"
-                      accept="image/png, image/jpeg"
-                      onChange={handlePhotoUpload}
-                      className="hidden"
-                    />
-                  </label>
-                  <span className="text-[11px] text-slate-400 mt-1 block">
-                    (JPG, PNG - Max 5MB)
-                  </span>
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                  <Bus size={20} />
+                </div>
+                <div className="text-xs text-slate-600">
+                  <strong className="text-slate-900 block font-bold">Fleet Registration Standards</strong>
+                  <span>Buses registered in Karavali-Transit are linked to live GPS telemetry, automated timetable stops, and encrypted 4-digit conductor check-in PINs.</span>
                 </div>
               </div>
             </div>
@@ -1304,28 +1250,32 @@ export default function OwnerPortal({
           {wizardStep === 4 && (
             <div className="space-y-6">
               {/* Bus Details Summary Box */}
-              <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50 flex flex-col sm:flex-row gap-5 items-center">
-                <img
-                  src={wizardForm.photo_preview || wizardForm.photo_url || '/images/coastal-private-bus.jpg'}
-                  alt="Bus preview"
-                  className="w-48 h-32 object-cover rounded-xl shadow-xs border border-slate-200 shrink-0"
-                />
-                <div className="grid grid-cols-2 gap-3 text-xs flex-1 w-full">
-                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
-                    <span className="text-slate-400 block font-bold text-[10px] uppercase tracking-wider mb-1">Bus Number</span>
-                    <strong className="text-slate-900 text-sm font-black font-mono">{wizardForm.vehicle_number}</strong>
+              <div className="wizard-vehicle-summary-card">
+                <div className="wizard-summary-badge-header">
+                  <div className="wizard-summary-icon">
+                    <Bus size={22} />
                   </div>
-                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
-                    <span className="text-slate-400 block font-bold text-[10px] uppercase tracking-wider mb-1">Bus Name</span>
-                    <strong className="text-slate-900 text-sm font-black">{wizardForm.bus_name}</strong>
+                  <div>
+                    <h4 className="wizard-summary-title">{wizardForm.vehicle_number}</h4>
+                    <p className="wizard-summary-subtitle">{wizardForm.bus_name} • Coastal Fleet</p>
                   </div>
-                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
-                    <span className="text-slate-400 block font-bold text-[10px] uppercase tracking-wider mb-1">Bus Type</span>
-                    <strong className="text-slate-800 font-bold">{wizardForm.service_type}</strong>
+                </div>
+                <div className="wizard-summary-grid">
+                  <div className="wizard-summary-stat-box">
+                    <span className="wizard-summary-stat-label">Bus Number</span>
+                    <strong className="wizard-summary-stat-val font-mono">{wizardForm.vehicle_number}</strong>
                   </div>
-                  <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs">
-                    <span className="text-slate-400 block font-bold text-[10px] uppercase tracking-wider mb-1">Total Seats</span>
-                    <strong className="text-slate-800 font-bold">{wizardForm.total_seats}</strong>
+                  <div className="wizard-summary-stat-box">
+                    <span className="wizard-summary-stat-label">Bus Name</span>
+                    <strong className="wizard-summary-stat-val">{wizardForm.bus_name}</strong>
+                  </div>
+                  <div className="wizard-summary-stat-box">
+                    <span className="wizard-summary-stat-label">Bus Type</span>
+                    <strong className="wizard-summary-stat-val">{wizardForm.service_type}</strong>
+                  </div>
+                  <div className="wizard-summary-stat-box">
+                    <span className="wizard-summary-stat-label">Total Seats</span>
+                    <strong className="wizard-summary-stat-val">{wizardForm.total_seats} Seats</strong>
                   </div>
                 </div>
               </div>
@@ -1566,12 +1516,12 @@ export default function OwnerPortal({
         </header>
 
         {notice && (
-          <div className="mb-6 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="owner-notice-banner">
+            <div className="owner-notice-content">
               <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
               <span>{notice}</span>
             </div>
-            <button type="button" onClick={() => setNotice('')} className="text-emerald-700 hover:text-emerald-900 font-bold">
+            <button type="button" onClick={() => setNotice('')} className="owner-notice-close" title="Dismiss notice">
               ✕
             </button>
           </div>
@@ -1718,7 +1668,6 @@ export default function OwnerPortal({
                   <thead>
                     <tr>
                       <th style={{ width: '40px' }}>#</th>
-                      <th style={{ width: '90px' }}>Bus Photo</th>
                       <th>Bus Number</th>
                       <th>Bus Name</th>
                       <th>Type</th>
@@ -1751,13 +1700,6 @@ export default function OwnerPortal({
                             onClick={() => setSelectedBusForView(bus)}
                           >
                             <td className="font-bold text-slate-400">{idx + 1}</td>
-                            <td>
-                              <img
-                                src={bus.photo_url || '/images/coastal-private-bus.jpg'}
-                                alt={bus.bus_name}
-                                className="w-14 h-9 object-cover rounded-lg shadow-xs border border-slate-200"
-                              />
-                            </td>
                             <td className="font-mono font-black text-slate-900 text-xs">
                               {bus.vehicle_number}
                             </td>
@@ -1847,24 +1789,21 @@ export default function OwnerPortal({
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                      {/* Left: Thumbnail & Specs */}
+                      {/* Left: Vehicle Badge & Specs */}
                       <div>
-                        <img
-                          src={selectedBusForView.photo_url || '/images/coastal-private-bus.jpg'}
-                          alt={selectedBusForView.bus_name}
-                          className="view-bus-panel-img mb-3"
-                        />
-                        <div className="mb-3">
-                          <h4 className="text-base font-black text-slate-900 font-mono m-0">
-                            {selectedBusForView.vehicle_number}
-                          </h4>
-                          <p className="text-xs font-extrabold text-slate-600 m-0 mt-0.5">
-                            {selectedBusForView.bus_name}
-                          </p>
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold mt-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            Active
-                          </span>
+                        <div className="view-bus-hero-card">
+                          <div className="view-bus-hero-icon">
+                            <Bus size={24} />
+                          </div>
+                          <div className="view-bus-hero-meta">
+                            <h4 className="view-bus-hero-number">
+                              {selectedBusForView.vehicle_number}
+                            </h4>
+                            <p className="view-bus-hero-name">
+                              {selectedBusForView.bus_name}
+                            </p>
+                            <span className="conductor-status-pill mt-1">Active</span>
+                          </div>
                         </div>
 
                         <div className="space-y-1.5 text-xs">
@@ -2156,59 +2095,81 @@ export default function OwnerPortal({
 
         {/* TAB 3: CONDUCTORS */}
         {activeTab === 'conductors' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="space-y-6">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
-                <h2 className="text-base font-extrabold text-slate-900 m-0">Authorized Conductors</h2>
-                <p className="text-xs text-slate-500 m-0">Manage duty credentials and bus assignments</p>
+                <h2 className="text-xl font-black text-slate-900 m-0">Authorized Conductors</h2>
+                <p className="text-xs text-slate-500 m-0 mt-0.5 font-medium">Manage duty credentials and bus assignments across your fleet</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowConductorModal(true)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow flex items-center gap-1.5 cursor-pointer"
+                className="btn-add-conductor"
               >
                 <Plus size={15} />
-                <span>+ Authorize Conductor</span>
+                <span>Authorize Conductor</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {conductors.map((cond) => (
-                <div key={cond.conductor_id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                        <Users size={18} />
-                      </div>
-                      <div>
-                        <strong className="text-sm font-extrabold text-slate-900 block">{cond.name}</strong>
-                        <span className="text-xs text-slate-500 font-semibold">{cond.phone}</span>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                      {cond.status || 'Active'}
-                    </span>
-                  </div>
-
-                  <div className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                    Assigned Bus:{' '}
-                    <strong>
-                      {cond.bus_name ? `${cond.bus_name} (${cond.vehicle_number})` : 'Unassigned (Standby)'}
-                    </strong>
-                  </div>
-
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteConductor(cond.conductor_id, cond.name)}
-                      className="text-xs text-rose-600 hover:text-rose-800 font-bold cursor-pointer"
-                    >
-                      Revoke Authorization
-                    </button>
-                  </div>
+            {conductors.length === 0 ? (
+              <div className="p-12 text-center bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-100">
+                  <Users size={32} />
                 </div>
-              ))}
-            </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 m-0">No conductors authorized yet</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
+                    Authorize certified crew conductors to grant duty access and mobile terminal sign-in for your fleet.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowConductorModal(true)}
+                  className="btn-add-conductor mx-auto"
+                >
+                  <Plus size={15} />
+                  <span>Authorize First Conductor</span>
+                </button>
+              </div>
+            ) : (
+              <div className="conductor-cards-grid">
+                {conductors.map((cond) => (
+                  <div key={cond.conductor_id} className="conductor-card">
+                    <div className="conductor-card-header">
+                      <div className="conductor-avatar-block">
+                        <div className="conductor-avatar">
+                          {cond.name?.charAt(0) || 'C'}
+                        </div>
+                        <div className="conductor-meta">
+                          <strong className="conductor-name">{cond.name}</strong>
+                          <span className="conductor-phone">{cond.phone}</span>
+                        </div>
+                      </div>
+                      <span className="conductor-status-pill">
+                        {cond.status || 'Active'}
+                      </span>
+                    </div>
+
+                    <div className="conductor-assignment-box">
+                      <span>Assigned Bus:</span>
+                      <span className="conductor-assignment-value">
+                        {cond.bus_name ? `${cond.bus_name} (${cond.vehicle_number})` : 'Unassigned (Standby)'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteConductor(cond.conductor_id, cond.name)}
+                        className="btn-revoke-conductor"
+                      >
+                        Revoke Authorization
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -2311,50 +2272,51 @@ export default function OwnerPortal({
 
       {/* Authorize Conductor Modal */}
       {showConductorModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 m-0">Authorize New Conductor</h3>
+        <div className="conductor-modal-backdrop" onClick={() => setShowConductorModal(false)}>
+          <div className="conductor-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="conductor-modal-header">
+              <h3 className="conductor-modal-title">Authorize New Conductor</h3>
               <button
                 type="button"
                 onClick={() => setShowConductorModal(false)}
-                className="text-slate-400 hover:text-slate-700"
+                className="conductor-modal-close"
+                title="Close"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveConductor} className="space-y-4 text-xs">
-              <div>
-                <label className="font-extrabold text-slate-700 block mb-1">Full Name</label>
+            <form onSubmit={handleSaveConductor} className="conductor-modal-form">
+              <div className="conductor-modal-field">
+                <label className="conductor-modal-label">Full Name</label>
                 <input
                   type="text"
                   placeholder="e.g. Manjunath Shetty"
                   value={conductorForm.name}
                   onChange={(e) => setConductorForm({ ...conductorForm, name: e.target.value })}
                   required
-                  className="w-full p-2.5 rounded-xl border border-slate-300 font-bold focus:border-blue-600 outline-none"
+                  className="conductor-modal-input"
                 />
               </div>
 
-              <div>
-                <label className="font-extrabold text-slate-700 block mb-1">Mobile Phone Number</label>
+              <div className="conductor-modal-field">
+                <label className="conductor-modal-label">Mobile Phone Number</label>
                 <input
                   type="text"
                   placeholder="e.g. 98451 12345"
                   value={conductorForm.phone}
                   onChange={(e) => setConductorForm({ ...conductorForm, phone: e.target.value })}
                   required
-                  className="w-full p-2.5 rounded-xl border border-slate-300 font-bold focus:border-blue-600 outline-none"
+                  className="conductor-modal-input"
                 />
               </div>
 
-              <div>
-                <label className="font-extrabold text-slate-700 block mb-1">Assign to Bus (Optional)</label>
+              <div className="conductor-modal-field">
+                <label className="conductor-modal-label">Assign to Bus (Optional)</label>
                 <select
                   value={conductorForm.assigned_bus_id}
                   onChange={(e) => setConductorForm({ ...conductorForm, assigned_bus_id: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 font-bold bg-white focus:border-blue-600 outline-none"
+                  className="conductor-modal-select"
                 >
                   <option value="">Unassigned (Standby Pool)</option>
                   {buses.map((b) => (
@@ -2365,18 +2327,18 @@ export default function OwnerPortal({
                 </select>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              <div className="conductor-modal-actions">
                 <button
                   type="button"
                   onClick={() => setShowConductorModal(false)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 font-bold rounded-xl hover:bg-slate-50"
+                  className="btn-modal-cancel"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={conductorSaving}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow"
+                  className="btn-modal-submit"
                 >
                   {conductorSaving ? 'Saving...' : 'Authorize Conductor'}
                 </button>
@@ -2388,11 +2350,11 @@ export default function OwnerPortal({
       {/* Planned Stop Timetable Modal */}
       {selectedBusForTimetable && (
         <div
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+          className="timetable-modal-backdrop"
           onClick={() => setSelectedBusForTimetable(null)}
         >
           <div
-            className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto"
+            className="timetable-modal-card"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between">
