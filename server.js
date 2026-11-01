@@ -425,6 +425,13 @@ app.patch('/api/owner/buses/:busId/pin', requireOwnerSession, async (req, res) =
     activeBuses[busId].conductor_pin = pin
   }
 
+  const busMatched = ownedBuses.find((b) => b.bus_id === busId)
+  await insertOwnerActivity(
+    req.owner.email,
+    'PIN_UPDATED',
+    `Updated conductor PIN for vehicle ${busMatched?.vehicle_number || busId}`
+  )
+
   res.json({ success: true, message: 'Conductor PIN updated.' })
 })
 
