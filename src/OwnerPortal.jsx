@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  Download,
   Edit3,
   Eye,
   EyeOff,
@@ -634,6 +635,37 @@ export default function OwnerPortal({
     } catch (err) {
       setNotice(`Server error: ${err.message}`)
     }
+  }
+
+  // 15. Export Fleet Schedule to CSV
+  const handleExportFleetCsv = () => {
+    if (!buses || buses.length === 0) {
+      alert('No buses to export yet.')
+      return
+    }
+    const headers = ['Bus Number', 'Bus Name', 'Type', 'Total Seats', 'Route Number', 'Origin', 'Destination', 'Departure Time', 'Frequency', 'Stops Count']
+    const rows = buses.map((b) => [
+      `"${b.vehicle_number || ''}"`,
+      `"${b.bus_name || ''}"`,
+      `"${b.service_type || 'Non AC'}"`,
+      b.total_seats || 45,
+      `"${b.route_number || '001'}"`,
+      `"${b.origin || 'Mangaluru'}"`,
+      `"${b.destination || 'Udupi'}"`,
+      `"${b.departure_time || '06:30 AM'}"`,
+      `"${b.frequency || 'Daily'}"`,
+      b.stops?.length || 0,
+    ])
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `karavali_fleet_schedule_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   // =========================================================================
@@ -2274,6 +2306,22 @@ export default function OwnerPortal({
                 <strong className="text-2xl font-black text-indigo-700 block mt-1">98.4% On Schedule</strong>
                 <span className="text-[11px] text-slate-500 mt-1 block">Based on GPS corridor telemetry</span>
               </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 m-0">Export Fleet Timetable</h3>
+                <p className="text-xs text-slate-500 m-0 mt-0.5">Download complete schedule, intermediate stops, and bus capacity as CSV spreadsheet</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExportFleetCsv}
+                className="btn-add-conductor"
+                title="Download CSV"
+              >
+                <Download size={15} />
+                <span>Export Fleet Schedule (CSV)</span>
+              </button>
             </div>
           </div>
         )}
