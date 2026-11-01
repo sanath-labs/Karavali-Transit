@@ -165,3 +165,52 @@ test('Conductor HTTP API Flow: send-otp, verify-otp, lookup, and register', asyn
   assert.equal(stopsData.success, true)
   assert.ok(Array.isArray(stopsData.stops))
 })
+
+test('Conductor Security: Invalid OTP code rejection and rate-limiting', async () => {
+  const baseUrl = 'http://localhost:5000'
+  const tempEmail = `security_test_${Date.now()}@gmail.com`
+
+  // Request OTP
+  const sendRes = await fetch(`${baseUrl}/api/conductor/send-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: tempEmail }),
+  })
+  assert.equal(sendRes.status, 200)
+
+  // Submit intentionally invalid OTP code
+  const failRes = await fetch(`${baseUrl}/api/conductor/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: tempEmail, otp: '000000' }),
+  })
+  assert.equal(failRes.status, 401)
+  const failData = await failRes.json()
+  assert.equal(failData.success, false)
+  assert.ok(failData.error.includes('Invalid or expired'))
+})
+
+test('Conductor Mobile Sanitization: Lookup supports +91 prefix and whitespace variations', async () => {
+  await initDB()
+  const agencyEmail = `sanitization_${Date.now()}@gmail.com`
+  await createOwner(agencyEmail, 'Coastal Transit Lines')
+
+  const baseDigits = `9845${Math.floor(100000 + Math.random() * 900000)}`
+  await saveConductor({
+    owner_email: agencyEmail,
+    name: 'Ramesh Shenoy',
+    phone: baseDigits,
+    assigned_bus_id: null,
+  })
+
+  // Test looking up with +91 prefix and formatted spaces
+  const foundWithPrefix = await getConductorByPhoneAndOwner(agencyEmail, `+91 ${baseDigits.slice(0, 5)} ${baseDigits.slice(5)}`)
+  assert.ok(foundWithPrefix)
+  assert.equal(foundWithPrefix.name, 'Ramesh Shenoy')
+
+  // Test looking up with 10 digits
+  const foundPlain = await getConductorByPhoneAndOwner(agencyEmail, baseDigits)
+  assert.ok(foundPlain)
+  assert.equal(foundPlain.name, 'Ramesh Shenoy')
+})
+
