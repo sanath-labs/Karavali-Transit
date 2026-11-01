@@ -17,7 +17,7 @@ import {
   updateBus,
   deleteBus,
 } from '../db.js'
-import { matchesDestination } from '../src/transitUtils.js'
+import { matchesDestination, isValidIndianMobile, formatIndianMobile } from '../src/transitUtils.js'
 
 test('Owner Registration & Authentication: DB persistence and retrieval', async () => {
   await initDB()
@@ -313,6 +313,52 @@ test('Edit Bus and Delete Bus: Transactional updates, route stops replacement, a
   assert.ok(unlinkedConductor)
   assert.equal(unlinkedConductor.assigned_bus_id, null)
 })
+
+test('Conductor Mobile Formatting & Photo-free Bus Registration', async () => {
+  await initDB()
+
+  // 1. Mobile phone validation & formatting
+  assert.equal(isValidIndianMobile('9845112345'), true)
+  assert.equal(isValidIndianMobile('+91 98451 12345'), true)
+  assert.equal(isValidIndianMobile('09845112345'), true)
+  assert.equal(isValidIndianMobile('12345'), false)
+  assert.equal(isValidIndianMobile('5555512345'), false) // Must start with 6-9
+  assert.equal(formatIndianMobile('9845112345'), '+91 98451 12345')
+
+  // 2. Bus registration without photo
+  const testOwner = `photo_free_owner_${Date.now()}@gmail.com`
+  await createOwner({ email: testOwner, agency_name: 'Clean Transit Co' })
+
+  const uniqueVeh = `KA 19 ZZ ${Math.floor(1000 + Math.random() * 9000)}`
+  const savedBus = await saveBus({
+    bus_name: 'No Photo Express',
+    vehicle_number: uniqueVeh,
+    route_number: '999',
+    service_type: 'Non AC',
+    origin: 'Mangaluru',
+    destination: 'Udupi',
+    total_seats: 50,
+    photo_url: null, // explicitly null
+    departure_time: '08:00 AM',
+    frequency: 'Daily',
+    journey_duration: '2 hours',
+    owner_email: testOwner,
+    stops: [
+      { stop_name: 'Mangaluru', planned_arrival: '08:00 AM' },
+      { stop_name: 'Udupi', planned_arrival: '10:00 AM' },
+    ],
+  })
+
+  assert.ok(savedBus)
+  assert.ok(savedBus.bus_id)
+  assert.equal(savedBus.vehicle_number, uniqueVeh)
+  assert.equal(savedBus.owner_email, testOwner)
+
+  const retrieved = await getBusById(savedBus.bus_id, testOwner)
+  assert.ok(retrieved)
+  assert.equal(retrieved.bus_name, 'No Photo Express')
+})
+
 
 
 
