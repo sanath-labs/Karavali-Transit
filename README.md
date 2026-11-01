@@ -239,6 +239,36 @@ The Fleet Owner Command Center provides private fleet agencies with complete ope
 
 ---
 
+## 📱 Conductor Portal & Operations Terminal
+
+The Conductor Portal provides a secure, streamlined mobile operations workflow for crew staff and drivers operating private buses along coastal corridors:
+
+```mermaid
+flowchart LR
+    S1["Step 1: Agency Email Entry"] -->|"Send 6-Digit OTP"| S2["Step 2: Email OTP Verification"]
+    S2 -->|"Agency Bearer Token"| S3["Step 3: Conductor Mobile Entry\n(Direct — No Mobile OTP)"]
+    S3 -->|"Status Check"| S4{"Existing Crew?"}
+    S4 -->|"Yes"| S5["Step 5: Duty Dashboard"]
+    S4 -->|"No"| S4b["Step 4: Fast Registration & Bus Assignment"]
+    S4b --> S5
+```
+
+### Authentication Workflow
+1. **STEP 1 — Travel Agency Email Entry**: Conductor inputs registered fleet owner Gmail (`POST /api/conductor/send-otp`).
+2. **STEP 2 — Email OTP Verification**: 6-digit numeric OTP validated with countdown timer and rate-limiting (`POST /api/conductor/verify-otp`).
+3. **STEP 3 — Conductor Mobile Entry**: 10-digit Indian mobile number input (`+91`). **No mobile OTP verification is required**, ensuring instantaneous field check-ins.
+4. **STEP 4 — Conductor Lookup / Quick Registration**:
+   - Existing conductors are identified instantly from the database and prompt bus confirmation (`POST /api/conductor/lookup`).
+   - New conductors provide full name and select assigned bus from the agency fleet, persisting in PostgreSQL (`POST /api/conductor/register`).
+5. **STEP 5 — Conductor Operations Dashboard**:
+   - **One-Tap Shift & Live GPS**: Native geolocation streams coordinates via WebSocket `update_location` with NH-66 corridor fallback simulator.
+   - **Real-Time Occupancy Controller**: Commuter counter (`+1`, `-1`, `+5`, `-5`) and status toggle (*Seats Available*, *Standing Allowed*, *Overcrowded*).
+   - **Route Stops Progression Checklist**: Live timetable stops progression tracking.
+   - **Corridor Incident Broadcaster**: Push immediate delay and weather alerts to passenger radar screens.
+   - **Duty Ledger & Waybill**: Conductor shift summary modal with complete audit logging.
+
+---
+
 ## 🧪 60-Second Live Demonstration Guide
 
 To experience real-time synchronization between Conductor and Passenger:
