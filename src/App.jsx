@@ -842,7 +842,7 @@ function App() {
   return (
     <main className="transit-app min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
       {/* Passenger landing header / existing operational header */}
-      {role === 'passenger' && passengerStep === 1 ? (
+      {role === 'owner' ? null : role === 'passenger' && passengerStep === 1 ? (
         <header className="landing-header">
           <button className="landing-brand" type="button" onClick={() => { setRole('passenger'); setPassengerStep(1); setMenuOpen(false) }} aria-label="Karavali-Transit home">
             <span className="landing-brand-icon"><Bus size={42} strokeWidth={2.4} /></span>
@@ -2112,6 +2112,10 @@ function App() {
             setIsOwnerAuthenticated={setIsOwnerAuthenticated}
             ownerToken={ownerToken}
             setOwnerToken={setOwnerToken}
+            onExitToPassenger={() => {
+              setRole('passenger')
+              setPassengerStep(1)
+            }}
             onSwitchToConductor={(vehicleNumber, pin) => {
               setConductorVehicleInput(vehicleNumber)
               setConductorPinInput(pin)

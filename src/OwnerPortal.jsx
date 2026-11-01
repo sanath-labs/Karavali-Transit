@@ -40,6 +40,7 @@ export default function OwnerPortal({
   ownerToken,
   setOwnerToken,
   onSwitchToConductor,
+  onExitToPassenger,
 }) {
   // Auth state
   const [authMode, setAuthMode] = useState('signup') // 'signup' | 'login'
@@ -706,6 +707,19 @@ export default function OwnerPortal({
                   </span>
                 )}
               </div>
+
+              {onExitToPassenger && (
+                <div className="pt-3 border-t border-slate-100 text-center">
+                  <button
+                    type="button"
+                    onClick={onExitToPassenger}
+                    className="text-xs font-bold text-slate-500 hover:text-blue-600 inline-flex items-center gap-1.5 cursor-pointer transition"
+                  >
+                    <ArrowLeft size={14} />
+                    <span>Back to Passenger Radar</span>
+                  </button>
+                </div>
+              )}
             </form>
           </div>
         ) : (
@@ -1483,10 +1497,23 @@ export default function OwnerPortal({
           </button>
         </nav>
 
-        <button type="button" onClick={handleLogout} className="owner-sidebar-logout">
-          <LogOut size={17} />
-          <span>Logout</span>
-        </button>
+        <div className="space-y-1">
+          <button type="button" onClick={handleLogout} className="owner-sidebar-logout">
+            <LogOut size={17} />
+            <span>Logout</span>
+          </button>
+          {onExitToPassenger && (
+            <button
+              type="button"
+              onClick={onExitToPassenger}
+              className="owner-sidebar-logout text-slate-400 hover:text-white"
+              title="Return to public Passenger Radar"
+            >
+              <ArrowLeft size={16} />
+              <span>Passenger Radar</span>
+            </button>
+          )}
+        </div>
       </aside>
 
       {/* Main Content Area */}
