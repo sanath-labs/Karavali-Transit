@@ -2299,15 +2299,22 @@ export default function OwnerPortal({
 
       {/* Authorize Conductor Modal */}
       {showConductorModal && (
-        <div className="conductor-modal-backdrop" onClick={() => setShowConductorModal(false)}>
-          <div className="conductor-modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="conductor-modal-backdrop" onClick={() => setShowConductorModal(false)} role="presentation">
+          <div
+            className="conductor-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="conductor-modal-heading"
+          >
             <div className="conductor-modal-header">
-              <h3 className="conductor-modal-title">Authorize New Conductor</h3>
+              <h3 id="conductor-modal-heading" className="conductor-modal-title">Authorize New Conductor</h3>
               <button
                 type="button"
                 onClick={() => setShowConductorModal(false)}
                 className="conductor-modal-close"
                 title="Close"
+                aria-label="Close modal"
               >
                 <X size={18} />
               </button>
@@ -2379,14 +2386,18 @@ export default function OwnerPortal({
         <div
           className="timetable-modal-backdrop"
           onClick={() => setSelectedBusForTimetable(null)}
+          role="presentation"
         >
           <div
             className="timetable-modal-card"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="timetable-modal-heading"
           >
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="text-base font-black text-slate-900 m-0">
+                <h3 id="timetable-modal-heading" className="text-base font-black text-slate-900 m-0">
                   {selectedBusForTimetable.bus_name}
                 </h3>
                 <div className="flex items-center gap-2 mt-0.5 text-xs text-blue-700 font-extrabold">
