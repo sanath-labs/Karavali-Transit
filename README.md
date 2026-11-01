@@ -6,7 +6,7 @@
 [![Leaflet](https://img.shields.io/badge/Leaflet-1.9-199900.svg)](https://leafletjs.com/)
 [![Socket.IO](https://img.shields.io/badge/Socket.IO-4.8-010101.svg)](https://socket.io/)
 [![Express](https://img.shields.io/badge/Express-5.3-gray.svg)](https://expressjs.com/)
-[![SQLite](https://img.shields.io/badge/SQLite-transit.db-003B57.svg)](https://www.sqlite.org/)
+[![SQLite](https://img.shields.io/badge/Database-PostgreSQL%20%7C%20SQLite-336791.svg)](https://www.postgresql.org/)
 [![Oxlint: Passed](https://img.shields.io/badge/Oxlint-0%20warnings%200%20errors-success.svg)](https://oxc.rs/)
 
 > **Official Coastal Karnataka Real-Time Public Bus Tracking & Telemetry System**  
@@ -224,6 +224,18 @@ npm test        # Runs database smoke tests and passenger journey suite
 npm run lint    # Runs Oxlint inspection (0 warnings, 0 errors)
 npm run build   # Verifies production Vite bundle build
 ```
+
+---
+
+## 🏢 Fleet Owner Command Center & Bus Management
+
+The Fleet Owner Command Center provides private fleet agencies with complete operational autonomy:
+
+- **Authentication & Security:** Email OTP authentication with 12-hour encrypted bearer token sessions.
+- **Transactional PostgreSQL Bus Wizard:** 4-step wizard saving bus specifications, route corridors, ordered intermediate stops, and timetables inside an atomic PostgreSQL database transaction (`BEGIN`, `COMMIT`, `ROLLBACK`).
+- **Owner Dashboard (My Buses):** Responsive bus management table with real-time tracking indicators, view details panel with stops timeline, and prefilled modal editors.
+- **Conductor Authorization & PIN Lifecycle:** Grant duty authorization, validate Indian mobile numbers, and rotate encrypted 4-digit check-in PINs.
+- **Fleet Schedule Export:** Download complete fleet timetables and intermediate stops as structured CSV spreadsheets.
 
 ---
 
