@@ -16,9 +16,12 @@ import {
   Navigation,
   Phone,
   Plus,
+  Printer,
   Radio,
   ShieldCheck,
   Users,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react'
 import { apiUrl } from './api.js'
@@ -69,9 +72,34 @@ export default function ConductorPortal({
   const [shiftDurationMinutes, setShiftDurationMinutes] = useState(0)
   const [showShiftSummaryModal, setShowShiftSummaryModal] = useState(false)
   const [geoWatchId, setGeoWatchId] = useState(null)
+  const [currentSpeed, setCurrentSpeed] = useState(42)
+  const [currentHeading, setCurrentHeading] = useState(350)
+  const [isAudioFeedbackEnabled, setIsAudioFeedbackEnabled] = useState(true)
 
   const otpRefs = [useRef(null), useRef(null), useRef(null), useRef(null), useRef(null), useRef(null)]
   const simIndexRef = useRef(0)
+
+  // Subtle web audio feedback synthesizer for duty events
+  const playDutyChime = (frequency = 660, duration = 0.15) => {
+    if (!isAudioFeedbackEnabled || typeof window === 'undefined') return
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext
+      if (!AudioCtx) return
+      const audioCtx = new AudioCtx()
+      const osc = audioCtx.createOscillator()
+      const gain = audioCtx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(frequency, audioCtx.currentTime)
+      gain.gain.setValueAtTime(0.06, audioCtx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration)
+      osc.connect(gain)
+      gain.connect(audioCtx.destination)
+      osc.start()
+      osc.stop(audioCtx.currentTime + duration)
+    } catch {
+      // Audio playback skipped
+    }
+  }
 
   // Resend Countdown Timer
   useEffect(() => {
@@ -331,6 +359,7 @@ export default function ConductorPortal({
         setIsOnShift(true)
         setShiftStartTime(startedAt)
         setShiftData(data.shift)
+        playDutyChime(880, 0.2)
         setNotice(`Shift started for ${activeBus.vehicle_number}. GPS is streaming live!`)
 
         // Start Geolocation Telemetry Streaming
@@ -362,13 +391,17 @@ export default function ConductorPortal({
     if ('geolocation' in navigator) {
       const id = navigator.geolocation.watchPosition(
         (position) => {
+          const speedKmH = Math.round((position.coords.speed || 42) * 3.6)
+          const headingDeg = position.coords.heading || 350
+          setCurrentSpeed(speedKmH)
+          setCurrentHeading(headingDeg)
           const telemetryPayload = {
             bus_id: bus.bus_id,
             vehicle_number: bus.vehicle_number,
             lat: position.coords.latitude,
             lng: position.coords.longitude,
-            speed: Math.round((position.coords.speed || 42) * 3.6),
-            heading: position.coords.heading || 0,
+            speed: speedKmH,
+            heading: headingDeg,
             crowd_status: crowdStatus,
             passenger_count: passengerCount,
             timestamp: Date.now(),
@@ -394,6 +427,8 @@ export default function ConductorPortal({
       const nextIdx = (simIndexRef.current + 1) % coastalWaypoints.length
       simIndexRef.current = nextIdx
       const wp = coastalWaypoints[nextIdx]
+      setCurrentSpeed(wp.speed)
+      setCurrentHeading(350)
       const telemetryPayload = {
         bus_id: bus.bus_id,
         vehicle_number: bus.vehicle_number,
@@ -420,12 +455,14 @@ export default function ConductorPortal({
       }
       setGeoWatchId(null)
     }
+    playDutyChime(520, 0.25)
     setShowShiftSummaryModal(true)
   }
 
   const handleConfirmEndShift = () => {
     setIsOnShift(false)
     setShowShiftSummaryModal(false)
+    playDutyChime(440, 0.3)
     setNotice(`Shift for ${activeBus?.vehicle_number} ended successfully. Ledger saved.`)
   }
 
@@ -434,6 +471,7 @@ export default function ConductorPortal({
     const maxSeats = activeBus?.total_seats || 45
     const newCount = Math.max(0, Math.min(maxSeats + 25, passengerCount + delta))
     setPassengerCount(newCount)
+    playDutyChime(700, 0.08)
 
     // Dynamic Occupancy Thresholds
     let newStatus = 'Seats Available'
@@ -458,6 +496,7 @@ export default function ConductorPortal({
   // Broadcast Incident Alerts
   const handleBroadcastAlert = (type, text) => {
     setIncidentNotice(`Broadcasting: ${text}`)
+    playDutyChime(350, 0.3)
     if (socket && socket.connected && activeBus) {
       socket.emit('send_alert', {
         type,
@@ -470,6 +509,7 @@ export default function ConductorPortal({
   }
 
   const handleToggleStop = (stopId) => {
+    playDutyChime(780, 0.1)
     setPassedStops((prev) => ({
       ...prev,
       [stopId]: !prev[stopId],
@@ -896,6 +936,14 @@ export default function ConductorPortal({
             </div>
             <button
               type="button"
+              onClick={() => setIsAudioFeedbackEnabled(!isAudioFeedbackEnabled)}
+              className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 transition cursor-pointer"
+              title={isAudioFeedbackEnabled ? 'Audio Feedback Enabled (Click to Mute)' : 'Audio Feedback Muted (Click to Enable)'}
+            >
+              {isAudioFeedbackEnabled ? <Volume2 size={15} className="text-blue-600" /> : <VolumeX size={15} className="text-slate-400" />}
+            </button>
+            <button
+              type="button"
               onClick={handleLogout}
               className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
               title="End shift and logout"
@@ -962,8 +1010,11 @@ export default function ConductorPortal({
               <strong className="text-slate-900 font-black">{maxSeats} Passenger Seats</strong>
             </div>
             <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl">
-              <span className="text-slate-400 block font-bold text-[10px] uppercase">Departure Time</span>
-              <strong className="text-slate-900 font-black">{activeBus?.departure_time || '06:30 AM'}</strong>
+              <div className="flex items-center gap-1">
+                <Compass size={11} className="text-slate-400" />
+                <span className="text-slate-400 block font-bold text-[10px] uppercase">Telemetry Speed</span>
+              </div>
+              <strong className="text-slate-900 font-black">{isOnShift ? `${currentSpeed} km/h • ${currentHeading}° N` : '0 km/h (Parked)'}</strong>
             </div>
             <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl">
               <div className="flex items-center gap-1">
@@ -1257,21 +1308,31 @@ export default function ConductorPortal({
                   )}
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 flex-wrap">
                   <button
                     type="button"
-                    onClick={() => setShowShiftSummaryModal(false)}
-                    className="btn-modal-cancel"
+                    onClick={() => window.print()}
+                    className="py-2 px-3 rounded-xl border border-slate-300 hover:bg-slate-100 font-extrabold text-xs text-slate-700 flex items-center gap-1.5 transition cursor-pointer"
                   >
-                    Resume Duty
+                    <Printer size={14} />
+                    <span>Print Waybill</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmEndShift}
-                    className="btn-modal-submit"
-                  >
-                    Confirm End Duty
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowShiftSummaryModal(false)}
+                      className="btn-modal-cancel"
+                    >
+                      Resume Duty
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmEndShift}
+                      className="btn-modal-submit"
+                    >
+                      Confirm End Duty
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
