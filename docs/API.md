@@ -78,6 +78,14 @@ This document details the REST endpoints, SQL database schemas, and Socket.IO re
   - Development mode returns the generated OTP for local testing. Production OTP delivery is unavailable until an email provider is configured.
   - Public bus and telemetry responses omit owner email and conductor PIN fields.
 
+  ### 1.6 Conductor Portal REST Endpoints
+  - `POST /api/conductor/send-otp`: Sends 6-digit verification code to the travel agency's registered Gmail address.
+  - `POST /api/conductor/verify-otp`: Validates OTP code, resets attempt counter, and grants short-lived verified agency token.
+  - `POST /api/conductor/lookup`: Fast mobile lookup (+91 10-digit) querying PostgreSQL conductors table under the verified agency. Returns exists: true/false, conductor profile, and agency fleet buses.
+  - `POST /api/conductor/register`: Fast self-registration for new crew members, recording the assignment and logging an activity audit trail.
+  - `POST /api/conductor/start-duty`: Initializes shift record in driver_shifts and marks bus as active on fleet radar.
+  - `GET /api/conductor/buses/:busId/stops`: Fetches ordered route stops and planned arrival times from bus_route_stops.
+
 ---
 
 ## 2. WebSocket Events (Socket.IO)
