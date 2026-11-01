@@ -2241,44 +2241,66 @@ export default function OwnerPortal({
         {activeTab === 'routes' && (
           <div className="space-y-4">
             <h2 className="text-base font-extrabold text-slate-900 m-0">Fleet Corridors &amp; Routes</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {buses.map((bus) => (
-                <div key={bus.bus_id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">
-                      Route #{bus.route_number || '001'}
-                    </span>
-                    <strong className="text-sm font-extrabold text-slate-900">{bus.bus_name}</strong>
-                  </div>
-
-                  <div className="text-xs font-extrabold text-slate-800 flex items-center gap-2">
-                    <MapPin size={15} className="text-emerald-600" />
-                    <span>{bus.origin || 'Mangaluru'}</span>
-                    <span className="text-slate-400">➔</span>
-                    <MapPin size={15} className="text-rose-600" />
-                    <span>{bus.destination || 'Udupi'}</span>
-                  </div>
-
-                  {bus.stops?.length > 0 && (
-                    <div className="pt-2 border-t border-slate-100">
-                      <span className="text-[10px] uppercase font-black text-slate-400 block mb-1">
-                        Planned Intermediate Stops
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {bus.stops.map((s, idx) => (
-                          <span
-                            key={idx}
-                            className="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700"
-                          >
-                            {s.stop_name} ({s.planned_arrival})
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+            {buses.length === 0 ? (
+              <div className="p-12 text-center bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-100">
+                  <Share2 size={32} />
                 </div>
-              ))}
-            </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 m-0">No routes configured yet</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
+                    Register a bus with origin, destination, and intermediate stops to view corridor telemetry and progression.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddNewBus}
+                  className="btn-add-conductor mx-auto"
+                >
+                  <Plus size={15} />
+                  <span>Register First Route</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {buses.map((bus) => (
+                  <div key={bus.bus_id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">
+                        Route #{bus.route_number || '001'}
+                      </span>
+                      <strong className="text-sm font-extrabold text-slate-900">{bus.bus_name}</strong>
+                    </div>
+
+                    <div className="text-xs font-extrabold text-slate-800 flex items-center gap-2">
+                      <MapPin size={15} className="text-emerald-600" />
+                      <span>{bus.origin || 'Mangaluru'}</span>
+                      <span className="text-slate-400">➔</span>
+                      <MapPin size={15} className="text-rose-600" />
+                      <span>{bus.destination || 'Udupi'}</span>
+                    </div>
+
+                    {bus.stops?.length > 0 && (
+                      <div className="pt-2 border-t border-slate-100">
+                        <span className="text-[10px] uppercase font-black text-slate-400 block mb-1">
+                          Planned Intermediate Stops
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {bus.stops.map((s, idx) => (
+                            <span
+                              key={idx}
+                              className="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700"
+                            >
+                              {s.stop_name} ({s.planned_arrival})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
