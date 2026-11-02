@@ -45,8 +45,16 @@ export function matchesConductorPin(expectedPin, enteredPin) {
 }
 
 export function toPublicBus(bus) {
+  if (!bus) return null
   const publicBus = { ...bus }
   delete publicBus.conductor_pin
   delete publicBus.owner_email
+  delete publicBus.driver_phone
+  delete publicBus.fare
+  delete publicBus.ticket_fare
+  delete publicBus.ticket_price
+  delete publicBus.price
+  delete publicBus.est_fare
+  delete publicBus.stage_fare
   return publicBus
 }
