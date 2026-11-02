@@ -9,17 +9,21 @@ import {
   deleteBus,
   deleteConductor,
   getActiveShifts,
+  getAllBusStops,
   getBuses,
   getBusesByOwner,
   getBusById,
   getBusByVehicleNumber,
   getBusRouteStops,
+  getBusRouteWithStops,
   getConductorByPhoneAndOwner,
   getConductorsByOwner,
   getDatabaseType,
+  getNearbyBusStops,
   getOwnerActivities,
   getOwnerByEmail,
   getOwnerDashboardData,
+  getPassengerFeedback,
   getRecentTelemetry,
   initDB,
   insertOwnerActivity,
@@ -28,6 +32,9 @@ import {
   recordTelemetry,
   saveBus,
   saveConductor,
+  savePassengerFeedback,
+  searchBusesByJourney,
+  searchBusStops,
   updateBus,
   updateBusPin,
   verifyConductorPin,
@@ -750,6 +757,189 @@ app.post('/api/conductor/verify-pin', async (req, res) => {
   })
 })
 
+// ============================================================================
+// PASSENGER PORTAL PUBLIC API ENDPOINTS
+// ============================================================================
+
+// 1. Search bus stops by official name, Kannada name, alternative names, or landmark
+app.get('/api/public/stops/search', async (req, res) => {
+  try {
+    const q = req.query.q || ''
+    const stops = await searchBusStops(q)
+    res.json({ success: true, count: stops.length, stops })
+  } catch (err) {
+    console.error('Error in /api/public/stops/search:', err)
+    res.status(500).json({ success: false, error: 'Failed to search stops.' })
+  }
+})
+
+// 2. Discover nearby bus stops by browser GPS coordinates (Optional on-demand)
+app.get('/api/public/stops/nearby', async (req, res) => {
+  try {
+    const { lat, lng, radius } = req.query
+    if (!lat || !lng) {
+      return res.status(400).json({ success: false, error: 'Latitude and longitude coordinates are required.' })
+    }
+    const stops = await getNearbyBusStops(Number(lat), Number(lng), radius ? Number(radius) : 15)
+    res.json({ success: true, count: stops.length, stops })
+  } catch (err) {
+    console.error('Error in /api/public/stops/nearby:', err)
+    res.status(500).json({ success: false, error: 'Failed to find nearby stops.' })
+  }
+})
+
+// 3. Get all verified coastal stops
+app.get(['/api/public/stops', '/api/public/stops/all'], async (req, res) => {
+  try {
+    const stops = await getAllBusStops()
+    res.json({ success: true, count: stops.length, stops })
+  } catch (err) {
+    console.error('Error in /api/public/stops:', err)
+    res.status(500).json({ success: false, error: 'Failed to fetch stops.' })
+  }
+})
+
+// 4. Search buses by journey (FROM -> TO stop order matching)
+// Strictly NO ticket fare, ticket price, fees or payment functionality
+app.get('/api/public/buses/search', async (req, res) => {
+  try {
+    const { from, to } = req.query
+    if (!from || !to) {
+      return res.status(400).json({ success: false, error: 'Both FROM and TO destination stops are required.' })
+    }
+    const buses = await searchBusesByJourney(from, to, activeBuses)
+    res.json({
+      success: true,
+      from,
+      to,
+      count: buses.length,
+      buses,
+    })
+  } catch (err) {
+    console.error('Error in /api/public/buses/search:', err)
+    res.status(500).json({ success: false, error: 'Failed to search buses for selected journey.' })
+  }
+})
+
+// 5. Get public bus details
+app.get('/api/public/buses/:id', async (req, res) => {
+  try {
+    const busId = Number(req.params.id)
+    const bus = await getBusById(busId)
+    if (!bus) {
+      return res.status(404).json({ success: false, error: 'Bus not found.' })
+    }
+    const active = activeBuses[busId] || {}
+    res.json({
+      success: true,
+      bus: {
+        ...toPublicBus(bus),
+        latitude: active.latitude || null,
+        longitude: active.longitude || null,
+        speed: active.speed || 0,
+        is_live: Boolean(active.is_on_shift && active.timestamp && (Date.now() - new Date(active.timestamp).getTime() < 120000)),
+        last_update: active.timestamp ? new Date(active.timestamp).toLocaleTimeString() : null,
+      },
+    })
+  } catch (err) {
+    console.error('Error in /api/public/buses/:id:', err)
+    res.status(500).json({ success: false, error: 'Failed to fetch bus details.' })
+  }
+})
+
+// 6. Get complete bus route with timeline stops & verified landmarks
+app.get('/api/public/buses/:id/route', async (req, res) => {
+  try {
+    const busId = Number(req.params.id)
+    const busWithRoute = await getBusRouteWithStops(busId)
+    if (!busWithRoute) {
+      return res.status(404).json({ success: false, error: 'Bus or route not found.' })
+    }
+    res.json({
+      success: true,
+      bus: toPublicBus(busWithRoute),
+    })
+  } catch (err) {
+    console.error('Error in /api/public/buses/:id/route:', err)
+    res.status(500).json({ success: false, error: 'Failed to fetch bus route.' })
+  }
+})
+
+// 7. Get live tracking location and telemetry freshness for a specific bus
+app.get('/api/public/buses/:id/location', async (req, res) => {
+  try {
+    const busId = Number(req.params.id)
+    const active = activeBuses[busId]
+    if (!active || !active.latitude || !active.longitude) {
+      return res.json({
+        success: true,
+        tracking_status: 'OFFLINE',
+        message: 'No live GPS tracking session active for this bus.',
+        location: null,
+      })
+    }
+
+    const lastTs = active.timestamp ? new Date(active.timestamp).getTime() : 0
+    const now = Date.now()
+    const isStale = lastTs > 0 && now - lastTs >= 120000
+    const status = isStale ? 'LOCATION STALE' : 'LIVE'
+
+    res.json({
+      success: true,
+      tracking_status: status,
+      location: {
+        bus_id: busId,
+        latitude: active.latitude,
+        longitude: active.longitude,
+        speed: active.speed || 0,
+        heading: active.heading || 0,
+        timestamp: active.timestamp,
+        is_stale: isStale,
+      },
+    })
+  } catch (err) {
+    console.error('Error in /api/public/buses/:id/location:', err)
+    res.status(500).json({ success: false, error: 'Failed to fetch bus location.' })
+  }
+})
+
+// 8. Submit passenger feedback
+app.post('/api/public/feedback', async (req, res) => {
+  try {
+    const { name, email, category, rating, message } = req.body
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ success: false, error: 'Feedback message cannot be empty.' })
+    }
+    const saved = await savePassengerFeedback({
+      name,
+      email,
+      category,
+      rating,
+      message,
+    })
+    res.status(201).json({
+      success: true,
+      message: 'Thank you for your valuable feedback!',
+      feedback: saved,
+    })
+  } catch (err) {
+    console.error('Error in /api/public/feedback:', err)
+    res.status(500).json({ success: false, error: err.message || 'Failed to submit feedback.' })
+  }
+})
+
+// 9. Get recent public feedback (optional reviews display)
+app.get('/api/public/feedback', async (req, res) => {
+  try {
+    const limit = req.query.limit ? Number(req.query.limit) : 20
+    const feedback = await getPassengerFeedback(limit)
+    res.json({ success: true, count: feedback.length, feedback })
+  } catch (err) {
+    console.error('Error in GET /api/public/feedback:', err)
+    res.status(500).json({ success: false, error: 'Failed to fetch feedback.' })
+  }
+})
+
 // Fetch recent driver shifts from SQL database
 app.get('/api/shifts', async (req, res) => {
   const shifts = await getActiveShifts()
@@ -829,6 +1019,41 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 5000
 
 await initDB()
+
+// Seed realistic initial live GPS telemetry for coastal demonstration buses
+try {
+  const durgaBus = await getBusByVehicleNumber('KA 19 AB 1234')
+  if (durgaBus) {
+    activeBuses[durgaBus.bus_id] = {
+      ...durgaBus,
+      latitude: 13.0908,
+      longitude: 74.7903,
+      speed: 42,
+      heading: 350,
+      is_on_shift: true,
+      timestamp: Date.now(),
+      next_stop: 'Mulki',
+      eta_minutes: 25,
+    }
+  }
+  const lakshmiBus = await getBusByVehicleNumber('KA 20 CD 5678')
+  if (lakshmiBus) {
+    activeBuses[lakshmiBus.bus_id] = {
+      ...lakshmiBus,
+      latitude: 13.0321,
+      longitude: 74.7891,
+      speed: 38,
+      heading: 355,
+      is_on_shift: true,
+      timestamp: Date.now(),
+      next_stop: 'Mukka',
+      eta_minutes: 40,
+    }
+  }
+} catch (e) {
+  console.debug('Initial live buses seed:', e.message)
+}
+
 server.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`)
 })
