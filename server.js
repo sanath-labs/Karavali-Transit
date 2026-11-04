@@ -37,9 +37,16 @@ import {
   searchBusStops,
   updateBus,
   updateBusPin,
+  updateConductorAssignedBus,
   verifyConductorPin,
+  getConductorById,
 } from './db.js'
-import { createOwnerSessionManager, isValidOtp, toPublicBus } from './serverAuth.js'
+import {
+  createConductorSessionManager,
+  createOwnerSessionManager,
+  isValidOtp,
+  toPublicBus,
+} from './serverAuth.js'
 
 const app = express()
 app.use(cors())
@@ -49,6 +56,26 @@ app.use(express.json())
 const activeBuses = {}
 const activeOtps = {}
 const ownerSessions = createOwnerSessionManager()
+const conductorSessions = createConductorSessionManager()
+
+export { conductorSessions }
+
+async function requireConductorSession(req, res, next) {
+  const authHeader = req.get('authorization')
+  const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]
+  const session = token ? conductorSessions.get(token) : null
+
+  if (!session) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Conductor session is missing or expired. Please sign in.',
+    })
+  }
+
+  req.conductor = session
+  req.conductorToken = token
+  next()
+}
 
 function publicBusSnapshot(buses) {
   return Object.fromEntries(
