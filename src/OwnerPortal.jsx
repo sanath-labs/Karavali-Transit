@@ -681,10 +681,10 @@ export default function OwnerPortal({
           </div>
           <div>
             <div className="text-xl font-black text-slate-900 tracking-tight leading-none">
-              Karavali-<span className="text-amber-500">Transit</span>
+              Karavali-Transit
             </div>
             <div className="text-xs font-bold text-slate-500 mt-0.5">
-              Private Bus Tracking System
+              Fleet Owner Portal
             </div>
           </div>
         </div>
@@ -877,7 +877,7 @@ export default function OwnerPortal({
         <div className="save-confirmation-container">
           <div className="save-confirmation-badge">
             <Check size={14} />
-            <span>8 Save Confirmation</span>
+            <span>Registration Confirmation</span>
           </div>
 
           <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3 border border-emerald-100 shadow-sm">
