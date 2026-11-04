@@ -385,7 +385,7 @@ export default function ConductorPortal({
 
   // Strictly Sensor-Driven Hardware GPS (No simulation, no hardcoded waypoints)
 
-  const startGpsStreaming = (bus) => {
+  const handleStartLiveTracking = () => {
     if ('geolocation' in navigator) {
       const id = navigator.geolocation.watchPosition(
         (position) => {
