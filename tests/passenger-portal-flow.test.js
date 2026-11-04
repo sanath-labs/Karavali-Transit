@@ -15,11 +15,12 @@ test('Passenger Portal End-to-End Database and Flow Suite', async (t) => {
   await initDB()
 
   await t.test('1. Bus Stop Discovery - Search by Official Name in English & Kannada', async () => {
+    // Exactly 9 official corridor stops
+    const allStops = await getAllBusStops()
+    assert.equal(allStops.length, 9, 'Should return exactly 9 official corridor stops')
+
     // Search in English
     const englishResults = await searchBusStops('Surathkal')
-    const allStops = await getAllBusStops()
-    assert.ok(allStops.length >= 20, 'Should return all verified coastal corridor stops')
-
     assert.ok(englishResults.length > 0, 'Should find Surathkal stop in English')
     assert.equal(englishResults[0].stop_name, 'Surathkal')
 
@@ -29,9 +30,13 @@ test('Passenger Portal End-to-End Database and Flow Suite', async (t) => {
     assert.equal(kannadaResults[0].stop_name, 'Surathkal')
 
     // Search partial name
-    const partialResults = await searchBusStops('Hampan')
-    assert.ok(partialResults.length > 0, 'Should find Hampankatta by partial match')
-    assert.ok(partialResults.some((s) => s.stop_name === 'Hampankatta'), 'Hampankatta should be in partial match results')
+    const partialResults = await searchBusStops('Surath')
+    assert.ok(partialResults.length > 0, 'Should find Surathkal by partial match')
+    assert.ok(partialResults.some((s) => s.stop_name === 'Surathkal'), 'Surathkal should be in partial match results')
+
+    // Search Hampankatta alternative name -> maps to Mangaluru
+    const hampanResults = await searchBusStops('Hampan')
+    assert.ok(hampanResults.some((s) => s.stop_name === 'Mangaluru'), 'Hampankatta should map to official Mangaluru stop')
   })
 
   await t.test('2. Bus Stop Discovery - Search by Familiar Nearby Landmarks', async () => {
@@ -69,7 +74,7 @@ test('Passenger Portal End-to-End Database and Flow Suite', async (t) => {
   await t.test('4. Journey Search - Stop Order Matching (FROM occurs BEFORE TO)', async () => {
     // Search Mangaluru -> Kundapura
     const buses = await searchBusesByJourney('Mangaluru', 'Kundapura')
-    assert.ok(buses.length > 0, 'Should find coastal buses operating from Mangaluru to Kundapura')
+    assert.equal(buses.length, 3, 'Should find all 3 coastal buses operating from Mangaluru to Kundapura')
 
     const firstBus = buses[0]
     assert.ok(firstBus.bus_name, 'Bus name must be present')
@@ -77,28 +82,28 @@ test('Passenger Portal End-to-End Database and Flow Suite', async (t) => {
     assert.equal(firstBus.boarding_stop, 'Mangaluru')
     assert.equal(firstBus.destination_stop, 'Kundapura')
     assert.ok(firstBus.boarding_stop_order < firstBus.destination_stop_order, 'Boarding order must precede destination order')
+    assert.ok(firstBus.conductor_name, 'Conductor name must be present')
 
     // Reverse Search: Kundapura -> Mangaluru should NOT match forward buses where Mangaluru precedes Kundapura
     const reverseBuses = await searchBusesByJourney('Kundapura', 'Mangaluru')
-    const invalidMatches = reverseBuses.filter((b) => b.vehicle_number === firstBus.vehicle_number)
-    assert.equal(invalidMatches.length, 0, 'Reverse search must reject buses travelling in opposite direction')
+    assert.equal(reverseBuses.length, 0, 'Reverse search must reject buses travelling in opposite direction')
   })
 
-  await t.test('5. Bus Route Details - Vertical Timeline with Verified Landmarks', async () => {
-    const buses = await searchBusesByJourney('Mangaluru', 'Surathkal')
+  await t.test('5. Bus Route Details - Vertical Timeline with All 9 Official Stops', async () => {
+    const buses = await searchBusesByJourney('Surathkal', 'Udupi')
     assert.ok(buses.length > 0)
     const busId = buses[0].bus_id
 
     const routeData = await getBusRouteWithStops(busId)
     assert.ok(routeData, 'Bus route data must be returned')
-    assert.ok(routeData.stops.length >= 2, 'Route should contain intermediate stops')
+    assert.equal(routeData.stops.length, 9, 'Route must contain all 9 official corridor stops in order')
 
     const hasLandmarks = routeData.stops.some((s) => s.nearby_landmarks && s.nearby_landmarks.length > 0)
     assert.ok(hasLandmarks, 'Route stops should be enriched with verified nearby landmarks')
   })
 
   await t.test('6. CRITICAL REQUIREMENT - Zero Ticket Fare, Price, or Fee Properties', async () => {
-    const buses = await searchBusesByJourney('Mangaluru', 'Udupi')
+    const buses = await searchBusesByJourney('Surathkal', 'Udupi')
     assert.ok(buses.length > 0)
 
     for (const bus of buses) {
