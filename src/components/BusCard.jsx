@@ -8,10 +8,12 @@ export default function BusCard({
   onViewDetails,
 }) {
   const isLive = Boolean(
-    bus.is_live ||
-      bus.tracking_status === 'LIVE' ||
-      bus.tracking_status === 'LOCATION STALE'
+    bus.tracking_status === 'LIVE' ||
+      (bus.is_live && bus.tracking_status !== 'LOCATION STALE' && bus.tracking_status !== 'OFFLINE')
   )
+  const isStale = bus.tracking_status === 'LOCATION STALE'
+  const isNotTracking = bus.tracking_status === 'NOT TRACKING'
+  const canTrack = isLive || isStale
 
   return (
     <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs hover:border-blue-400 hover:shadow-xs transition flex flex-col justify-between space-y-4 select-none">
@@ -34,7 +36,17 @@ export default function BusCard({
         {isLive ? (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Active
+            Live
+          </span>
+        ) : isStale ? (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            Signal Stale
+          </span>
+        ) : isNotTracking ? (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+            <span className="w-2 h-2 rounded-full bg-blue-400" />
+            Not Tracking
           </span>
         ) : (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
@@ -75,7 +87,7 @@ export default function BusCard({
 
       {/* Actions */}
       <div className="grid grid-cols-2 gap-2 pt-1">
-        {isLive ? (
+        {canTrack ? (
           <>
             <button
               type="button"
