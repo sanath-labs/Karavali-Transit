@@ -1465,6 +1465,53 @@ export async function saveConductor(data) {
   })
 }
 
+export async function getConductorById(conductorId) {
+  const query = `
+    SELECT c.*, b.bus_name, b.vehicle_number, b.route_number, b.origin, b.destination, b.total_seats
+    FROM conductors c
+    LEFT JOIN buses b ON c.assigned_bus_id = b.bus_id
+    WHERE c.conductor_id = $1
+    LIMIT 1
+  `
+  if (isPostgres()) {
+    const res = await pgPool.query(query, [conductorId])
+    return res.rows[0] || null
+  }
+
+  const sqliteQuery = `
+    SELECT c.*, b.bus_name, b.vehicle_number, b.route_number, b.origin, b.destination, b.total_seats
+    FROM conductors c
+    LEFT JOIN buses b ON c.assigned_bus_id = b.bus_id
+    WHERE c.conductor_id = ?
+    LIMIT 1
+  `
+  return new Promise((resolve) => {
+    sqliteDb.get(sqliteQuery, [conductorId], (err, row) => {
+      resolve(err ? null : row || null)
+    })
+  })
+}
+
+export async function updateConductorAssignedBus(conductorId, busId) {
+  if (isPostgres()) {
+    const res = await pgPool.query(
+      'UPDATE conductors SET assigned_bus_id = $1 WHERE conductor_id = $2',
+      [busId ? Number(busId) : null, Number(conductorId)]
+    )
+    return res.rowCount > 0
+  }
+
+  return new Promise((resolve) => {
+    sqliteDb.run(
+      'UPDATE conductors SET assigned_bus_id = ? WHERE conductor_id = ?',
+      [busId ? Number(busId) : null, Number(conductorId)],
+      function (err) {
+        resolve(!err && this.changes > 0)
+      }
+    )
+  })
+}
+
 export async function deleteConductor(conductorId, ownerEmail) {
   if (isPostgres()) {
     const res = await pgPool.query(
