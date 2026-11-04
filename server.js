@@ -657,10 +657,21 @@ app.post('/api/conductor/lookup', async (req, res) => {
   const conductor = await getConductorByPhoneAndOwner(cleanEmail, cleanPhone)
   const buses = await getBusesByOwner(cleanEmail)
 
+  let conductorToken = null
+  if (conductor) {
+    conductorToken = conductorSessions.create(
+      conductor.conductor_id,
+      conductor.phone,
+      cleanEmail,
+      conductor.assigned_bus_id
+    )
+  }
+
   res.json({
     success: true,
     exists: Boolean(conductor),
     conductor: conductor || null,
+    conductor_token: conductorToken,
     buses: buses || [],
     agency_email: cleanEmail,
   })
@@ -678,7 +689,18 @@ app.post('/api/conductor/register', async (req, res) => {
 
   const existing = await getConductorByPhoneAndOwner(cleanEmail, cleanPhone)
   if (existing) {
-    return res.json({ success: true, conductor: existing, message: 'Conductor already registered.' })
+    const conductorToken = conductorSessions.create(
+      existing.conductor_id,
+      existing.phone,
+      cleanEmail,
+      existing.assigned_bus_id
+    )
+    return res.json({
+      success: true,
+      conductor: existing,
+      conductor_token: conductorToken,
+      message: 'Conductor already registered.',
+    })
   }
 
   const created = await saveConductor({
@@ -696,11 +718,19 @@ app.post('/api/conductor/register', async (req, res) => {
   )
 
   const updatedConductor = await getConductorByPhoneAndOwner(cleanEmail, cleanPhone)
+  const conductorObj = updatedConductor || created
+  const conductorToken = conductorSessions.create(
+    conductorObj.conductor_id,
+    cleanPhone,
+    cleanEmail,
+    conductorObj.assigned_bus_id
+  )
 
   res.json({
     success: true,
     message: 'Conductor registered successfully.',
-    conductor: updatedConductor || created,
+    conductor: conductorObj,
+    conductor_token: conductorToken,
   })
 })
 
