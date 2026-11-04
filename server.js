@@ -774,6 +774,135 @@ app.post('/api/conductor/start-duty', async (req, res) => {
   })
 })
 
+// 17. CONDUCTOR REAL-TIME GPS TELEMETRY INGESTION (ACTUAL SMARTPHONE SENSOR TELEMETRY)
+app.post('/api/conductor/gps-location', requireConductorSession, async (req, res) => {
+  const {
+    bus_id,
+    latitude,
+    longitude,
+    accuracy,
+    speed,
+    heading,
+    timestamp,
+    crowd_status,
+    passenger_count,
+  } = req.body
+
+  if (!bus_id) {
+    return res.status(400).json({ success: false, error: 'Bus ID is required.' })
+  }
+
+  const busIdNum = Number(bus_id)
+  const session = req.conductor
+
+  if (session.bus_id && session.bus_id !== busIdNum) {
+    return res.status(403).json({
+      success: false,
+      error: `Unauthorized: Conductor is not assigned to this bus (assigned to #${session.bus_id}, requested #${busIdNum}).`,
+    })
+  }
+
+  if (session.conductor_id) {
+    const conductor = await getConductorById(session.conductor_id)
+    if (conductor && conductor.assigned_bus_id && conductor.assigned_bus_id !== busIdNum) {
+      return res.status(403).json({
+        success: false,
+        error: `Unauthorized: Conductor is not assigned to this bus (assigned to #${conductor.assigned_bus_id}, requested #${busIdNum}).`,
+      })
+    }
+  }
+
+  const lat = Number(latitude)
+  const lng = Number(longitude)
+  const acc = Number(accuracy) || 0
+  const spd = Number(speed) || 0
+  const hdg = Number(heading) || 0
+  const ts = Number(timestamp) || Date.now()
+
+  if (isNaN(lat) || isNaN(lng) || lat < 12.0 || lat > 15.0 || lng < 73.5 || lng > 76.0) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid coordinates: GPS location is outside the coastal Karnataka corridor.',
+    })
+  }
+
+  if (acc > 1000) {
+    return res.status(400).json({
+      success: false,
+      error: 'GPS accuracy too low (> 1000m). Waiting for better satellite fix.',
+    })
+  }
+
+  if (spd > 110) {
+    return res.status(400).json({
+      success: false,
+      error: `GPS speed anomaly rejected: ${spd} km/h exceeds realistic bus limits.`,
+    })
+  }
+
+  const now = Date.now()
+  if (ts < now - 300000 || ts > now + 60000) {
+    return res.status(400).json({
+      success: false,
+      error: 'GPS timestamp expired or invalid.',
+    })
+  }
+
+  const bus = await getBusById(busIdNum)
+  if (!bus) {
+    return res.status(404).json({ success: false, error: 'Bus not found.' })
+  }
+
+  const payload = {
+    ...(activeBuses[busIdNum] || {}),
+    ...bus,
+    bus_id: busIdNum,
+    latitude: lat,
+    longitude: lng,
+    accuracy: acc,
+    speed: spd,
+    heading: hdg,
+    crowd_status: crowd_status || activeBuses[busIdNum]?.crowd_status || 'Seats Available',
+    passenger_count: passenger_count !== undefined ? Number(passenger_count) : (activeBuses[busIdNum]?.passenger_count || 0),
+    timestamp: ts,
+    is_on_shift: true,
+    tracking_status: 'LIVE',
+    last_telemetry_at: now,
+  }
+
+  activeBuses[busIdNum] = payload
+
+  io.emit('live_location_broadcast', toPublicBus(payload))
+  io.emit('bus_location_update', toPublicBus(payload))
+
+  try {
+    await recordTelemetry({
+      bus_id: busIdNum,
+      bus_name: bus.bus_name,
+      latitude: lat,
+      longitude: lng,
+      speed: spd,
+    })
+  } catch (dbErr) {
+    console.error('Failed to save telemetry to DB:', dbErr.message)
+  }
+
+  res.json({
+    success: true,
+    message: 'Live GPS location updated.',
+    tracking_status: 'LIVE',
+    location: {
+      bus_id: busIdNum,
+      latitude: lat,
+      longitude: lng,
+      accuracy: acc,
+      speed: spd,
+      heading: hdg,
+      timestamp: ts,
+    },
+  })
+})
+
 // 17. CONDUCTOR ROUTE STOPS: Get Timetable Stops for Active Bus
 app.get('/api/conductor/buses/:busId/stops', async (req, res) => {
   const busId = Number(req.params.busId)
