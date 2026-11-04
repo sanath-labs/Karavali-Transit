@@ -903,6 +903,30 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
   })
 })
 
+// 18. CONDUCTOR STOP LIVE TRACKING
+app.post('/api/conductor/stop-tracking', requireConductorSession, async (req, res) => {
+  const { bus_id } = req.body
+  const busIdNum = Number(bus_id || req.conductor.bus_id)
+
+  if (!busIdNum) {
+    return res.status(400).json({ success: false, error: 'Bus ID is required.' })
+  }
+
+  if (activeBuses[busIdNum]) {
+    activeBuses[busIdNum].tracking_status = 'OFFLINE'
+    activeBuses[busIdNum].is_on_shift = false
+    io.emit('bus_tracking_stopped', { bus_id: busIdNum })
+    io.emit('live_location_broadcast', toPublicBus(activeBuses[busIdNum]))
+    io.emit('bus_location_update', toPublicBus(activeBuses[busIdNum]))
+  }
+
+  res.json({
+    success: true,
+    message: 'Live GPS tracking stopped successfully.',
+    tracking_status: 'OFFLINE',
+  })
+})
+
 // 17. CONDUCTOR ROUTE STOPS: Get Timetable Stops for Active Bus
 app.get('/api/conductor/buses/:busId/stops', async (req, res) => {
   const busId = Number(req.params.busId)
