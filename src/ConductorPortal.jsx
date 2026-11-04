@@ -24,7 +24,7 @@ import {
   VolumeX,
   X,
 } from 'lucide-react'
-import { apiUrl } from './api.js'
+import { apiUrl, conductorHeaders } from './api.js'
 import { formatIndianMobile } from './transitUtils.js'
 
 function getNow() {
@@ -58,6 +58,15 @@ export default function ConductorPortal({
   const [conductorRecord, setConductorRecord] = useState(null)
   const [agencyBuses, setAgencyBuses] = useState([])
   const [selectedBusId, setSelectedBusId] = useState('')
+
+  // Conductor Auth Token
+  const [conductorToken, setConductorToken] = useState(() => {
+    try {
+      return localStorage.getItem('karavali_conductor_token') || ''
+    } catch {
+      return ''
+    }
+  })
 
   // Step 5: Active Shift State & Operations
   const [activeBus, setActiveBus] = useState(null)
