@@ -17,3 +17,16 @@ export function ownerHeaders(token, headers = {}) {
     'X-Owner-Email': email,
   }
 }
+
+export function conductorHeaders(token, headers = {}) {
+  let savedToken = token
+  if (!savedToken) {
+    try {
+      savedToken = localStorage.getItem('karavali_conductor_token') || ''
+    } catch {}
+  }
+  return {
+    ...headers,
+    Authorization: `Bearer ${savedToken || ''}`,
+  }
+}
