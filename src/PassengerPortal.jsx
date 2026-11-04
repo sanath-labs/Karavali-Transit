@@ -21,8 +21,6 @@ import {
   Crosshair,
   CheckCircle2,
   Navigation,
-  Layers,
-  Sparkles,
 } from 'lucide-react'
 import io from 'socket.io-client'
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet'
@@ -125,7 +123,7 @@ const OFFICIAL_9_CORRIDOR_STOPS = [
   },
 ]
 
-// Custom Leaflet Icons for Passenger Map (Screen 4)
+// Custom Leaflet Icons for Passenger Map
 const busLiveIcon = L.divIcon({
   className: 'custom-bus-live-marker',
   html: `
@@ -201,16 +199,12 @@ export default function PassengerPortal({
 }) {
   const t = translations[lang] || translations.en
 
-  // 5 Screens Workflow (Matching exact reference image media_1793720304519_38c33f68.jpg)
-  // 1: Home (Plan Your Journey & Search)
-  // 2: Buses (Surathkal -> Udupi Available Buses & Timings)
-  // 3: Bus Details (Route & Stop Timings vertical timeline)
-  // 4: Live Tracking (Leaflet Map & Floating HUD)
-  // 5: Hamburger Menu Drawer
+  // REAL PAGE FLOW (One page displayed at a time):
+  // 1: Homepage (From & To stop selection and Search)
+  // 2: Matching Bus Results
+  // 3: Bus Details & Route Timeline
+  // 4: Live Tracking Map
   const [screen, setScreen] = useState(1)
-
-  // View Mode: 'interactive' (standard full interactive app) | 'studio' (exact 5 side-by-side phone mockups)
-  const [viewMode, setViewMode] = useState('interactive')
 
   // Drawer & Modal Overlays
   const [menuOpen, setMenuOpen] = useState(false)
@@ -219,7 +213,7 @@ export default function PassengerPortal({
   const [findStopTab, setFindStopTab] = useState('name') // 'name' | 'landmark' | 'nearme'
   const [activeModal, setActiveModal] = useState(null) // 'helpdesk' | 'feedback' | 'contact'
 
-  // Search Fields (Default to Surathkal -> Udupi as depicted in Reference Image)
+  // Search Fields (Default: Surathkal -> Udupi along the 9 corridor stops)
   const [currentStop, setCurrentStop] = useState('Surathkal')
   const [destination, setDestination] = useState('Udupi')
   const [fromDropdownOpen, setFromDropdownOpen] = useState(false)
@@ -230,6 +224,7 @@ export default function PassengerPortal({
   // Bus List & Filters (Screen 2)
   const [buses, setBuses] = useState([])
   const [loadingBuses, setLoadingBuses] = useState(false)
+  const [searchError, setSearchError] = useState('')
   const [activeFilter, setActiveFilter] = useState('active') // 'active' | 'all' | 'scheduled'
 
   // Selected Bus Details (Screen 3 & Screen 4)
@@ -242,7 +237,7 @@ export default function PassengerPortal({
   const [liveTelemetry, setLiveTelemetry] = useState({})
   const socketRef = useRef(null)
 
-  // Verified Bus Stops Cache (for Dropdowns & Find Stop modal)
+  // Verified Bus Stops Cache
   const [allStops, setAllStops] = useState(OFFICIAL_9_CORRIDOR_STOPS)
   const [stopSearchQuery, setStopSearchQuery] = useState('')
   const [nearMeStops, setNearMeStops] = useState([])
@@ -286,7 +281,7 @@ export default function PassengerPortal({
     },
   ]
 
-  // Popular Routes (Matches Reference Image Screen 1)
+  // Popular Routes
   const POPULAR_ROUTES = [
     { from: 'Mangaluru', to: 'Udupi' },
     { from: 'Surathkal', to: 'Udupi' },
@@ -344,18 +339,17 @@ export default function PassengerPortal({
     return () => clearInterval(timer)
   }, [])
 
-  // Fetch verified corridor stops on load
+  // Fetch verified corridor stops on load using correct apiUrl() function
   useEffect(() => {
     async function loadStops() {
       try {
-        const res = await fetch(`${apiUrl}/api/public/stops`)
+        const res = await fetch(apiUrl('/api/public/stops'))
         const data = await res.json()
         if (data.success && Array.isArray(data.stops) && data.stops.length > 0) {
           setAllStops(data.stops)
-        } else {
-          setAllStops(OFFICIAL_9_CORRIDOR_STOPS)
         }
-      } catch {
+      } catch (err) {
+        console.warn('Stops fetch fallback to 9 corridor constants:', err)
         setAllStops(OFFICIAL_9_CORRIDOR_STOPS)
       }
     }
@@ -383,7 +377,6 @@ export default function PassengerPortal({
 
   const toSuggestions = useMemo(() => {
     const q = toQuery.trim().toLowerCase()
-    // Enforce that Destination must occur strictly after Boarding Stop in corridor order
     const fromStopObj = OFFICIAL_9_CORRIDOR_STOPS.find(
       (s) => s.stop_name.toLowerCase() === currentStop.toLowerCase()
     )
@@ -399,102 +392,51 @@ export default function PassengerPortal({
     )
   }, [toQuery, currentStop])
 
-  // Search Buses API handler
+  // Real Search Buses API handler (connected to existing backend)
   const handleSearchBuses = async (fromVal = currentStop, toVal = destination, shouldSwitchScreen = true) => {
     if (!fromVal || !toVal) return
 
     setLoadingBuses(true)
+    setSearchError('')
     setCurrentStop(fromVal)
     setDestination(toVal)
 
     try {
-      const res = await fetch(
-        `${apiUrl}/api/public/buses/search?from=${encodeURIComponent(fromVal)}&to=${encodeURIComponent(toVal)}`
-      )
+      const url = apiUrl(`/api/public/buses/search?from=${encodeURIComponent(fromVal)}&to=${encodeURIComponent(toVal)}`)
+      const res = await fetch(url)
       const data = await res.json()
-      if (data.success && Array.isArray(data.buses) && data.buses.length > 0) {
+
+      if (data.success && Array.isArray(data.buses)) {
         setBuses(data.buses)
-        if (!selectedBus) {
+        if (data.buses.length > 0) {
           setSelectedBus(data.buses[0])
+        } else {
+          setSelectedBus(null)
         }
       } else {
-        // Fallback realistic corridor seed data matching reference image
-        const fallbackBuses = [
-          {
-            bus_id: 1,
-            bus_name: 'Shri Durga Travels',
-            vehicle_number: 'KA 19 AB 1234',
-            service_type: 'Non AC',
-            origin: 'Mangaluru',
-            destination: 'Kundapura',
-            boarding_stop: fromVal,
-            boarding_planned_time: '10:40 AM',
-            destination_stop: toVal,
-            destination_planned_time: '12:15 PM',
-            is_live: true,
-            tracking_status: 'LIVE',
-            next_stop: 'Kaup',
-            live_eta_minutes: 18,
-            conductor_name: 'Manjunath Shetty',
-            conductor_phone: '98451 12345',
-            latitude: 13.165,
-            longitude: 74.76,
-          },
-          {
-            bus_id: 2,
-            bus_name: 'Sri Lakshmi Travels',
-            vehicle_number: 'KA 20 CD 5678',
-            service_type: 'AC',
-            origin: 'Mangaluru',
-            destination: 'Kundapura',
-            boarding_stop: fromVal,
-            boarding_planned_time: '11:15 AM',
-            destination_stop: toVal,
-            destination_planned_time: '12:50 PM',
-            is_live: true,
-            tracking_status: 'LIVE',
-            next_stop: 'Mulki',
-            live_eta_minutes: 25,
-            conductor_name: 'Santhosh Poojary',
-            conductor_phone: '98452 23456',
-            latitude: 13.045,
-            longitude: 74.789,
-          },
-          {
-            bus_id: 3,
-            bus_name: 'Udupi Express',
-            vehicle_number: 'KA 21 GH 3456',
-            service_type: 'Non AC',
-            origin: 'Mangaluru',
-            destination: 'Kundapura',
-            boarding_stop: fromVal,
-            boarding_planned_time: '12:30 PM',
-            destination_stop: toVal,
-            destination_planned_time: '02:05 PM',
-            is_live: false,
-            tracking_status: 'SCHEDULED',
-            next_stop: null,
-            live_eta_minutes: null,
-            conductor_name: 'Pradeep Kumar',
-            conductor_phone: '98453 34567',
-          },
-        ]
-        setBuses(fallbackBuses)
-        if (!selectedBus) {
-          setSelectedBus(fallbackBuses[0])
+        setBuses([])
+        setSelectedBus(null)
+        if (data.error) {
+          setSearchError(data.error)
         }
       }
+
       if (shouldSwitchScreen) {
         setScreen(2)
       }
-    } catch {
-      setScreen(2)
+    } catch (err) {
+      console.error('Failed to search buses:', err)
+      setBuses([])
+      setSearchError('Unable to connect to the transit network server. Please check your connection.')
+      if (shouldSwitchScreen) {
+        setScreen(2)
+      }
     } finally {
       setLoadingBuses(false)
     }
   }
 
-  // Swap From & To (with corridor validation check)
+  // Swap From & To
   const handleSwapStops = () => {
     const fromObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === currentStop)
     const toObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === destination)
@@ -503,7 +445,6 @@ export default function PassengerPortal({
       setCurrentStop(destination)
       setDestination(currentStop)
     } else {
-      // Pick next valid stop along corridor
       setCurrentStop(destination)
       const nextStop = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id > (toObj?.stop_id || 1))
       setDestination(nextStop ? nextStop.stop_name : 'Kundapura')
@@ -517,7 +458,7 @@ export default function PassengerPortal({
     setScreen(3)
 
     try {
-      const res = await fetch(`${apiUrl}/api/public/buses/${bus.bus_id}/route`)
+      const res = await fetch(apiUrl(`/api/public/buses/${bus.bus_id}/route`))
       const data = await res.json()
       if (data.success && data.bus) {
         setRouteDetails(data.bus)
@@ -538,7 +479,7 @@ export default function PassengerPortal({
     setScreen(4)
 
     try {
-      const res = await fetch(`${apiUrl}/api/public/buses/${bus.bus_id}/route`)
+      const res = await fetch(apiUrl(`/api/public/buses/${bus.bus_id}/route`))
       const data = await res.json()
       if (data.success && data.bus) {
         setRouteDetails(data.bus)
@@ -552,40 +493,48 @@ export default function PassengerPortal({
 
   // Filter counts for Screen 2
   const activeCount = useMemo(
-    () => buses.filter((b) => b.is_live || b.tracking_status === 'LIVE').length,
+    () =>
+      buses.filter(
+        (b) =>
+          b.is_live ||
+          b.tracking_status === 'LIVE' ||
+          b.tracking_status === 'LOCATION STALE'
+      ).length,
     [buses]
   )
+
   const scheduledCount = useMemo(
-    () => buses.filter((b) => b.tracking_status === 'SCHEDULED' || !b.is_live).length,
+    () =>
+      buses.filter(
+        (b) =>
+          b.tracking_status === 'SCHEDULED' ||
+          (!b.is_live && b.tracking_status !== 'LIVE' && b.tracking_status !== 'LOCATION STALE')
+      ).length,
     [buses]
   )
+
   const displayedBuses = useMemo(() => {
     if (activeFilter === 'active') {
-      return buses.filter((b) => b.is_live || b.tracking_status === 'LIVE')
+      return buses.filter(
+        (b) =>
+          b.is_live ||
+          b.tracking_status === 'LIVE' ||
+          b.tracking_status === 'LOCATION STALE'
+      )
     }
     if (activeFilter === 'scheduled') {
-      return buses.filter((b) => b.tracking_status === 'SCHEDULED' || !b.is_live)
+      return buses.filter(
+        (b) =>
+          b.tracking_status === 'SCHEDULED' ||
+          (!b.is_live && b.tracking_status !== 'LIVE' && b.tracking_status !== 'LOCATION STALE')
+      )
     }
     return buses
   }, [buses, activeFilter])
 
   // Real-time telemetry for the selected bus
   const activeSelectedBus = useMemo(() => {
-    return (
-      selectedBus ||
-      buses[0] || {
-        bus_id: 1,
-        bus_name: 'Shri Durga Travels',
-        vehicle_number: 'KA 19 AB 1234',
-        service_type: 'Non AC',
-        is_live: true,
-        tracking_status: 'LIVE',
-        next_stop: 'Kaup',
-        live_eta_minutes: 18,
-        boarding_planned_time: '10:40 AM',
-        destination_planned_time: '12:15 PM',
-      }
-    )
+    return selectedBus || buses[0] || null
   }, [selectedBus, buses])
 
   const trackedTelemetry = useMemo(() => {
@@ -597,14 +546,19 @@ export default function PassengerPortal({
     if (trackedTelemetry?.latitude && trackedTelemetry?.longitude) {
       return [trackedTelemetry.latitude, trackedTelemetry.longitude]
     }
-    // Default live bus position near Padubidri / Kaup along NH-66
     return [13.165, 74.76]
   }, [trackedTelemetry])
 
   // Full corridor 9-stop timeline list for Screen 3
   const corridorTimelineStops = useMemo(() => {
-    // Reference timings for Shri Durga Travels along the 9 corridor stops
-    const timingMap = {
+    if (routeDetails?.stops?.length === 9) {
+      return routeDetails.stops
+    }
+    if (activeSelectedBus?.stops?.length === 9) {
+      return activeSelectedBus.stops
+    }
+
+    const defaultTimingMap = {
       Mangaluru: '09:55 AM',
       Kuntikana: '10:05 AM',
       Kulur: '10:15 AM',
@@ -616,15 +570,11 @@ export default function PassengerPortal({
       Kundapura: '01:00 PM',
     }
 
-    if (routeDetails?.stops?.length === 9) {
-      return routeDetails.stops
-    }
-
     return OFFICIAL_9_CORRIDOR_STOPS.map((stop) => ({
       ...stop,
-      planned_arrival: timingMap[stop.stop_name] || '11:00 AM',
+      planned_arrival: defaultTimingMap[stop.stop_name] || '11:00 AM',
     }))
-  }, [routeDetails])
+  }, [routeDetails, activeSelectedBus])
 
   // Polyline coordinates along NH-66 connecting all 9 stops
   const polylineCoordinates = useMemo(() => {
@@ -638,7 +588,7 @@ export default function PassengerPortal({
     ]
   }, [])
 
-  // Geolocation for "Find Stops Near Me" (on-demand click only, strictly no tracking)
+  // Geolocation for "Find Stops Near Me" (on-demand only, strictly no tracking)
   const handleFindStopsNearMe = () => {
     if (!navigator.geolocation) {
       setNearMeError('Geolocation is not supported by your browser.')
@@ -651,7 +601,7 @@ export default function PassengerPortal({
         try {
           const { latitude, longitude } = pos.coords
           const res = await fetch(
-            `${apiUrl}/api/public/stops/nearby?lat=${latitude}&lng=${longitude}&radius=30`
+            apiUrl(`/api/public/stops/nearby?lat=${latitude}&lng=${longitude}&radius=30`)
           )
           const data = await res.json()
           if (data.success && Array.isArray(data.stops)) {
@@ -680,7 +630,7 @@ export default function PassengerPortal({
     if (!feedbackMessage.trim()) return
     setFeedbackSubmitting(true)
     try {
-      const res = await fetch(`${apiUrl}/api/public/feedback`, {
+      const res = await fetch(apiUrl('/api/public/feedback'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -704,41 +654,28 @@ export default function PassengerPortal({
   }
 
   // ==========================================================================
-  // RENDER HELPERS: Individual Phone Screens matching Reference Design
+  // PAGE RENDERERS (Only the active page in the journey flow is displayed)
   // ==========================================================================
 
-  // Screen 1: Home
-  const renderScreen1 = () => (
+  // PAGE 1: Passenger Homepage (Default Route /)
+  const renderHomepage = () => (
     <div className="flex-1 flex flex-col bg-slate-50 relative overflow-y-auto">
-      {/* Phone Status Bar */}
-      <div className="px-6 pt-2 pb-1 flex items-center justify-between text-[11px] font-bold text-slate-800 shrink-0">
-        <span>10:24</span>
-        <div className="flex items-center gap-1.5 text-slate-700">
-          <span className="text-[10px]">📶</span>
-          <span className="text-[10px]">📡</span>
-          <span className="text-xs">🔋</span>
-        </div>
-      </div>
-
-      {/* Screen 1 Header */}
-      <header className="px-4 py-2 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 shadow-2xs">
+      {/* Top Header */}
+      <header className="px-5 py-3.5 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-20 shadow-xs">
         <button
           type="button"
-          onClick={() => {
-            setMenuOpen(true)
-            setScreen(5)
-          }}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
+          onClick={() => setMenuOpen(true)}
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all cursor-pointer"
           aria-label="Open Navigation Menu"
         >
-          <Menu size={22} strokeWidth={2.4} />
+          <Menu size={24} strokeWidth={2.4} />
         </button>
 
-        <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
-            <Bus size={16} strokeWidth={2.4} />
+        <div className="flex items-center gap-2.5">
+          <span className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+            <Bus size={18} strokeWidth={2.4} />
           </span>
-          <span className="font-extrabold text-sm tracking-tight text-slate-900">
+          <span className="font-extrabold text-base tracking-tight text-slate-900">
             Karavali-Transit
           </span>
         </div>
@@ -746,47 +683,57 @@ export default function PassengerPortal({
         <button
           type="button"
           onClick={() => setNotificationsOpen(true)}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-700 hover:bg-slate-100 relative active:scale-95 transition-all"
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-700 hover:bg-slate-100 relative active:scale-95 transition-all cursor-pointer"
           aria-label="Notifications"
         >
-          <Bell size={19} strokeWidth={2.2} />
-          <span className="w-2 h-2 rounded-full bg-blue-600 absolute top-1.5 right-1.5 border-2 border-white" />
+          <Bell size={21} strokeWidth={2.2} />
+          <span className="w-2 h-2 rounded-full bg-blue-600 absolute top-2 right-2 border-2 border-white" />
         </button>
       </header>
 
-      {/* Screen 1 Content */}
-      <div className="p-4 flex-1 flex flex-col space-y-3.5">
-        {/* Coastal Banner Card (Matching Reference Screen 1) */}
-        <div className="relative rounded-2xl overflow-hidden shadow-sm border border-sky-200/60 bg-gradient-to-br from-sky-600 via-blue-700 to-indigo-900 text-white p-4 min-h-[96px] flex flex-col justify-between">
-          <div className="absolute right-0 top-0 bottom-0 w-2/5 opacity-30 pointer-events-none bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-sky-200 via-white to-transparent" />
+      {/* Main Homepage Body */}
+      <div className="p-5 sm:p-6 flex-1 flex flex-col space-y-5 max-w-xl mx-auto w-full">
+        {/* Hello Passenger Greetings */}
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <span>Hello Passenger</span>
+            <span className="text-2xl">👋</span>
+          </h2>
+          <p className="text-xs font-semibold text-slate-500 mt-1">
+            Find your bus and track it live
+          </p>
+        </div>
+
+        {/* Coastal Hero Banner Card */}
+        <div className="relative rounded-2xl overflow-hidden shadow-sm border border-sky-200/60 bg-gradient-to-br from-sky-600 via-blue-700 to-indigo-900 text-white p-5 flex flex-col justify-between min-h-[110px]">
           <div className="relative z-10">
             <span className="text-[10px] uppercase tracking-wider font-extrabold text-sky-200 block">
               Coastal Highway Corridor
             </span>
-            <h2 className="text-sm sm:text-base font-black leading-tight mt-0.5">
+            <h3 className="text-base sm:text-lg font-black leading-tight mt-0.5">
               Track Your Bus Along The Coastal Route
-            </h2>
-            <p className="text-xs font-semibold text-sky-100 mt-0.5">
-              Mangaluru – Kundapura
+            </h3>
+            <p className="text-xs font-semibold text-sky-100 mt-1">
+              Mangaluru – Kundapura (NH-66)
             </p>
           </div>
-          <div className="relative z-10 flex items-center gap-1.5 text-[10px] font-bold text-sky-200 mt-2">
+          <div className="relative z-10 flex items-center gap-1.5 text-[11px] font-bold text-sky-200 mt-3">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span>9 Official Corridor Stops Active</span>
           </div>
         </div>
 
-        {/* Plan Your Journey Card */}
-        <div className="bg-white rounded-2xl p-4 shadow-md border border-slate-100 space-y-3 relative">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Bus size={15} strokeWidth={2.5} />
+        {/* Journey Search Card ("Plan Your Journey") */}
+        <div className="bg-white rounded-2xl p-5 shadow-md border border-slate-100 space-y-4 relative">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <Bus size={17} strokeWidth={2.5} />
             </div>
             <div>
-              <h3 className="text-xs font-black text-slate-900 leading-tight">
+              <h3 className="text-sm font-black text-slate-900 leading-tight">
                 Plan Your Journey
               </h3>
-              <p className="text-[10px] font-medium text-slate-500">
+              <p className="text-[11px] font-medium text-slate-500">
                 Select your boarding and destination
               </p>
             </div>
@@ -794,9 +741,9 @@ export default function PassengerPortal({
 
           {/* Current Bus Stop (From) */}
           <div className="relative">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <MapPin size={12} className="text-emerald-500 shrink-0" />
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                <MapPin size={13} className="text-emerald-500 shrink-0" />
                 <span>From</span>
               </span>
             </div>
@@ -806,23 +753,23 @@ export default function PassengerPortal({
                 setFromDropdownOpen(true)
                 setToDropdownOpen(false)
               }}
-              className="flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:border-blue-500 cursor-pointer transition-all"
+              className="flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:border-blue-500 cursor-pointer transition-all"
             >
-              <span className="text-xs font-bold text-slate-800">
+              <span className="text-sm font-bold text-slate-800">
                 {currentStop}
               </span>
-              <ChevronDown size={16} className="text-slate-400" />
+              <ChevronDown size={18} className="text-slate-400" />
             </div>
 
             {fromDropdownOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 max-h-52 overflow-y-auto">
+              <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 max-h-56 overflow-y-auto">
                 <div className="px-3 py-1.5 border-b border-slate-100">
                   <input
                     type="text"
                     placeholder="Search corridor stop..."
                     value={fromQuery}
                     onChange={(e) => setFromQuery(e.target.value)}
-                    className="w-full text-xs font-semibold bg-slate-100 rounded-lg px-2.5 py-1.5 outline-hidden"
+                    className="w-full text-xs font-semibold bg-slate-100 rounded-lg px-3 py-2 outline-hidden"
                     autoFocus
                   />
                 </div>
@@ -835,10 +782,10 @@ export default function PassengerPortal({
                       setFromDropdownOpen(false)
                       setFromQuery('')
                     }}
-                    className="w-full px-3.5 py-2 text-left hover:bg-blue-50 text-xs font-bold text-slate-700 flex items-center justify-between"
+                    className="w-full px-4 py-2.5 text-left hover:bg-blue-50 text-xs font-bold text-slate-700 flex items-center justify-between cursor-pointer"
                   >
                     <span>{s.stop_name}</span>
-                    <span className="text-[10px] text-slate-400 font-medium">
+                    <span className="text-[11px] text-slate-400 font-medium">
                       {s.stop_name_kn}
                     </span>
                   </button>
@@ -848,22 +795,22 @@ export default function PassengerPortal({
           </div>
 
           {/* Swap Button */}
-          <div className="flex justify-end -my-1 pr-2">
+          <div className="flex justify-end -my-1.5 pr-2">
             <button
               type="button"
               onClick={handleSwapStops}
-              className="w-7 h-7 rounded-full border border-slate-200 bg-white shadow-xs flex items-center justify-center text-slate-600 hover:text-blue-600 hover:border-blue-400 active:scale-95 transition-all cursor-pointer"
+              className="w-8 h-8 rounded-full border border-slate-200 bg-white shadow-xs flex items-center justify-center text-slate-600 hover:text-blue-600 hover:border-blue-400 active:scale-95 transition-all cursor-pointer"
               title="Swap From and To"
             >
-              <ArrowUpDown size={13} strokeWidth={2.4} />
+              <ArrowUpDown size={15} strokeWidth={2.4} />
             </button>
           </div>
 
           {/* Destination (To) */}
           <div className="relative">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <MapPin size={12} className="text-rose-500 shrink-0" />
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                <MapPin size={13} className="text-rose-500 shrink-0" />
                 <span>To</span>
               </span>
             </div>
@@ -873,23 +820,23 @@ export default function PassengerPortal({
                 setToDropdownOpen(true)
                 setFromDropdownOpen(false)
               }}
-              className="flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:border-blue-500 cursor-pointer transition-all"
+              className="flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:border-blue-500 cursor-pointer transition-all"
             >
-              <span className="text-xs font-bold text-slate-800">
+              <span className="text-sm font-bold text-slate-800">
                 {destination}
               </span>
-              <ChevronDown size={16} className="text-slate-400" />
+              <ChevronDown size={18} className="text-slate-400" />
             </div>
 
             {toDropdownOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 max-h-52 overflow-y-auto">
+              <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 max-h-56 overflow-y-auto">
                 <div className="px-3 py-1.5 border-b border-slate-100">
                   <input
                     type="text"
                     placeholder="Search corridor destination..."
                     value={toQuery}
                     onChange={(e) => setToQuery(e.target.value)}
-                    className="w-full text-xs font-semibold bg-slate-100 rounded-lg px-2.5 py-1.5 outline-hidden"
+                    className="w-full text-xs font-semibold bg-slate-100 rounded-lg px-3 py-2 outline-hidden"
                     autoFocus
                   />
                 </div>
@@ -902,10 +849,10 @@ export default function PassengerPortal({
                       setToDropdownOpen(false)
                       setToQuery('')
                     }}
-                    className="w-full px-3.5 py-2 text-left hover:bg-blue-50 text-xs font-bold text-slate-700 flex items-center justify-between"
+                    className="w-full px-4 py-2.5 text-left hover:bg-blue-50 text-xs font-bold text-slate-700 flex items-center justify-between cursor-pointer"
                   >
                     <span>{s.stop_name}</span>
-                    <span className="text-[10px] text-slate-400 font-medium">
+                    <span className="text-[11px] text-slate-400 font-medium">
                       {s.stop_name_kn}
                     </span>
                   </button>
@@ -914,30 +861,30 @@ export default function PassengerPortal({
             )}
           </div>
 
-          {/* Search Buses Button (Screen 1 Blue CTA) */}
+          {/* Large Blue Search CTA */}
           <button
             type="button"
             onClick={() => handleSearchBuses()}
             disabled={loadingBuses}
-            className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold text-xs py-3 rounded-xl shadow-md flex items-center justify-center gap-2 transition-all mt-1 cursor-pointer"
+            className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold text-sm py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 transition-all mt-2 cursor-pointer"
           >
-            <Search size={15} strokeWidth={2.5} />
-            <span>{loadingBuses ? 'Searching...' : 'Search Buses'}</span>
+            <Search size={18} strokeWidth={2.5} />
+            <span>{loadingBuses ? 'Searching Buses...' : 'Search Buses'}</span>
           </button>
         </div>
 
-        {/* Popular Journeys (Matches Reference Image Screen 1) */}
+        {/* Popular Journeys */}
         <div>
-          <h4 className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider mb-2">
+          <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-2.5">
             Popular Journeys
           </h4>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             {POPULAR_ROUTES.map((route) => (
               <button
                 key={`${route.from}-${route.to}`}
                 type="button"
                 onClick={() => handleSearchBuses(route.from, route.to)}
-                className="px-2.5 py-2 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-700 hover:border-blue-500 hover:text-blue-600 active:bg-blue-50 text-center shadow-2xs transition-all cursor-pointer"
+                className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:border-blue-500 hover:text-blue-600 active:bg-blue-50 text-center shadow-2xs transition-all cursor-pointer"
               >
                 {route.from} → {route.to}
               </button>
@@ -948,93 +895,83 @@ export default function PassengerPortal({
         {/* Don't know your bus stop? Card */}
         <div
           onClick={() => setFindStopOpen(true)}
-          className="bg-white rounded-2xl p-3 shadow-2xs border border-slate-100 flex items-center gap-3 cursor-pointer hover:border-blue-400 hover:shadow-xs transition-all"
+          className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center gap-3.5 cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
         >
-          <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <MapPin size={16} strokeWidth={2.4} />
+          <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <MapPin size={20} strokeWidth={2.4} />
           </div>
           <div>
             <h5 className="text-xs font-bold text-slate-800 leading-tight">
               Don't know your bus stop?
             </h5>
-            <span className="text-[11px] font-extrabold text-blue-600 hover:underline">
-              Find a Stop →
+            <span className="text-xs font-extrabold text-blue-600 hover:underline">
+              Find a Stop by Landmark →
             </span>
           </div>
         </div>
       </div>
 
       {/* Bottom Coastal Artwork */}
-      <div className="mt-auto pointer-events-none relative w-full h-20 overflow-hidden shrink-0">
+      <div className="mt-auto pointer-events-none relative w-full h-24 overflow-hidden shrink-0">
         <div className="absolute inset-0 bg-gradient-to-t from-sky-100/90 via-sky-50/50 to-transparent" />
         <svg
           viewBox="0 0 500 150"
           preserveAspectRatio="none"
-          className="absolute bottom-0 w-full h-14 text-sky-200/50 fill-current"
+          className="absolute bottom-0 w-full h-16 text-sky-200/50 fill-current"
         >
           <path d="M0.00,49.98 C149.99,150.00 349.89,-49.98 500.00,49.98 L500.00,150.00 L0.00,150.00 Z" />
         </svg>
         <svg
           viewBox="0 0 500 150"
           preserveAspectRatio="none"
-          className="absolute bottom-0 w-full h-9 text-blue-300/40 fill-current"
+          className="absolute bottom-0 w-full h-10 text-blue-300/40 fill-current"
         >
           <path d="M0.00,49.98 C180.00,120.00 320.00,10.00 500.00,49.98 L500.00,150.00 L0.00,150.00 Z" />
         </svg>
-        <div className="absolute bottom-1.5 left-4 text-[9px] font-bold text-sky-900 tracking-wider">
-          🌊 Karavali Coastal Highway Corridor
+        <div className="absolute bottom-2 left-6 text-[10px] font-bold text-sky-900 tracking-wider">
+          🌊 Karavali Coastal Highway Corridor • NH-66
         </div>
       </div>
     </div>
   )
 
-  // Screen 2: Available Buses (Surathkal -> Udupi)
-  const renderScreen2 = () => (
+  // PAGE 2: Matching Bus Results (Surathkal -> Udupi)
+  const renderBusesPage = () => (
     <div className="flex-1 flex flex-col bg-slate-50 relative overflow-y-auto">
-      {/* Phone Status Bar */}
-      <div className="px-6 pt-2 pb-1 flex items-center justify-between text-[11px] font-bold text-slate-800 shrink-0">
-        <span>10:24</span>
-        <div className="flex items-center gap-1.5 text-slate-700">
-          <span className="text-[10px]">📶</span>
-          <span className="text-[10px]">📡</span>
-          <span className="text-xs">🔋</span>
-        </div>
-      </div>
-
-      {/* Screen 2 Header */}
-      <header className="px-4 py-2.5 bg-white border-b border-slate-100 flex items-center gap-3 shrink-0 shadow-2xs">
+      {/* Top Header */}
+      <header className="px-5 py-3.5 bg-white border-b border-slate-100 flex items-center gap-3 sticky top-0 z-20 shadow-xs">
         <button
           type="button"
           onClick={() => setScreen(1)}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
-          aria-label="Back to Search"
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all cursor-pointer"
+          aria-label="Back to Homepage"
         >
-          <ArrowLeft size={19} strokeWidth={2.4} />
+          <ArrowLeft size={22} strokeWidth={2.4} />
         </button>
-        <h2 className="text-xs sm:text-sm font-extrabold text-slate-900 truncate">
+        <h2 className="text-base font-extrabold text-slate-900 truncate">
           Buses: {currentStop} → {destination}
         </h2>
       </header>
 
-      {/* Filter Tabs: Active (2) | All (3) | Scheduled (1) */}
-      <div className="px-4 py-2.5 bg-white border-b border-slate-100 flex items-center gap-2 overflow-x-auto shrink-0 scrollbar-none">
+      {/* Filter Tabs */}
+      <div className="px-5 py-3 bg-white border-b border-slate-100 flex items-center gap-2.5 overflow-x-auto shrink-0 scrollbar-none">
         <button
           type="button"
           onClick={() => setActiveFilter('active')}
-          className={`px-3 py-1 rounded-full text-[11px] font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+          className={`px-4 py-1.5 rounded-full text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
             activeFilter === 'active'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
           }`}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          <span className="w-2 h-2 rounded-full bg-emerald-400" />
           <span>Active ({activeCount})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveFilter('all')}
-          className={`px-3 py-1 rounded-full text-[11px] font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+          className={`px-4 py-1.5 rounded-full text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
             activeFilter === 'all'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -1046,7 +983,7 @@ export default function PassengerPortal({
         <button
           type="button"
           onClick={() => setActiveFilter('scheduled')}
-          className={`px-3 py-1 rounded-full text-[11px] font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+          className={`px-4 py-1.5 rounded-full text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
             activeFilter === 'scheduled'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -1057,328 +994,361 @@ export default function PassengerPortal({
       </div>
 
       {/* Bus Cards List */}
-      <div className="p-3.5 space-y-3 flex-1">
-        {displayedBuses.map((bus) => {
-          const isLive = Boolean(bus.is_live || bus.tracking_status === 'LIVE')
-          return (
-            <div
-              key={bus.bus_id}
-              className="bg-white rounded-2xl p-3.5 shadow-2xs border border-slate-100 hover:border-blue-300 transition-all space-y-2.5"
+      <div className="p-4 sm:p-5 space-y-3.5 flex-1 max-w-xl mx-auto w-full">
+        {loadingBuses ? (
+          <div className="text-center py-16 bg-white rounded-2xl border border-slate-100 shadow-sm">
+            <RotateCw size={32} className="mx-auto text-blue-600 animate-spin mb-3" />
+            <p className="text-sm font-extrabold text-slate-800">Searching active corridor buses...</p>
+            <p className="text-xs text-slate-500 mt-1">Connecting to live PostgreSQL tracking session</p>
+          </div>
+        ) : searchError ? (
+          <div className="p-5 bg-white rounded-2xl border border-rose-200 shadow-sm text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+              <MapPin size={24} />
+            </div>
+            <h4 className="text-sm font-black text-rose-900">Search Notice</h4>
+            <p className="text-xs text-slate-600">{searchError}</p>
+            <button
+              type="button"
+              onClick={() => setScreen(1)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold cursor-pointer"
             >
-              {/* Top Row: Icon, Bus Name, Status Badge, Reg/Type */}
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-800 shrink-0">
-                    <Bus size={18} strokeWidth={2.2} />
+              Modify Boarding &amp; Destination
+            </button>
+          </div>
+        ) : displayedBuses.length === 0 ? (
+          <div className="text-center py-14 px-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+              <Bus size={26} />
+            </div>
+            <h4 className="text-sm font-extrabold text-slate-800">
+              No matching buses currently in this filter
+            </h4>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto">
+              All buses operate along the 9 official NH-66 corridor stops. Try selecting All ({buses.length}) or selecting another stop pair.
+            </p>
+            <button
+              type="button"
+              onClick={() => setScreen(1)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              ← Back to Journey Search
+            </button>
+          </div>
+        ) : (
+          displayedBuses.map((bus) => {
+            const isLive = Boolean(
+              bus.is_live ||
+                bus.tracking_status === 'LIVE' ||
+                bus.tracking_status === 'LOCATION STALE'
+            )
+
+            return (
+              <div
+                key={bus.bus_id}
+                className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:border-blue-300 transition-all space-y-3"
+              >
+                {/* Top Row: Icon, Bus Name, Status Badge, Reg/Type */}
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-800 shrink-0">
+                      <Bus size={20} strokeWidth={2.2} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-900 leading-tight">
+                        {bus.bus_name}
+                      </h3>
+                      <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                        {bus.vehicle_number} • {bus.service_type || 'Non AC'}
+                      </p>
+                    </div>
                   </div>
+
+                  {/* Status Pill */}
+                  {isLive ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">
+                      Scheduled
+                    </span>
+                  )}
+                </div>
+
+                {/* Stop Timings Row */}
+                <div className="flex items-center justify-between px-1 py-1">
                   <div>
-                    <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-tight">
-                      {bus.bus_name}
-                    </h3>
-                    <p className="text-[10px] font-semibold text-slate-500">
-                      {bus.vehicle_number} • {bus.service_type || 'Non AC'}
-                    </p>
+                    <div className="text-sm font-black text-slate-900 flex items-center gap-1">
+                      <Clock size={13} className="text-slate-400" />
+                      <span>{bus.boarding_planned_time || '10:40 AM'}</span>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-500">
+                      {bus.boarding_stop || currentStop}
+                    </span>
+                  </div>
+
+                  <div className="text-slate-400 font-bold text-sm tracking-widest">
+                    ➔
+                  </div>
+
+                  <div className="text-right">
+                    <div className="text-sm font-black text-slate-900 flex items-center justify-end gap-1">
+                      <Clock size={13} className="text-slate-400" />
+                      <span>{bus.destination_planned_time || '12:15 PM'}</span>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-500">
+                      {bus.destination_stop || destination}
+                    </span>
                   </div>
                 </div>
 
-                {/* Status Pill */}
+                {/* Actions: Active gets Track & Details; Scheduled gets full-width Details */}
                 {isLive ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <div className="grid grid-cols-2 gap-2.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleTrackBusDirectly(bus)}
+                      className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold py-2.5 rounded-xl shadow-xs text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <MapPin size={15} strokeWidth={2.4} />
+                      <span>Track Bus</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectBusDetails(bus)}
+                      className="w-full bg-white border border-blue-600 hover:bg-blue-50 active:scale-98 text-blue-600 font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1 transition-all cursor-pointer"
+                    >
+                      <span>View Details</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectBusDetails(bus)}
+                      className="w-full bg-white border border-blue-600 hover:bg-blue-50 active:scale-98 text-blue-600 font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center transition-all cursor-pointer"
+                    >
+                      View Details
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+
+  // PAGE 3: Bus Details (Route & Stop Timings vertical timeline)
+  const renderDetailsPage = () => (
+    <div className="flex-1 flex flex-col bg-slate-50 relative overflow-y-auto">
+      {/* Top Header */}
+      <header className="px-5 py-3.5 bg-white border-b border-slate-100 flex items-center gap-3 sticky top-0 z-20 shadow-xs">
+        <button
+          type="button"
+          onClick={() => setScreen(2)}
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all cursor-pointer"
+          aria-label="Back to Bus List"
+        >
+          <ArrowLeft size={22} strokeWidth={2.4} />
+        </button>
+        <h2 className="text-base font-extrabold text-slate-900">Bus Details</h2>
+      </header>
+
+      <div className="p-4 sm:p-5 space-y-4 flex-1 max-w-xl mx-auto w-full">
+        {activeSelectedBus && (
+          <>
+            {/* Top Summary Card */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3.5">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center text-blue-700 shrink-0">
+                    <Bus size={22} strokeWidth={2.2} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 leading-tight">
+                      {activeSelectedBus.bus_name}
+                    </h3>
+                    <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                      {activeSelectedBus.vehicle_number} • {activeSelectedBus.service_type || 'Non AC'}
+                    </p>
+                    {activeSelectedBus.conductor_name && (
+                      <p className="text-[11px] font-bold text-slate-500 mt-1">
+                        Conductor: {activeSelectedBus.conductor_name} ({activeSelectedBus.conductor_phone || 'Assigned'})
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {activeSelectedBus.is_live ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     Active
                   </span>
                 ) : (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">
                     Scheduled
                   </span>
                 )}
               </div>
 
-              {/* Time Row */}
-              <div className="flex items-center justify-between px-1 py-0.5">
-                <div>
-                  <div className="text-xs font-black text-slate-900 flex items-center gap-1">
-                    <Clock size={11} className="text-slate-400" />
-                    <span>{bus.boarding_planned_time || '10:40 AM'}</span>
+              {/* Departure & Arrival Boxes Side-by-Side */}
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                {/* Departure Box */}
+                <div className="bg-sky-50/70 border border-sky-100 rounded-xl p-3 flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-sky-100 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <Clock size={15} strokeWidth={2.4} />
                   </div>
-                  <span className="text-[10px] font-semibold text-slate-500">
-                    {bus.boarding_stop || currentStop}
-                  </span>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Departure
+                    </span>
+                    <span className="text-sm font-black text-slate-900 block leading-tight">
+                      {activeSelectedBus.boarding_planned_time || '10:40 AM'}
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      ({currentStop})
+                    </span>
+                  </div>
                 </div>
 
-                <div className="text-slate-400 font-bold text-xs tracking-widest">
-                  ➔
-                </div>
-
-                <div className="text-right">
-                  <div className="text-xs font-black text-slate-900 flex items-center justify-end gap-1">
-                    <Clock size={11} className="text-slate-400" />
-                    <span>{bus.destination_planned_time || '12:15 PM'}</span>
+                {/* Arrival (Planned) Box */}
+                <div className="bg-rose-50/70 border border-rose-100 rounded-xl p-3 flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <Flag size={14} strokeWidth={2.4} />
                   </div>
-                  <span className="text-[10px] font-semibold text-slate-500">
-                    {bus.destination_stop || destination}
-                  </span>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Arrival (Planned)
+                    </span>
+                    <span className="text-sm font-black text-slate-900 block leading-tight">
+                      {activeSelectedBus.destination_planned_time || '12:15 PM'}
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      ({destination})
+                    </span>
+                  </div>
                 </div>
               </div>
+            </div>
 
-              {/* Button(s) matching Reference Image Screen 2 */}
-              {isLive ? (
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => handleTrackBusDirectly(bus)}
-                    className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold py-2 rounded-xl shadow-xs text-xs flex items-center justify-center gap-1 transition-all cursor-pointer"
-                  >
-                    <MapPin size={13} strokeWidth={2.4} />
-                    <span>Track Bus</span>
-                  </button>
+            {/* Route & Stop Timings Vertical Timeline (All 9 Stops in Order) */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+              <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider mb-4">
+                Route &amp; Stop Timings
+              </h4>
 
-                  <button
-                    type="button"
-                    onClick={() => handleSelectBusDetails(bus)}
-                    className="w-full bg-white border border-blue-600 hover:bg-blue-50 active:scale-98 text-blue-600 font-extrabold py-2 rounded-xl text-xs flex items-center justify-center gap-1 transition-all cursor-pointer"
-                  >
-                    <span>View Details</span>
-                  </button>
+              {loadingRoute ? (
+                <div className="text-center py-6 text-xs font-semibold text-slate-400">
+                  Loading verified corridor timeline...
                 </div>
               ) : (
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectBusDetails(bus)}
-                    className="w-full bg-white border border-blue-600 hover:bg-blue-50 active:scale-98 text-blue-600 font-extrabold py-2 rounded-xl text-xs flex items-center justify-center transition-all cursor-pointer"
-                  >
-                    View Details
-                  </button>
+                <div className="space-y-0 relative pl-2">
+                  {corridorTimelineStops.map((stop, idx) => {
+                    const isLast = idx === corridorTimelineStops.length - 1
+                    const isBoarding = stop.stop_name.toLowerCase() === currentStop.toLowerCase()
+                    const isDestination = stop.stop_name.toLowerCase() === destination.toLowerCase()
+
+                    return (
+                      <div key={stop.stop_id || idx} className="flex items-start gap-3.5 relative pb-5 last:pb-0">
+                        {/* Connecting Line */}
+                        {!isLast && (
+                          <div className="absolute left-[7px] top-[16px] bottom-0 w-0.5 bg-slate-200" />
+                        )}
+
+                        {/* Node */}
+                        {isBoarding ? (
+                          <div className="w-4 h-4 rounded-full border-[3px] border-emerald-500 bg-white shrink-0 mt-0.5 z-10 shadow-xs" />
+                        ) : isDestination ? (
+                          <div className="w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center shrink-0 mt-0.5 z-10 shadow-xs">
+                            <MapPin size={10} strokeWidth={3} />
+                          </div>
+                        ) : (
+                          <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 bg-white shrink-0 mt-0.5 ml-[1px] z-10" />
+                        )}
+
+                        {/* Stop Info */}
+                        <div className="flex-1 -mt-0.5 flex items-center justify-between">
+                          <div>
+                            <div
+                              className={`text-xs ${
+                                isBoarding
+                                  ? 'font-black text-emerald-700 text-sm'
+                                  : isDestination
+                                  ? 'font-black text-rose-700 text-sm'
+                                  : 'font-bold text-slate-800'
+                              }`}
+                            >
+                              {stop.stop_name}
+                              {isBoarding && (
+                                <span className="ml-2 px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800">
+                                  (Boarding)
+                                </span>
+                              )}
+                              {isDestination && (
+                                <span className="ml-2 px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-rose-800">
+                                  (Destination)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-xs font-bold text-slate-600">
+                            {stop.planned_arrival}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
-          )
-        })}
+          </>
+        )}
       </div>
+
+      {/* Sticky Bottom Action Button */}
+      {activeSelectedBus && (
+        <div className="p-4 bg-white border-t border-slate-100 sticky bottom-0 z-20">
+          <div className="max-w-xl mx-auto w-full">
+            <button
+              type="button"
+              onClick={() => handleTrackBusDirectly(activeSelectedBus)}
+              className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold text-sm py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <MapPin size={17} strokeWidth={2.4} />
+              <span>Track This Bus</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 
-  // Screen 3: Bus Details (Route & Stop Timings)
-  const renderScreen3 = () => (
-    <div className="flex-1 flex flex-col bg-slate-50 relative overflow-y-auto">
-      {/* Phone Status Bar */}
-      <div className="px-6 pt-2 pb-1 flex items-center justify-between text-[11px] font-bold text-slate-800 shrink-0">
-        <span>10:24</span>
-        <div className="flex items-center gap-1.5 text-slate-700">
-          <span className="text-[10px]">📶</span>
-          <span className="text-[10px]">📡</span>
-          <span className="text-xs">🔋</span>
-        </div>
-      </div>
-
-      {/* Screen 3 Header */}
-      <header className="px-4 py-2.5 bg-white border-b border-slate-100 flex items-center gap-3 shrink-0 shadow-2xs">
-        <button
-          type="button"
-          onClick={() => setScreen(2)}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
-          aria-label="Back to Bus List"
-        >
-          <ArrowLeft size={19} strokeWidth={2.4} />
-        </button>
-        <h2 className="text-xs sm:text-sm font-extrabold text-slate-900">
-          Bus Details
-        </h2>
-      </header>
-
-      <div className="p-3.5 space-y-3.5 flex-1">
-        {/* Top Summary Card */}
-        <div className="bg-white rounded-2xl p-3.5 shadow-2xs border border-slate-100 space-y-3">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-blue-700 shrink-0">
-                <Bus size={20} strokeWidth={2.2} />
-              </div>
-              <div>
-                <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-tight">
-                  {activeSelectedBus.bus_name}
-                </h3>
-                <p className="text-[10px] font-semibold text-slate-500 mt-0.5">
-                  {activeSelectedBus.vehicle_number} • {activeSelectedBus.service_type || 'Non AC'}
-                </p>
-                {activeSelectedBus.conductor_name && (
-                  <p className="text-[9px] font-bold text-slate-400 mt-0.5">
-                    Conductor: {activeSelectedBus.conductor_name} ({activeSelectedBus.conductor_phone || 'Assigned'})
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {activeSelectedBus.is_live ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Active
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
-                Scheduled
-              </span>
-            )}
-          </div>
-
-          {/* Departure & Arrival Boxes Side-by-Side */}
-          <div className="grid grid-cols-2 gap-2 pt-0.5">
-            {/* Departure */}
-            <div className="bg-sky-50/70 border border-sky-100 rounded-xl p-2.5 flex items-start gap-2">
-              <div className="w-6 h-6 rounded-full bg-sky-100 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
-                <Clock size={13} strokeWidth={2.4} />
-              </div>
-              <div>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Departure
-                </span>
-                <span className="text-xs font-black text-slate-900 block leading-tight">
-                  {activeSelectedBus.boarding_planned_time || '10:40 AM'}
-                </span>
-                <span className="text-[10px] font-semibold text-slate-500">
-                  ({currentStop})
-                </span>
-              </div>
-            </div>
-
-            {/* Arrival (Planned) */}
-            <div className="bg-rose-50/70 border border-rose-100 rounded-xl p-2.5 flex items-start gap-2">
-              <div className="w-6 h-6 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 mt-0.5">
-                <Flag size={12} strokeWidth={2.4} />
-              </div>
-              <div>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Arrival (Planned)
-                </span>
-                <span className="text-xs font-black text-slate-900 block leading-tight">
-                  {activeSelectedBus.destination_planned_time || '12:15 PM'}
-                </span>
-                <span className="text-[10px] font-semibold text-slate-500">
-                  ({destination})
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Route & Stop Timings Vertical Timeline (All 9 Stops in Order) */}
-        <div className="bg-white rounded-2xl p-3.5 shadow-2xs border border-slate-100">
-          <h4 className="text-[11px] font-extrabold text-slate-800 uppercase tracking-wider mb-3">
-            Route &amp; Stop Timings
-          </h4>
-
-          {loadingRoute ? (
-            <div className="text-center py-6 text-xs font-semibold text-slate-400">
-              Loading verified corridor timeline...
-            </div>
-          ) : (
-            <div className="space-y-0 relative pl-1.5">
-              {corridorTimelineStops.map((stop, idx) => {
-                const isLast = idx === corridorTimelineStops.length - 1
-                const isBoarding = stop.stop_name.toLowerCase() === currentStop.toLowerCase()
-                const isDestination = stop.stop_name.toLowerCase() === destination.toLowerCase()
-
-                return (
-                  <div key={stop.stop_id || idx} className="flex items-start gap-3 relative pb-4 last:pb-0">
-                    {/* Connecting Vertical Line */}
-                    {!isLast && (
-                      <div className="absolute left-[7px] top-[14px] bottom-0 w-0.5 bg-slate-200" />
-                    )}
-
-                    {/* Timeline Node */}
-                    {isBoarding ? (
-                      <div className="w-4 h-4 rounded-full border-[3px] border-emerald-500 bg-white shrink-0 mt-0.5 z-10 shadow-xs" />
-                    ) : isDestination ? (
-                      <div className="w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center shrink-0 mt-0.5 z-10 shadow-xs">
-                        <MapPin size={9} strokeWidth={3} />
-                      </div>
-                    ) : (
-                      <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 bg-white shrink-0 mt-0.5 ml-[1px] z-10" />
-                    )}
-
-                    {/* Stop Details */}
-                    <div className="flex-1 -mt-0.5 flex items-center justify-between">
-                      <div>
-                        <div
-                          className={`text-xs ${
-                            isBoarding
-                              ? 'font-black text-emerald-700'
-                              : isDestination
-                              ? 'font-black text-rose-700'
-                              : 'font-bold text-slate-800'
-                          }`}
-                        >
-                          {stop.stop_name}
-                          {isBoarding && (
-                            <span className="ml-1.5 px-1.5 py-0.2 rounded-sm text-[9px] font-black bg-emerald-100 text-emerald-800">
-                              (Boarding)
-                            </span>
-                          )}
-                          {isDestination && (
-                            <span className="ml-1.5 px-1.5 py-0.2 rounded-sm text-[9px] font-black bg-rose-100 text-rose-800">
-                              (Destination)
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="text-[11px] font-bold text-slate-500">
-                        {stop.planned_arrival}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Bottom Sticky Action Button */}
-      <div className="p-3 bg-white border-t border-slate-100 sticky bottom-0">
-        <button
-          type="button"
-          onClick={() => handleTrackBusDirectly(activeSelectedBus)}
-          className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold text-xs py-2.5 rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-        >
-          <MapPin size={15} strokeWidth={2.4} />
-          <span>Track This Bus</span>
-        </button>
-      </div>
-    </div>
-  )
-
-  // Screen 4: Live Tracking (Leaflet Map + Floating HUD)
-  const renderScreen4 = () => (
+  // PAGE 4: Live Tracking Map (Full interactive Leaflet map & floating HUD)
+  const renderTrackingPage = () => (
     <div className="flex-1 flex flex-col bg-slate-50 relative overflow-hidden">
-      {/* Phone Status Bar */}
-      <div className="px-6 pt-2 pb-1 flex items-center justify-between text-[11px] font-bold text-slate-800 shrink-0 bg-white z-10">
-        <span>10:24</span>
-        <div className="flex items-center gap-1.5 text-slate-700">
-          <span className="text-[10px]">📶</span>
-          <span className="text-[10px]">📡</span>
-          <span className="text-xs">🔋</span>
-        </div>
-      </div>
-
-      {/* Screen 4 Header */}
-      <header className="px-4 py-2.5 bg-white border-b border-slate-100 flex items-center gap-3 shrink-0 shadow-2xs z-10">
+      {/* Top Header */}
+      <header className="px-5 py-3.5 bg-white border-b border-slate-100 flex items-center gap-3 shrink-0 shadow-xs z-10">
         <button
           type="button"
           onClick={() => setScreen(3)}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all cursor-pointer"
           aria-label="Back to Details"
         >
-          <ArrowLeft size={19} strokeWidth={2.4} />
+          <ArrowLeft size={22} strokeWidth={2.4} />
         </button>
-        <h2 className="text-xs sm:text-sm font-extrabold text-slate-900">
+        <h2 className="text-base font-extrabold text-slate-900">
           Live Tracking
         </h2>
       </header>
 
-      {/* Interactive Map Area */}
-      <div className="flex-1 relative w-full h-full">
+      {/* Map Area */}
+      <div className="flex-1 relative w-full h-[520px] sm:h-[600px]">
         <MapContainer
           center={busCoords}
           zoom={11}
@@ -1400,8 +1370,12 @@ export default function PassengerPortal({
 
           {/* Labeled Pins for All 9 Official Corridor Stops */}
           {OFFICIAL_9_CORRIDOR_STOPS.map((stop) => {
-            const isDestination = stop.stop_name.toLowerCase() === destination.toLowerCase() || stop.stop_name === 'Kundapura'
-            const isBoarding = stop.stop_name.toLowerCase() === currentStop.toLowerCase() || stop.stop_name === 'Mangaluru'
+            const isDestination =
+              stop.stop_name.toLowerCase() === destination.toLowerCase() ||
+              stop.stop_name === 'Kundapura'
+            const isBoarding =
+              stop.stop_name.toLowerCase() === currentStop.toLowerCase() ||
+              stop.stop_name === 'Mangaluru'
 
             return (
               <Marker
@@ -1411,7 +1385,9 @@ export default function PassengerPortal({
               >
                 <Popup>
                   <div className="text-xs">
-                    <strong>{stop.stop_name} ({stop.stop_name_kn})</strong>
+                    <strong>
+                      {stop.stop_name} ({stop.stop_name_kn})
+                    </strong>
                     <br />
                     Locality: {stop.locality}
                   </div>
@@ -1421,276 +1397,289 @@ export default function PassengerPortal({
           })}
 
           {/* Live Bus Marker */}
-          <Marker position={busCoords} icon={busLiveIcon}>
-            <Popup>
-              <div className="text-xs">
-                <strong>{activeSelectedBus.bus_name}</strong>
-                <br />
-                {activeSelectedBus.vehicle_number}
-                <br />
-                Status: Live GPS Active
-              </div>
-            </Popup>
-          </Marker>
+          {activeSelectedBus && (
+            <Marker position={busCoords} icon={busLiveIcon}>
+              <Popup>
+                <div className="text-xs">
+                  <strong>{activeSelectedBus.bus_name}</strong>
+                  <br />
+                  {activeSelectedBus.vehicle_number}
+                  <br />
+                  Status: Live GPS Active
+                </div>
+              </Popup>
+            </Marker>
+          )}
 
           <MapViewportController bounds={mapBounds} center={busCoords} />
         </MapContainer>
 
-        {/* Floating Bottom HUD Card (Screen 4) */}
-        <div className="absolute bottom-3 left-3 right-3 z-10">
-          <div className="bg-white rounded-2xl p-3.5 shadow-xl border border-slate-100 space-y-2.5">
-            {/* Bus Info & Badge */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-800 shrink-0">
-                  <Bus size={18} strokeWidth={2.2} />
+        {/* Floating Bottom HUD Card */}
+        {activeSelectedBus && (
+          <div className="absolute bottom-4 left-4 right-4 sm:left-6 sm:right-6 z-10 max-w-xl mx-auto">
+            <div className="bg-white rounded-2xl p-4 shadow-xl border border-slate-100 space-y-3">
+              {/* Bus Name & Status */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-800 shrink-0">
+                    <Bus size={20} strokeWidth={2.2} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 leading-tight">
+                      {activeSelectedBus.bus_name}
+                    </h3>
+                    <p className="text-xs font-semibold text-slate-500">
+                      {activeSelectedBus.vehicle_number}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-tight">
-                    {activeSelectedBus.bus_name}
-                  </h3>
-                  <p className="text-[10px] font-semibold text-slate-500">
-                    {activeSelectedBus.vehicle_number}
-                  </p>
-                </div>
-              </div>
 
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Active
-              </span>
-            </div>
-
-            {/* Next Stop & ETA Boxes */}
-            <div className="grid grid-cols-2 gap-2 pt-0.5">
-              <div className="bg-slate-50 rounded-xl p-2 border border-slate-100">
-                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                  <MapPin size={10} className="text-rose-500 shrink-0" />
-                  <span>Next Stop</span>
-                </div>
-                <div className="text-xs font-black text-slate-900 mt-0.5">
-                  {trackedTelemetry?.next_stop || 'Kaup'}
-                </div>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-2 border border-slate-100">
-                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                  <Clock size={10} className="text-blue-500 shrink-0" />
-                  <span>ETA</span>
-                </div>
-                <div className="text-xs font-black text-slate-900 mt-0.5">
-                  ~ {trackedTelemetry?.eta_minutes || 18} min
-                </div>
-              </div>
-            </div>
-
-            {/* Telemetry Freshness Bar */}
-            <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] font-semibold text-slate-500">
-              <div className="flex items-center gap-1.5">
-                <RotateCw size={11} className="text-blue-600 animate-spin" />
-                <span>
-                  Last Updated: 11:02 AM • 🟢 Live ({secondsAgo}s)
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Active
                 </span>
               </div>
+
+              {/* Next Stop & ETA Boxes */}
+              <div className="grid grid-cols-2 gap-2.5 pt-0.5">
+                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <MapPin size={11} className="text-rose-500 shrink-0" />
+                    <span>Next Stop</span>
+                  </div>
+                  <div className="text-sm font-black text-slate-900 mt-0.5">
+                    {trackedTelemetry?.next_stop || 'Kaup'}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <Clock size={11} className="text-blue-500 shrink-0" />
+                    <span>ETA</span>
+                  </div>
+                  <div className="text-sm font-black text-slate-900 mt-0.5">
+                    ~ {trackedTelemetry?.eta_minutes || 18} min
+                  </div>
+                </div>
+              </div>
+
+              {/* Freshness Bar */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] font-semibold text-slate-500">
+                <div className="flex items-center gap-1.5">
+                  <RotateCw size={12} className="text-blue-600 animate-spin" />
+                  <span>
+                    Last Updated: 11:02 AM • 🟢 Live ({secondsAgo}s)
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  // SLIDE-OUT DRAWER MENU (Hamburger ☰)
+  const renderDrawer = () => {
+    if (!menuOpen) return null
+    return (
+      <div className="fixed inset-0 z-50 flex">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity cursor-pointer"
+          onClick={() => setMenuOpen(false)}
+        />
+
+        {/* Drawer Content */}
+        <div className="relative w-72 max-w-[85%] bg-slate-900 text-white h-full shadow-2xl flex flex-col z-10">
+          <div className="p-5 bg-gradient-to-br from-blue-700 to-indigo-900 border-b border-white/10 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2.5">
+              <span className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white">
+                <Bus size={18} strokeWidth={2.4} />
+              </span>
+              <div>
+                <h3 className="font-extrabold text-sm leading-tight text-white">
+                  Karavali-Transit
+                </h3>
+                <p className="text-[10px] text-sky-200 font-semibold">
+                  Passenger Portal
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(false)}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-white/80 hover:bg-white/20 active:scale-95 transition-all cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Navigation Links */}
+          <nav className="p-3.5 space-y-1.5 flex-1 bg-slate-900 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setScreen(1)
+                setMenuOpen(false)
+              }}
+              className={`w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-3 transition-all cursor-pointer ${
+                screen === 1
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-200 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              <Navigation size={16} />
+              <span>Home</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false)
+                handleSearchBuses(currentStop, destination)
+              }}
+              className={`w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-3 transition-all cursor-pointer ${
+                screen === 2
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-200 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              <Bus size={16} className="text-sky-400" />
+              <span>Passenger Radar</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false)
+                setFindStopOpen(true)
+              }}
+              className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-200 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
+            >
+              <Compass size={16} className="text-sky-400" />
+              <span>Find Bus Stop</span>
+            </button>
+
+            <div className="my-2 border-t border-white/10" />
+
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false)
+                onSelectRole('owner')
+              }}
+              className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
+            >
+              <Building size={16} className="text-slate-400" />
+              <span>Fleet Owner Login</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false)
+                onSelectRole('conductor')
+              }}
+              className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
+            >
+              <Radio size={16} className="text-slate-400" />
+              <span>Conductor Login</span>
+            </button>
+
+            <div className="my-2 border-t border-white/10" />
+
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false)
+                setActiveModal('helpdesk')
+              }}
+              className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
+            >
+              <HelpCircle size={16} className="text-slate-400" />
+              <span>Helpdesk</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false)
+                setActiveModal('feedback')
+              }}
+              className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
+            >
+              <MessageSquare size={16} className="text-slate-400" />
+              <span>Feedback</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false)
+                setActiveModal('contact')
+              }}
+              className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
+            >
+              <Phone size={16} className="text-slate-400" />
+              <span>Contact Us</span>
+            </button>
+          </nav>
+
+          {/* Bottom Language Switcher */}
+          <div className="p-4 border-t border-white/10 bg-slate-950 flex items-center justify-between shrink-0">
+            <span className="text-xs text-slate-400 font-semibold flex items-center gap-1.5">
+              <span>🌐</span>
+              <span>Language:</span>
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (lang !== 'en') toggleLanguage()
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  lang === 'en'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                }`}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (lang !== 'kn') toggleLanguage()
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  lang === 'kn'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                }`}
+              >
+                ಕನ್ನಡ
+              </button>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  )
-
-  // Screen 5: Hamburger Slide-Out Drawer Menu (Matching Reference Screen 5)
-  const renderScreen5 = () => (
-    <div className="flex-1 flex flex-col bg-slate-900 text-white relative overflow-y-auto">
-      {/* Phone Status Bar */}
-      <div className="px-6 pt-2 pb-1 flex items-center justify-between text-[11px] font-bold text-slate-300 shrink-0 bg-blue-700">
-        <span>10:24</span>
-        <div className="flex items-center gap-1.5 text-slate-300">
-          <span className="text-[10px]">📶</span>
-          <span className="text-[10px]">📡</span>
-          <span className="text-xs">🔋</span>
-        </div>
-      </div>
-
-      {/* Top Banner (Matches Reference Image Screen 5) */}
-      <div className="p-4 bg-gradient-to-br from-blue-700 to-indigo-900 border-b border-white/10 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2.5">
-          <span className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white">
-            <Bus size={18} strokeWidth={2.4} />
-          </span>
-          <div>
-            <h2 className="font-extrabold text-sm leading-tight text-white">
-              Karavali-Transit
-            </h2>
-            <p className="text-[10px] text-sky-200 font-semibold">
-              Passenger Portal
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            setMenuOpen(false)
-            setScreen(1)
-          }}
-          className="w-7 h-7 rounded-lg flex items-center justify-center text-white/80 hover:bg-white/20 active:scale-95 transition-all cursor-pointer"
-        >
-          <X size={18} />
-        </button>
-      </div>
-
-      {/* Navigation List */}
-      <nav className="p-3.5 space-y-1.5 flex-1 bg-slate-900">
-        <button
-          type="button"
-          onClick={() => {
-            setScreen(1)
-            setMenuOpen(false)
-          }}
-          className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold bg-blue-600 text-white flex items-center gap-3 transition-all cursor-pointer shadow-xs"
-        >
-          <Navigation size={16} className="text-white" />
-          <span>Home</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMenuOpen(false)
-            handleSearchBuses('Surathkal', 'Udupi')
-          }}
-          className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-200 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
-        >
-          <Bus size={16} className="text-sky-400" />
-          <span>Passenger Radar</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMenuOpen(false)
-            setFindStopOpen(true)
-          }}
-          className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-200 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
-        >
-          <Compass size={16} className="text-sky-400" />
-          <span>Find Bus Stop</span>
-        </button>
-
-        <div className="my-2 border-t border-white/10" />
-
-        <button
-          type="button"
-          onClick={() => {
-            setMenuOpen(false)
-            onSelectRole('owner')
-          }}
-          className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
-        >
-          <Building size={16} className="text-slate-400" />
-          <span>Fleet Owner Login</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMenuOpen(false)
-            onSelectRole('conductor')
-          }}
-          className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
-        >
-          <Radio size={16} className="text-slate-400" />
-          <span>Conductor Login</span>
-        </button>
-
-        <div className="my-2 border-t border-white/10" />
-
-        <button
-          type="button"
-          onClick={() => {
-            setMenuOpen(false)
-            setActiveModal('helpdesk')
-          }}
-          className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
-        >
-          <HelpCircle size={16} className="text-slate-400" />
-          <span>Helpdesk</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMenuOpen(false)
-            setActiveModal('feedback')
-          }}
-          className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
-        >
-          <MessageSquare size={16} className="text-slate-400" />
-          <span>Feedback</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMenuOpen(false)
-            setActiveModal('contact')
-          }}
-          className="w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-3 transition-all cursor-pointer"
-        >
-          <Phone size={16} className="text-slate-400" />
-          <span>Contact Us</span>
-        </button>
-      </nav>
-
-      {/* Language Switcher Pills at Bottom (Matching Reference Screen 5) */}
-      <div className="p-4 border-t border-white/10 bg-slate-950 flex items-center justify-between shrink-0">
-        <span className="text-xs text-slate-400 font-semibold flex items-center gap-1.5">
-          <span>🌐</span>
-          <span>Language:</span>
-        </span>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              if (lang !== 'en') toggleLanguage()
-            }}
-            className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-              lang === 'en'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-white/10 text-slate-300 hover:bg-white/20'
-            }`}
-          >
-            English
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (lang !== 'kn') toggleLanguage()
-            }}
-            className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-              lang === 'kn'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-white/10 text-slate-300 hover:bg-white/20'
-            }`}
-          >
-            ಕನ್ನಡ
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="w-full min-h-screen bg-slate-100 flex flex-col text-slate-900 select-none">
       {/* ============================================================== */}
-      {/* TOP ROUTE STEPPER BANNER (Depicted at top of Reference Graphic) */}
+      {/* REAL RESPONSIVE APP: TOP CORRIDOR STEPPER & HEADER             */}
       {/* ============================================================== */}
-      <header className="bg-white border-b border-slate-200 py-3 px-4 shadow-xs sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Main Title & Subtitles */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
-              <Bus size={22} strokeWidth={2.5} />
+      <header className="bg-white border-b border-slate-200 py-3 px-4 sm:px-6 shadow-xs sticky top-0 z-30">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+          {/* Logo & Corridor Brand */}
+          <div
+            onClick={() => setScreen(1)}
+            className="flex items-center gap-3 cursor-pointer"
+          >
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+              <Bus size={22} strokeWidth={2.4} />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1698,53 +1687,31 @@ export default function PassengerPortal({
                   Karavali-Transit
                 </h1>
                 <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-800">
-                  VTU Engineering Mini Project
+                  NH-66 Corridor
                 </span>
               </div>
-              <p className="text-xs font-extrabold text-blue-700">
-                Mangaluru – Kundapura Bus Tracking
-              </p>
-              <p className="text-[10px] font-semibold text-slate-500">
-                Real-time • Reliable • Simple
+              <p className="text-[11px] font-extrabold text-blue-700 leading-tight">
+                Mangaluru – Kundapura Real-Time Tracking
               </p>
             </div>
           </div>
 
-          {/* View Mode Switcher on Desktop */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Quick Action Links */}
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setViewMode('studio')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
-                viewMode === 'studio'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+              onClick={toggleLanguage}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 cursor-pointer"
             >
-              <Layers size={14} />
-              <span className="hidden sm:inline">5-Screen Reference Studio</span>
-              <span className="sm:hidden">5 Screens</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setViewMode('interactive')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
-                viewMode === 'interactive'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <Sparkles size={14} />
-              <span>Interactive App</span>
+              {lang === 'en' ? 'ಕನ್ನಡ' : 'English'}
             </button>
           </div>
         </div>
 
-        {/* 9-Stop Connecting Corridor Route Stepper */}
-        <div className="max-w-7xl mx-auto mt-2.5 pt-2 border-t border-slate-100 overflow-x-auto scrollbar-none">
-          <div className="flex items-center gap-1.5 min-w-[760px] py-1 text-xs">
-            <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white font-extrabold text-[10px] flex items-center gap-1 shrink-0">
+        {/* 9-Stop Connecting Corridor Stepper */}
+        <div className="max-w-4xl mx-auto mt-2.5 pt-2 border-t border-slate-100 overflow-x-auto scrollbar-none">
+          <div className="flex items-center gap-1.5 min-w-[720px] py-0.5 text-xs">
+            <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white font-extrabold text-[10px] flex items-center gap-1 shrink-0">
               <MapPin size={10} />
               <span>Route</span>
             </span>
@@ -1766,155 +1733,28 @@ export default function PassengerPortal({
               </div>
             ))}
 
-            <span className="text-base shrink-0 ml-1">🚍</span>
+            <span className="text-sm shrink-0 ml-1">🚍</span>
           </div>
         </div>
       </header>
 
       {/* ============================================================== */}
-      {/* MAIN CONTAINER: STUDIO VIEW (5 SCREENS) vs INTERACTIVE VIEW    */}
+      {/* MAIN APPLICATION CONTAINER (Only ONE current page is shown)     */}
       {/* ============================================================== */}
-      <main className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 overflow-x-auto">
-        {viewMode === 'studio' ? (
-          /* ============================================================ */
-          /* 5-SCREEN STUDIO VIEW: EXACTLY MATCHING REFERENCE IMAGE       */
-          /* ============================================================ */
-          <div className="w-full max-w-[1500px] flex flex-col items-center">
-            {/* Step Guides above the 5 phones */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 w-full mb-4 px-2 text-center text-xs font-black text-slate-800">
-              <div className="flex items-center justify-center gap-1.5 bg-white p-2 rounded-xl shadow-2xs border border-slate-200">
-                <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">1</span>
-                <span>Select Stop &amp; Destination</span>
-              </div>
-              <div className="flex items-center justify-center gap-1.5 bg-white p-2 rounded-xl shadow-2xs border border-slate-200">
-                <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">2</span>
-                <span>Available Buses &amp; Timings</span>
-              </div>
-              <div className="flex items-center justify-center gap-1.5 bg-white p-2 rounded-xl shadow-2xs border border-slate-200">
-                <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">3</span>
-                <span>See Bus &amp; Route Details</span>
-              </div>
-              <div className="flex items-center justify-center gap-1.5 bg-white p-2 rounded-xl shadow-2xs border border-slate-200">
-                <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">4</span>
-                <span>Track Selected Bus Live</span>
-              </div>
-              <div className="flex items-center justify-center gap-1.5 bg-white p-2 rounded-xl shadow-2xs border border-slate-200">
-                <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">5</span>
-                <span>Navigation &amp; Drawer</span>
-              </div>
-            </div>
-
-            {/* 5 Phone Screens Row */}
-            <div className="flex items-start justify-center gap-5 w-full overflow-x-auto pb-4">
-              {/* Phone 1: Home */}
-              <div className="w-[280px] sm:w-[295px] h-[640px] bg-white rounded-[32px] shadow-2xl border-[6px] border-slate-800 overflow-hidden flex flex-col shrink-0">
-                {renderScreen1()}
-              </div>
-
-              {/* Phone 2: Buses */}
-              <div className="w-[280px] sm:w-[295px] h-[640px] bg-white rounded-[32px] shadow-2xl border-[6px] border-slate-800 overflow-hidden flex flex-col shrink-0">
-                {renderScreen2()}
-              </div>
-
-              {/* Phone 3: Bus Details */}
-              <div className="w-[280px] sm:w-[295px] h-[640px] bg-white rounded-[32px] shadow-2xl border-[6px] border-slate-800 overflow-hidden flex flex-col shrink-0">
-                {renderScreen3()}
-              </div>
-
-              {/* Phone 4: Live Tracking */}
-              <div className="w-[280px] sm:w-[295px] h-[640px] bg-white rounded-[32px] shadow-2xl border-[6px] border-slate-800 overflow-hidden flex flex-col shrink-0">
-                {renderScreen4()}
-              </div>
-
-              {/* Phone 5: Hamburger Drawer */}
-              <div className="w-[280px] sm:w-[295px] h-[640px] bg-slate-900 rounded-[32px] shadow-2xl border-[6px] border-slate-800 overflow-hidden flex flex-col shrink-0">
-                {renderScreen5()}
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* ============================================================ */
-          /* INTERACTIVE APP VIEW: FOCUSED PHONE FRAME                    */
-          /* ============================================================ */
-          <div className="flex flex-col items-center w-full">
-            {/* Screen Tab Switcher */}
-            <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm mb-4 overflow-x-auto max-w-full">
-              <button
-                type="button"
-                onClick={() => setScreen(1)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  screen === 1 ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                1. Home
-              </button>
-              <button
-                type="button"
-                onClick={() => setScreen(2)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  screen === 2 ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                2. Buses
-              </button>
-              <button
-                type="button"
-                onClick={() => setScreen(3)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  screen === 3 ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                3. Bus Details
-              </button>
-              <button
-                type="button"
-                onClick={() => setScreen(4)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  screen === 4 ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                4. Live Tracking
-              </button>
-              <button
-                type="button"
-                onClick={() => setScreen(5)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  screen === 5 ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                5. Menu Drawer
-              </button>
-            </div>
-
-            {/* Interactive Phone Mockup */}
-            <div className="w-full max-w-[440px] h-[780px] bg-white sm:rounded-[36px] sm:shadow-2xl sm:border-[8px] sm:border-slate-800 overflow-hidden flex flex-col relative">
-              {screen === 1 && renderScreen1()}
-              {screen === 2 && renderScreen2()}
-              {screen === 3 && renderScreen3()}
-              {screen === 4 && renderScreen4()}
-              {screen === 5 && renderScreen5()}
-
-              {/* Slide-out Menu Drawer Overlay */}
-              {menuOpen && screen !== 5 && (
-                <div className="absolute inset-0 z-40 flex">
-                  <div
-                    className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity cursor-pointer"
-                    onClick={() => setMenuOpen(false)}
-                  />
-                  <div className="relative w-72 max-w-[85%] h-full shadow-2xl flex flex-col z-10">
-                    {renderScreen5()}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+      <main className="flex-1 flex flex-col items-center justify-start p-0 sm:py-6 sm:px-4">
+        {/* Centered responsive container for desktop & tablet; full width on mobile */}
+        <div className="w-full max-w-xl sm:rounded-3xl sm:shadow-xl sm:border sm:border-slate-200 overflow-hidden flex flex-col bg-white min-h-[640px] relative">
+          {screen === 1 && renderHomepage()}
+          {screen === 2 && renderBusesPage()}
+          {screen === 3 && renderDetailsPage()}
+          {screen === 4 && renderTrackingPage()}
+        </div>
 
         {/* ============================================================== */}
-        {/* BOTTOM FEATURE CARDS (depicted at bottom of Reference Image)  */}
+        {/* BOTTOM FEATURE CARDS                                           */}
         {/* ============================================================== */}
-        <section className="w-full max-w-5xl mt-8 pt-6 border-t border-slate-200">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-center">
+        <section className="w-full max-w-3xl mt-8 pt-6 border-t border-slate-200 px-4 hidden sm:block">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3 text-center">
             <div className="bg-white p-3 rounded-2xl shadow-xs border border-slate-200 flex flex-col items-center">
               <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm font-bold mb-1.5">
                 🚌
@@ -1972,13 +1812,16 @@ export default function PassengerPortal({
         </section>
       </main>
 
+      {/* Slide-out Drawer Menu Overlay */}
+      {renderDrawer()}
+
       {/* ============================================================== */}
       {/* NOTIFICATIONS DRAWER                                           */}
       {/* ============================================================== */}
       {notificationsOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity cursor-pointer"
             onClick={() => setNotificationsOpen(false)}
           />
           <div className="relative w-80 max-w-[85%] bg-white h-full shadow-2xl flex flex-col z-10">
@@ -2031,7 +1874,7 @@ export default function PassengerPortal({
       {findStopOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs cursor-pointer"
             onClick={() => setFindStopOpen(false)}
           />
           <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] z-10">
@@ -2257,7 +2100,7 @@ export default function PassengerPortal({
       {activeModal === 'helpdesk' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs cursor-pointer"
             onClick={() => setActiveModal(null)}
           />
           <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] z-10">
@@ -2283,7 +2126,7 @@ export default function PassengerPortal({
                   How accurate is live bus tracking?
                 </h4>
                 <p>
-                  Telemetry updates in real-time from onboard conductor GPS sessions on the Mangaluru–Kundapura NH-66 corridor.
+                  Telemetry updates in real-time from onboard conductor GPS sessions along the Mangaluru–Kundapura NH-66 corridor.
                 </p>
               </div>
 
@@ -2301,7 +2144,7 @@ export default function PassengerPortal({
                   Do I need an account to track buses?
                 </h4>
                 <p>
-                  No. Karavali-Transit is 100% free and open for all public transit passengers with zero login or signup required.
+                  No. Karavali-Transit is 100% free and open for all public transit passengers with zero login or registration required.
                 </p>
               </div>
             </div>
@@ -2315,7 +2158,7 @@ export default function PassengerPortal({
       {activeModal === 'feedback' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs cursor-pointer"
             onClick={() => setActiveModal(null)}
           />
           <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] z-10">
@@ -2435,7 +2278,7 @@ export default function PassengerPortal({
       {activeModal === 'contact' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs cursor-pointer"
             onClick={() => setActiveModal(null)}
           />
           <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] z-10">

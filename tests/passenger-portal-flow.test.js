@@ -137,4 +137,23 @@ test('Passenger Portal End-to-End Database and Flow Suite', async (t) => {
     const match = list.find((item) => item.id === saved.id)
     assert.ok(match, 'Saved feedback must exist in the database list')
   })
+
+  await t.test('8. Filter Verification - Active, All, Scheduled Bus Breakdown', async () => {
+    const allCorridorBuses = await searchBusesByJourney('Surathkal', 'Udupi')
+    assert.equal(allCorridorBuses.length, 3, 'Should find all 3 registered buses on corridor')
+
+    // Simulate active shift telemetry for Durga and Lakshmi
+    const bus1 = allCorridorBuses.find((b) => b.bus_name.includes('Durga'))
+    const bus2 = allCorridorBuses.find((b) => b.bus_name.includes('Lakshmi'))
+    const activeMap = {}
+    if (bus1) activeMap[bus1.bus_id] = { is_on_shift: true, latitude: 13.165, longitude: 74.76, speed: 42, timestamp: Date.now() }
+    if (bus2) activeMap[bus2.bus_id] = { is_on_shift: true, latitude: 13.045, longitude: 74.789, speed: 38, timestamp: Date.now() }
+
+    const busesWithTelemetry = await searchBusesByJourney('Surathkal', 'Udupi', activeMap)
+    const activeBuses = busesWithTelemetry.filter((b) => b.is_live || b.tracking_status === 'LIVE' || b.tracking_status === 'LOCATION STALE')
+    const scheduledBuses = busesWithTelemetry.filter((b) => b.tracking_status === 'SCHEDULED' || (!b.is_live && b.tracking_status !== 'LIVE' && b.tracking_status !== 'LOCATION STALE'))
+
+    assert.equal(activeBuses.length, 2, 'Should have exactly 2 active live buses on shift (Shri Durga & Sri Lakshmi)')
+    assert.equal(scheduledBuses.length, 1, 'Should have exactly 1 scheduled bus (Udupi Express)')
+  })
 })

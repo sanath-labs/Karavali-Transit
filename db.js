@@ -358,6 +358,12 @@ async function seedRakeshFleetPg() {
         )
       }
 
+      // Detach any other conductor from this bus
+      await pgPool.query(
+        "UPDATE conductors SET assigned_bus_id = NULL WHERE assigned_bus_id = $1 AND name != $2",
+        [busId, b.conductor.name]
+      )
+
       const cCheck = await pgPool.query(
         "SELECT conductor_id FROM conductors WHERE owner_email = 'rakesh@gmail.com' AND name = $1",
         [b.conductor.name]
@@ -1883,11 +1889,12 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
       const now = Date.now()
       const lastTs = activeData.timestamp ? new Date(activeData.timestamp).getTime() : 0
       const isShiftActive = Boolean(activeData.is_on_shift || activeData.active_shift)
-      const hasRecentGps = isShiftActive && now - lastTs < 120000
-      const isStale = isShiftActive && lastTs > 0 && now - lastTs >= 120000
+      // Active coastal shifts stay fresh with a 1-hour heartbeat window
+      const hasRecentGps = isShiftActive && (now - lastTs < 3600000 || !lastTs)
+      const isStale = isShiftActive && lastTs > 0 && now - lastTs >= 3600000
 
-      let trackingStatus = 'NOT TRACKING'
-      if (hasRecentGps) {
+      let trackingStatus = 'SCHEDULED'
+      if (hasRecentGps && activeData.latitude && activeData.longitude) {
         trackingStatus = 'LIVE'
       } else if (isStale) {
         trackingStatus = 'LOCATION STALE'
@@ -1895,8 +1902,10 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
         trackingStatus = 'SCHEDULED'
       }
 
+      const isLive = trackingStatus === 'LIVE'
+
       let liveEtaMinutes = activeData.eta_minutes || null
-      if (trackingStatus === 'LIVE' && !liveEtaMinutes && activeData.latitude && activeData.longitude) {
+      if (isLive && !liveEtaMinutes && activeData.latitude && activeData.longitude) {
         const remainingStops = Math.max(1, toIdx - fromIdx)
         const speed = activeData.speed > 10 ? activeData.speed : 32
         liveEtaMinutes = Math.max(2, Math.round((remainingStops * 6 * 60) / speed))
