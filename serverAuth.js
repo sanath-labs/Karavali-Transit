@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 
 const OWNER_SESSION_TTL_MS = 12 * 60 * 60 * 1000
+const CONDUCTOR_SESSION_TTL_MS = 12 * 60 * 60 * 1000
 
 export function createOwnerSessionManager() {
   const sessions = new Map()
@@ -26,6 +27,49 @@ export function createOwnerSessionManager() {
         return null
       }
       return session
+    },
+    delete(token) {
+      sessions.delete(token)
+    },
+  }
+}
+
+export function createConductorSessionManager() {
+  const sessions = new Map()
+
+  return {
+    create(conductorId, phone, ownerEmail, busId, now = Date.now()) {
+      const token = randomBytes(32).toString('hex')
+      sessions.set(token, {
+        conductor_id: conductorId ? Number(conductorId) : null,
+        phone: String(phone || '').trim(),
+        owner_email: String(ownerEmail || '').trim().toLowerCase(),
+        bus_id: busId ? Number(busId) : null,
+        created_at: now,
+        expires_at: now + CONDUCTOR_SESSION_TTL_MS,
+      })
+      return token
+    },
+    set(token, sessionData) {
+      sessions.set(token, sessionData)
+    },
+    get(token, now = Date.now()) {
+      const session = sessions.get(token)
+      if (!session) return null
+      if (session.expires_at <= now) {
+        sessions.delete(token)
+        return null
+      }
+      return session
+    },
+    delete(token) {
+      sessions.delete(token)
+    },
+    updateBus(token, busId) {
+      const session = sessions.get(token)
+      if (session) {
+        session.bus_id = busId ? Number(busId) : null
+      }
     },
   }
 }
