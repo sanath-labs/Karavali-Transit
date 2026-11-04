@@ -15,10 +15,12 @@ import {
   Minus,
   Navigation,
   Phone,
+  Play,
   Plus,
   Printer,
   Radio,
   ShieldCheck,
+  Square,
   Users,
   Volume2,
   VolumeX,
@@ -80,13 +82,22 @@ export default function ConductorPortal({
   const [shiftStartTime, setShiftStartTime] = useState(null)
   const [shiftDurationMinutes, setShiftDurationMinutes] = useState(0)
   const [showShiftSummaryModal, setShowShiftSummaryModal] = useState(false)
+
+  // Live GPS Telemetry from Conductor's Android Phone (Strictly Sensor-Driven, NO Simulation)
   const [geoWatchId, setGeoWatchId] = useState(null)
-  const [currentSpeed, setCurrentSpeed] = useState(42)
-  const [currentHeading, setCurrentHeading] = useState(350)
+  const [isLiveTracking, setIsLiveTracking] = useState(false)
+  const [gpsPermissionState, setGpsPermissionState] = useState('prompt') // 'prompt' | 'requesting' | 'granted' | 'denied' | 'unsupported'
+  const [gpsStatus, setGpsStatus] = useState('IDLE') // 'IDLE' | 'REQUESTING' | 'LIVE' | 'STOPPED' | 'ERROR'
+  const [gpsErrorMessage, setGpsErrorMessage] = useState('')
+  const [gpsAccuracy, setGpsAccuracy] = useState(null)
+  const [lastGpsTimestamp, setLastGpsTimestamp] = useState(null)
+  const [currentLat, setCurrentLat] = useState(null)
+  const [currentLng, setCurrentLng] = useState(null)
+  const [currentSpeed, setCurrentSpeed] = useState(0)
+  const [currentHeading, setCurrentHeading] = useState(0)
   const [isAudioFeedbackEnabled, setIsAudioFeedbackEnabled] = useState(true)
 
   const otpRefs = [useRef(null), useRef(null), useRef(null), useRef(null), useRef(null), useRef(null)]
-  // Hardware GPS Telemetry State
 
   // Subtle web audio feedback synthesizer for duty events
   const playDutyChime = (frequency = 660, duration = 0.15) => {
@@ -242,6 +253,12 @@ export default function ConductorPortal({
       })
       const data = await res.json()
       if (res.ok && data.success) {
+        if (data.conductor_token) {
+          setConductorToken(data.conductor_token)
+          try {
+            localStorage.setItem('karavali_conductor_token', data.conductor_token)
+          } catch {}
+        }
         setIsExistingConductor(data.exists)
         const busesList = data.buses || []
         setAgencyBuses(busesList)
@@ -313,6 +330,12 @@ export default function ConductorPortal({
       })
       const data = await res.json()
       if (res.ok && data.success && data.conductor) {
+        if (data.conductor_token) {
+          setConductorToken(data.conductor_token)
+          try {
+            localStorage.setItem('karavali_conductor_token', data.conductor_token)
+          } catch {}
+        }
         setConductorRecord(data.conductor)
         const matchedBus = agencyBuses.find((b) => String(b.bus_id) === String(selectedBusId)) || agencyBuses[0] || null
         setActiveBus(matchedBus)
@@ -353,6 +376,7 @@ export default function ConductorPortal({
     const startedAt = getNow()
     setAuthLoading(true)
     try {
+      const token = conductorToken || localStorage.getItem('karavali_conductor_token') || ''
       const res = await fetch(apiUrl('/api/conductor/start-duty'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -361,6 +385,8 @@ export default function ConductorPortal({
           vehicle_number: activeBus.vehicle_number,
           driver_phone: conductorPhone,
           conductor_name: conductorName || conductorRecord?.name,
+          conductor_id: conductorRecord?.conductor_id,
+          conductor_token: token,
         }),
       })
       const data = await res.json()
@@ -368,11 +394,14 @@ export default function ConductorPortal({
         setIsOnShift(true)
         setShiftStartTime(startedAt)
         setShiftData(data.shift)
+        if (data.conductor_token) {
+          setConductorToken(data.conductor_token)
+          try {
+            localStorage.setItem('karavali_conductor_token', data.conductor_token)
+          } catch {}
+        }
         playDutyChime(880, 0.2)
-        setNotice(`Shift started for ${activeBus.vehicle_number}. GPS is streaming live!`)
-
-        // Start Geolocation Telemetry Streaming
-        startGpsStreaming(activeBus)
+        setNotice(`Duty shift initialized for ${activeBus.vehicle_number}. Click "Start Live Tracking" to stream GPS.`)
       } else {
         alert(data.error || 'Failed to start shift.')
       }
@@ -383,40 +412,123 @@ export default function ConductorPortal({
     }
   }
 
-  // Strictly Sensor-Driven Hardware GPS (No simulation, no hardcoded waypoints)
-
+  // =========================================================================
+  // REAL-TIME GPS BUS TRACKING (ACTUAL SMARTPHONE SENSOR TELEMETRY)
+  // NO SIMULATION, NO HARDCODED WAYPOINTS, HIGH-ACCURACY HARDWARE GPS
+  // =========================================================================
   const handleStartLiveTracking = () => {
-    if ('geolocation' in navigator) {
-      const id = navigator.geolocation.watchPosition(
-        (position) => {
-          const speedKmH = Math.round((position.coords.speed || 42) * 3.6)
-          const headingDeg = position.coords.heading || 350
+    setGpsErrorMessage('')
+
+    if (!('geolocation' in navigator)) {
+      setGpsPermissionState('unsupported')
+      setGpsStatus('ERROR')
+      setGpsErrorMessage('HTML5 Geolocation is not supported by your browser.')
+      return
+    }
+
+    if (!activeBus) {
+      alert('Please select a valid bus before tracking.')
+      return
+    }
+
+    setGpsStatus('REQUESTING')
+    setGpsPermissionState('requesting')
+    playDutyChime(750, 0.15)
+
+    try {
+      const watchId = navigator.geolocation.watchPosition(
+        async (position) => {
+          const lat = position.coords.latitude
+          const lng = position.coords.longitude
+          const accuracy = Math.round(position.coords.accuracy || 0)
+          const speedKmH =
+            position.coords.speed !== null && position.coords.speed >= 0
+              ? Math.round(position.coords.speed * 3.6)
+              : 0
+          const headingDeg =
+            position.coords.heading !== null && !isNaN(position.coords.heading)
+              ? Math.round(position.coords.heading)
+              : 0
+
+          setCurrentLat(lat)
+          setCurrentLng(lng)
           setCurrentSpeed(speedKmH)
           setCurrentHeading(headingDeg)
+          setGpsAccuracy(accuracy)
+          setLastGpsTimestamp(Date.now())
+          setGpsPermissionState('granted')
+          setGpsStatus('LIVE')
+          setIsLiveTracking(true)
+          setGpsErrorMessage('')
+
+          const token =
+            conductorToken || localStorage.getItem('karavali_conductor_token') || ''
           const telemetryPayload = {
-            bus_id: bus.bus_id,
-            vehicle_number: bus.vehicle_number,
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
+            bus_id: activeBus.bus_id,
+            vehicle_number: activeBus.vehicle_number,
+            latitude: lat,
+            longitude: lng,
+            accuracy,
             speed: speedKmH,
             heading: headingDeg,
             crowd_status: crowdStatus,
             passenger_count: passengerCount,
             timestamp: Date.now(),
           }
+
+          // Secure REST transmission with Conductor Token
+          try {
+            await fetch(apiUrl('/api/conductor/gps-location'), {
+              method: 'POST',
+              headers: conductorHeaders(token, { 'Content-Type': 'application/json' }),
+              body: JSON.stringify(telemetryPayload),
+            })
+          } catch (postErr) {
+            console.warn('REST telemetry post error:', postErr.message)
+          }
+
+          // Low-latency WebSocket transmission with Conductor Token
           if (socket && socket.connected) {
-            socket.emit('update_location', telemetryPayload)
+            socket.emit('update_location', {
+              ...telemetryPayload,
+              lat,
+              lng,
+              token,
+            })
           }
         },
         (err) => {
-          console.warn('HTML5 GPS fallback to coastal NH-66 simulator:', err.message)
-          runSimulatorFallback(bus)
+          console.warn('Conductor GPS Geolocation Error:', err)
+          setIsLiveTracking(false)
+          setGpsStatus('ERROR')
+
+          let userMsg = 'Unable to acquire GPS signal from your device.'
+          if (err.code === 1) {
+            setGpsPermissionState('denied')
+            userMsg =
+              'Location permission was denied. Please allow location access in your mobile browser settings to stream GPS.'
+          } else if (err.code === 2) {
+            setGpsPermissionState('prompt')
+            userMsg =
+              'GPS position unavailable. Please ensure GPS/Location is enabled on your Android phone.'
+          } else if (err.code === 3) {
+            setGpsPermissionState('prompt')
+            userMsg = 'GPS satellite fix timed out. Waiting for signal in open sky...'
+          }
+          setGpsErrorMessage(userMsg)
+          playDutyChime(320, 0.3)
         },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 15000,
+        }
       )
-      setGeoWatchId(id)
-    } else {
-      runSimulatorFallback(bus)
+
+      setGeoWatchId(watchId)
+    } catch (launchErr) {
+      setGpsStatus('ERROR')
+      setGpsErrorMessage(`Failed to start geolocation: ${launchErr.message}`)
     }
   }
 
@@ -429,41 +541,44 @@ export default function ConductorPortal({
     }
     setIsLiveTracking(false)
     setGpsStatus('STOPPED')
-  }
+    setCurrentSpeed(0)
+    playDutyChime(480, 0.2)
 
-  const runSimulatorFallback = (bus) => {
-    const simInterval = setInterval(() => {
-      const nextIdx = (simIndexRef.current + 1) % coastalWaypoints.length
-      simIndexRef.current = nextIdx
-      const wp = coastalWaypoints[nextIdx]
-      setCurrentSpeed(wp.speed)
-      setCurrentHeading(350)
-      const telemetryPayload = {
-        bus_id: bus.bus_id,
-        vehicle_number: bus.vehicle_number,
-        lat: wp.lat,
-        lng: wp.lng,
-        speed: wp.speed,
-        heading: 350,
-        crowd_status: crowdStatus,
-        passenger_count: passengerCount,
-        timestamp: Date.now(),
+    const token =
+      conductorToken || localStorage.getItem('karavali_conductor_token') || ''
+    if (activeBus) {
+      try {
+        await fetch(apiUrl('/api/conductor/stop-tracking'), {
+          method: 'POST',
+          headers: conductorHeaders(token, { 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ bus_id: activeBus.bus_id }),
+        })
+      } catch (err) {
+        console.warn('Stop tracking notify error:', err.message)
       }
+
       if (socket && socket.connected) {
-        socket.emit('update_location', telemetryPayload)
+        socket.emit('update_location', {
+          bus_id: activeBus.bus_id,
+          vehicle_number: activeBus.vehicle_number,
+          tracking_status: 'OFFLINE',
+          token,
+          timestamp: Date.now(),
+        })
       }
-    }, 4000)
-    setGeoWatchId(simInterval)
+    }
+    setNotice('Live GPS tracking paused. Bus is marked offline on the passenger map.')
   }
 
   const handleEndShift = () => {
-    if (geoWatchId) {
-      if (typeof geoWatchId === 'number') clearInterval(geoWatchId)
+    if (geoWatchId !== null) {
       if (navigator.geolocation && navigator.geolocation.clearWatch) {
         navigator.geolocation.clearWatch(geoWatchId)
       }
       setGeoWatchId(null)
     }
+    setIsLiveTracking(false)
+    setGpsStatus('STOPPED')
     playDutyChime(520, 0.25)
     setShowShiftSummaryModal(true)
   }
@@ -987,53 +1102,110 @@ export default function ConductorPortal({
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
-                GPS Corridor Telemetry Engine
+                Hardware GPS Telemetry Engine (Android Onboard Phone)
               </span>
               <h2 className="text-base font-black text-slate-900 m-0">
-                {isOnShift ? 'Live Duty Active — Broadcasting GPS' : 'Shift Inactive — Ready for Duty'}
+                {isOnShift
+                  ? isLiveTracking
+                    ? 'Live Tracking Active — Streaming Smartphone GPS'
+                    : 'Shift Initialized — Ready to Stream GPS'
+                  : 'Shift Inactive — Ready for Duty'}
               </h2>
             </div>
 
-            <div className="flex items-center gap-2">
-              {isOnShift ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              {isLiveTracking ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-extrabold animate-pulse">
                   <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                  GPS Streaming Live
+                  LIVE GPS STREAMING
+                </span>
+              ) : gpsStatus === 'REQUESTING' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-extrabold">
+                  <span className="w-2 h-2 rounded-full bg-amber-600 animate-ping"></span>
+                  Requesting Satellite Fix...
+                </span>
+              ) : gpsStatus === 'ERROR' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100 text-rose-800 text-xs font-extrabold">
+                  <span className="w-2 h-2 rounded-full bg-rose-600"></span>
+                  GPS Disconnected
+                </span>
+              ) : isOnShift ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-extrabold">
+                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                  Shift Standby (Not Tracking)
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-extrabold">
                   <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-                  Standby
+                  Offline
                 </span>
               )}
             </div>
           </div>
 
+          {/* GPS Error Diagnostic Banner */}
+          {gpsErrorMessage && (
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl text-xs font-bold flex items-start gap-2.5">
+              <AlertTriangle size={18} className="text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <strong className="block text-rose-800">{gpsErrorMessage}</strong>
+                <p className="text-[11px] text-rose-700 m-0">
+                  Tip: Ensure high-accuracy location is enabled in your Android phone settings, and grant browser permission when prompted.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Real-time Hardware Telemetry Gauges */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
             <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl">
-              <span className="text-slate-400 block font-bold text-[10px] uppercase">Service Type</span>
-              <strong className="text-slate-900 font-black">{activeBus?.service_type || 'Non AC'}</strong>
+              <span className="text-slate-400 block font-bold text-[10px] uppercase">GPS Hardware Status</span>
+              <strong className="text-slate-900 font-black">
+                {isLiveTracking ? '🟢 Connected (Active)' : gpsStatus === 'REQUESTING' ? '🟡 Acquiring Lock' : '⚪ Idle'}
+              </strong>
+              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
+                Permission: {gpsPermissionState.toUpperCase()}
+              </span>
             </div>
-            <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl">
-              <span className="text-slate-400 block font-bold text-[10px] uppercase">Seating Capacity</span>
-              <strong className="text-slate-900 font-black">{maxSeats} Passenger Seats</strong>
-            </div>
+
             <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl">
               <div className="flex items-center gap-1">
                 <Compass size={11} className="text-slate-400" />
-                <span className="text-slate-400 block font-bold text-[10px] uppercase">Telemetry Speed</span>
+                <span className="text-slate-400 block font-bold text-[10px] uppercase">Actual Speed &amp; Heading</span>
               </div>
-              <strong className="text-slate-900 font-black">{isOnShift ? `${currentSpeed} km/h • ${currentHeading}° N` : '0 km/h (Parked)'}</strong>
+              <strong className="text-slate-900 font-black">
+                {isLiveTracking ? `${currentSpeed} km/h • ${currentHeading}°` : '0 km/h (Stationary)'}
+              </strong>
+              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
+                {currentLat && currentLng ? `${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}` : 'Awaiting sensor'}
+              </span>
             </div>
+
+            <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl">
+              <span className="text-slate-400 block font-bold text-[10px] uppercase">Signal Accuracy</span>
+              <strong className="text-slate-900 font-black">
+                {gpsAccuracy !== null ? `± ${gpsAccuracy} meters` : 'No fix'}
+              </strong>
+              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
+                {gpsAccuracy !== null && gpsAccuracy <= 20 ? 'High Precision' : 'Standard Fix'}
+              </span>
+            </div>
+
             <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl">
               <div className="flex items-center gap-1">
                 <Clock size={11} className="text-slate-400" />
-                <span className="text-slate-400 block font-bold text-[10px] uppercase">Shift Duration</span>
+                <span className="text-slate-400 block font-bold text-[10px] uppercase">Last Transmission</span>
               </div>
-              <strong className="text-slate-900 font-black">{isOnShift ? `${shiftDurationMinutes} mins` : 'Not Started'}</strong>
+              <strong className="text-slate-900 font-black">
+                {lastGpsTimestamp ? new Date(lastGpsTimestamp).toLocaleTimeString() : 'Not Transmitted'}
+              </strong>
+              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
+                Shift: {shiftDurationMinutes} mins
+              </span>
             </div>
           </div>
 
+          {/* Action Buttons: Start Shift / Start Live Tracking / Stop Tracking / End Shift */}
           {!isOnShift ? (
             <button
               type="button"
@@ -1042,17 +1214,41 @@ export default function ConductorPortal({
               className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base rounded-2xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
             >
               <Navigation size={22} />
-              <span>One-Tap Start Shift &amp; Stream Live GPS ➔</span>
+              <span>Initialize Conductor Duty Shift ➔</span>
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={handleEndShift}
-              className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-sm rounded-2xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <LogOut size={18} />
-              <span>End Shift &amp; Generate Ledger Summary</span>
-            </button>
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {!isLiveTracking ? (
+                  <button
+                    type="button"
+                    onClick={handleStartLiveTracking}
+                    className="py-4 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-2xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                  >
+                    <Play size={18} fill="currentColor" />
+                    <span>Start Live Tracking</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStopLiveTracking}
+                    className="py-4 bg-amber-600 hover:bg-amber-700 text-white font-black text-sm rounded-2xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                  >
+                    <Square size={18} fill="currentColor" />
+                    <span>Stop Tracking</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleEndShift}
+                  className="py-4 bg-slate-800 hover:bg-slate-900 text-white font-black text-sm rounded-2xl shadow-sm transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <LogOut size={18} />
+                  <span>End Shift &amp; Close Ledger</span>
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
