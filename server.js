@@ -16,6 +16,7 @@ import {
   getBusByVehicleNumber,
   getBusRouteStops,
   getBusRouteWithStops,
+  getConductorById,
   getConductorByPhoneAndOwner,
   getConductorsByOwner,
   getDatabaseType,
@@ -39,7 +40,6 @@ import {
   updateBusPin,
   updateConductorAssignedBus,
   verifyConductorPin,
-  getConductorById,
 } from './db.js'
 import {
   createConductorSessionManager,
@@ -60,6 +60,12 @@ const conductorSessions = createConductorSessionManager()
 
 export { conductorSessions }
 
+function publicBusSnapshot(buses) {
+  return Object.fromEntries(
+    Object.entries(buses).map(([id, bus]) => [id, toPublicBus(bus)])
+  )
+}
+
 async function requireConductorSession(req, res, next) {
   const authHeader = req.get('authorization')
   const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]
@@ -75,12 +81,6 @@ async function requireConductorSession(req, res, next) {
   req.conductor = session
   req.conductorToken = token
   next()
-}
-
-function publicBusSnapshot(buses) {
-  return Object.fromEntries(
-    Object.entries(buses).map(([id, bus]) => [id, toPublicBus(bus)])
-  )
 }
 
 async function requireOwnerSession(req, res, next) {
@@ -736,28 +736,62 @@ app.post('/api/conductor/register', async (req, res) => {
 
 // 16. CONDUCTOR DUTY: Start Shift & Link to Telemetry
 app.post('/api/conductor/start-duty', async (req, res) => {
-  const { bus_id, vehicle_number, driver_phone, conductor_name } = req.body
+  const { bus_id, vehicle_number, driver_phone, conductor_name, conductor_id } = req.body
   if (!bus_id) {
     return res.status(400).json({ success: false, error: 'Bus ID is required to start duty.' })
   }
 
-  const bus = await getBusById(Number(bus_id))
+  const busIdNum = Number(bus_id)
+  const bus = await getBusById(busIdNum)
   if (!bus) {
     return res.status(404).json({ success: false, error: 'Bus record not found.' })
   }
 
+  // Find or create conductor session
+  const authHeader = req.get('authorization')
+  const incomingToken = req.body.conductor_token || authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]
+  let conductorSession = incomingToken ? conductorSessions.get(incomingToken) : null
+  let activeConductorId = conductor_id || conductorSession?.conductor_id
+
+  if (!conductorSession && driver_phone) {
+    const existing = await getConductorByPhoneAndOwner(bus.owner_email, driver_phone)
+    if (existing) {
+      activeConductorId = existing.conductor_id
+    }
+  }
+
+  if (activeConductorId) {
+    await updateConductorAssignedBus(activeConductorId, busIdNum)
+  }
+
+  let sessionToken = incomingToken
+  if (conductorSession) {
+    conductorSessions.updateBus(incomingToken, busIdNum)
+  } else {
+    sessionToken = conductorSessions.create(
+      activeConductorId || null,
+      driver_phone || '98451 00000',
+      bus.owner_email,
+      busIdNum
+    )
+  }
+
   const shiftData = {
-    driver_phone: driver_phone || '98451 00000',
+    driver_phone: driver_phone || conductorSession?.phone || '98451 00000',
     vehicle_number: bus.vehicle_number || vehicle_number,
     bus_name: bus.bus_name,
     route_name: `${bus.origin} ➔ ${bus.destination}`,
   }
 
   const shift = await recordShift(shiftData)
-  if (activeBuses[bus.bus_id]) {
-    activeBuses[bus.bus_id].is_on_shift = true
-    activeBuses[bus.bus_id].active_shift = shift
-    activeBuses[bus.bus_id].conductor_name = conductor_name || 'Conductor'
+  if (!activeBuses[bus.bus_id]) {
+    activeBuses[bus.bus_id] = { ...bus }
+  }
+  activeBuses[bus.bus_id].is_on_shift = true
+  activeBuses[bus.bus_id].active_shift = shift
+  activeBuses[bus.bus_id].conductor_name = conductor_name || 'Conductor'
+  if (!activeBuses[bus.bus_id].tracking_status || activeBuses[bus.bus_id].tracking_status === 'OFFLINE') {
+    activeBuses[bus.bus_id].tracking_status = 'NOT TRACKING'
   }
 
   io.emit('shift_broadcast', {
@@ -769,6 +803,7 @@ app.post('/api/conductor/start-duty', async (req, res) => {
   res.json({
     success: true,
     message: 'Conductor duty active. Live GPS streaming initialized.',
+    conductor_token: sessionToken,
     bus,
     shift,
   })
@@ -795,6 +830,7 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
   const busIdNum = Number(bus_id)
   const session = req.conductor
 
+  // Server-side Bus Assignment Validation
   if (session.bus_id && session.bus_id !== busIdNum) {
     return res.status(403).json({
       success: false,
@@ -819,6 +855,7 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
   const hdg = Number(heading) || 0
   const ts = Number(timestamp) || Date.now()
 
+  // Validate Latitude & Longitude bounds (Coastal Karnataka NH-66 Corridor)
   if (isNaN(lat) || isNaN(lng) || lat < 12.0 || lat > 15.0 || lng < 73.5 || lng > 76.0) {
     return res.status(400).json({
       success: false,
@@ -826,6 +863,7 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
     })
   }
 
+  // Validate Accuracy: reject if accuracy is worse than 1000m
   if (acc > 1000) {
     return res.status(400).json({
       success: false,
@@ -833,6 +871,7 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
     })
   }
 
+  // Validate Speed: reject impossible spikes (> 110 km/h)
   if (spd > 110) {
     return res.status(400).json({
       success: false,
@@ -840,6 +879,7 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
     })
   }
 
+  // Validate Timestamp: must not be in the distant past (> 5 minutes ago) or > 1 minute in the future
   const now = Date.now()
   if (ts < now - 300000 || ts > now + 60000) {
     return res.status(400).json({
@@ -872,9 +912,11 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
 
   activeBuses[busIdNum] = payload
 
+  // Broadcast to all connected clients via Socket.IO
   io.emit('live_location_broadcast', toPublicBus(payload))
   io.emit('bus_location_update', toPublicBus(payload))
 
+  // Persist telemetry into PostgreSQL / SQLite
   try {
     await recordTelemetry({
       bus_id: busIdNum,
@@ -1081,10 +1123,13 @@ app.get('/api/public/buses/:id/location', async (req, res) => {
     const busId = Number(req.params.id)
     const active = activeBuses[busId]
     if (!active || !active.latitude || !active.longitude) {
+      const fallbackStatus = active?.is_on_shift ? 'NOT TRACKING' : 'OFFLINE'
       return res.json({
         success: true,
-        tracking_status: 'OFFLINE',
-        message: 'No live GPS tracking session active for this bus.',
+        tracking_status: fallbackStatus,
+        message: fallbackStatus === 'NOT TRACKING'
+          ? 'Conductor shift active, waiting for live GPS telemetry transmission.'
+          : 'No live GPS tracking session active for this bus.',
         location: null,
       })
     }
@@ -1092,7 +1137,12 @@ app.get('/api/public/buses/:id/location', async (req, res) => {
     const lastTs = active.timestamp ? new Date(active.timestamp).getTime() : 0
     const now = Date.now()
     const isStale = lastTs > 0 && now - lastTs >= 120000
-    const status = isStale ? 'LOCATION STALE' : 'LIVE'
+    let status = 'LIVE'
+    if (!active.is_on_shift) {
+      status = 'OFFLINE'
+    } else if (isStale) {
+      status = 'LOCATION STALE'
+    }
 
     res.json({
       success: true,
@@ -1194,16 +1244,47 @@ io.on('connection', (socket) => {
   })
 
   socket.on('update_location', async (data) => {
-    if (data.speed && data.speed > 100) {
+    if (!data || !data.bus_id) return
+
+    // Verify token if provided
+    if (data.token) {
+      const session = conductorSessions.get(data.token)
+      if (!session) {
+        console.warn(`[Socket Update Rejected] Invalid conductor token for bus #${data.bus_id}`)
+        return
+      }
+      if (session.bus_id && session.bus_id !== Number(data.bus_id)) {
+        console.warn(`[Socket Update Rejected] Conductor token bus mismatch: ${session.bus_id} vs ${data.bus_id}`)
+        return
+      }
+    }
+
+    if (data.speed && data.speed > 110) {
       console.warn(`[GPS Spike Rejected] Bus #${data.bus_id} reported impossible speed: ${data.speed} km/h`)
       return
     }
 
+    const lat = Number(data.lat || data.latitude)
+    const lng = Number(data.lng || data.longitude)
+    if (!isNaN(lat) && !isNaN(lng)) {
+      if (lat < 12.0 || lat > 15.0 || lng < 73.5 || lng > 76.0) {
+        console.warn(`[GPS Out of Range Rejected] Bus #${data.bus_id} coords (${lat}, ${lng}) outside coastal corridor`)
+        return
+      }
+    }
+
+    const now = Date.now()
     const payload = {
       ...(activeBuses[data.bus_id] || {}),
       ...data,
+      latitude: lat || activeBuses[data.bus_id]?.latitude,
+      longitude: lng || activeBuses[data.bus_id]?.longitude,
+      speed: Number(data.speed) || 0,
+      heading: Number(data.heading) || 0,
       is_on_shift: true,
-      timestamp: data.timestamp || Date.now(),
+      tracking_status: 'LIVE',
+      timestamp: data.timestamp || now,
+      last_telemetry_at: now,
     }
     activeBuses[data.bus_id] = payload
 
@@ -1226,43 +1307,24 @@ io.on('connection', (socket) => {
   })
 })
 
+// Periodic Stale Telemetry Detector (checks every 15s)
+setInterval(() => {
+  const now = Date.now()
+  for (const bus of Object.values(activeBuses)) {
+    if (bus && bus.is_on_shift && bus.last_telemetry_at) {
+      const elapsed = now - bus.last_telemetry_at
+      if (elapsed >= 120000 && bus.tracking_status === 'LIVE') {
+        bus.tracking_status = 'LOCATION STALE'
+        io.emit('live_location_broadcast', toPublicBus(bus))
+        io.emit('bus_location_update', toPublicBus(bus))
+      }
+    }
+  }
+}, 15000)
+
 const PORT = process.env.PORT || 5000
 
 await initDB()
-
-// Seed realistic initial live GPS telemetry for coastal demonstration buses
-try {
-  const durgaBus = await getBusByVehicleNumber('KA 19 AB 1234')
-  if (durgaBus) {
-    activeBuses[durgaBus.bus_id] = {
-      ...durgaBus,
-      latitude: 13.1650,
-      longitude: 74.7600,
-      speed: 42,
-      heading: 350,
-      is_on_shift: true,
-      timestamp: Date.now(),
-      next_stop: 'Kaup',
-      eta_minutes: 18,
-    }
-  }
-  const lakshmiBus = await getBusByVehicleNumber('KA 20 CD 5678')
-  if (lakshmiBus) {
-    activeBuses[lakshmiBus.bus_id] = {
-      ...lakshmiBus,
-      latitude: 13.0450,
-      longitude: 74.7890,
-      speed: 38,
-      heading: 355,
-      is_on_shift: true,
-      timestamp: Date.now(),
-      next_stop: 'Mulki',
-      eta_minutes: 25,
-    }
-  }
-} catch (e) {
-  console.debug('Initial live buses seed:', e.message)
-}
 
 server.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`)
