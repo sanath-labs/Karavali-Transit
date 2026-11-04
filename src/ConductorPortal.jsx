@@ -77,7 +77,7 @@ export default function ConductorPortal({
   const [isAudioFeedbackEnabled, setIsAudioFeedbackEnabled] = useState(true)
 
   const otpRefs = [useRef(null), useRef(null), useRef(null), useRef(null), useRef(null), useRef(null)]
-  const simIndexRef = useRef(0)
+  // Hardware GPS Telemetry State
 
   // Subtle web audio feedback synthesizer for duty events
   const playDutyChime = (frequency = 660, duration = 0.15) => {
@@ -374,18 +374,7 @@ export default function ConductorPortal({
     }
   }
 
-  // Coastal NH-66 Waypoint fallback trajectory (Mangaluru to Udupi)
-  const coastalWaypoints = [
-    { lat: 12.8624, lng: 74.8385, speed: 38 },
-    { lat: 12.8942, lng: 74.8398, speed: 45 },
-    { lat: 12.9234, lng: 74.8291, speed: 52 },
-    { lat: 12.9658, lng: 74.8194, speed: 48 },
-    { lat: 13.0083, lng: 74.7952, speed: 55 },
-    { lat: 13.0782, lng: 74.7892, speed: 50 },
-    { lat: 13.1491, lng: 74.7812, speed: 58 },
-    { lat: 13.2504, lng: 74.7562, speed: 52 },
-    { lat: 13.3408, lng: 74.7421, speed: 44 },
-  ]
+  // Strictly Sensor-Driven Hardware GPS (No simulation, no hardcoded waypoints)
 
   const startGpsStreaming = (bus) => {
     if ('geolocation' in navigator) {
