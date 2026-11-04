@@ -420,6 +420,17 @@ export default function ConductorPortal({
     }
   }
 
+  const handleStopLiveTracking = async () => {
+    if (geoWatchId !== null) {
+      if (navigator.geolocation && navigator.geolocation.clearWatch) {
+        navigator.geolocation.clearWatch(geoWatchId)
+      }
+      setGeoWatchId(null)
+    }
+    setIsLiveTracking(false)
+    setGpsStatus('STOPPED')
+  }
+
   const runSimulatorFallback = (bus) => {
     const simInterval = setInterval(() => {
       const nextIdx = (simIndexRef.current + 1) % coastalWaypoints.length
