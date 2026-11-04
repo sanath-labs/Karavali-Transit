@@ -1,4 +1,4 @@
-# 🚌 Karavali Sarige (ಕರಾವಳಿ ಸಾರಿಗೆ) • Karavali-Transit
+# 🚌 Karavali-Transit (ಕರಾವಳಿ ಸಾರಿಗೆ)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![React: 19](https://img.shields.io/badge/React-19.2-61dafb.svg)](https://react.dev/)
@@ -6,23 +6,29 @@
 [![Leaflet](https://img.shields.io/badge/Leaflet-1.9-199900.svg)](https://leafletjs.com/)
 [![Socket.IO](https://img.shields.io/badge/Socket.IO-4.8-010101.svg)](https://socket.io/)
 [![Express](https://img.shields.io/badge/Express-5.3-gray.svg)](https://expressjs.com/)
-[![SQLite](https://img.shields.io/badge/Database-PostgreSQL%20%7C%20SQLite-336791.svg)](https://www.postgresql.org/)
+[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%20%7C%20SQLite-336791.svg)](https://www.postgresql.org/)
 [![Oxlint: Passed](https://img.shields.io/badge/Oxlint-0%20warnings%200%20errors-success.svg)](https://oxc.rs/)
 
-> **Official Coastal Karnataka Real-Time Public Bus Tracking & Telemetry System**  
-> *Hardware-Free GPS Telemetry • Zomato-Style Live Navigation Line • Staged 3-Step Passenger Journey • Relational SQL Persistence*
+> **Real-Time Private Bus Tracking and Passenger Information Platform**  
+> *Dedicated to the Mangaluru – Surathkal – Mulki – Udupi – Kundapura NH-66 Coastal Corridor*
 
 ---
 
-## 📌 Executive Overview
+## 📌 Overview
 
-**Karavali-Transit** is a hardware-free smart transit intelligence platform engineered specifically for the coastal corridor of Karnataka (connecting Mangaluru Statebank, Hampankatta, Lalbagh, Nanthoor, Kuloor, and Surathkal / NITK along the high-density NH-66 highway).
+**Karavali-Transit** is a real-time public transit information and telemetry platform serving private bus operators, conductors, and commuters across the coastal Karnataka highway corridor (NH-66).
 
-### 💡 Why Hardware-Free?
-Traditional public transit vehicle tracking depends on expensive, proprietary IoT GPS boxes wired into bus batteries. **Karavali-Transit eliminates 100% of these hardware costs**:
-1. **Conductors & Drivers** open the responsive web app on any Android or iOS smartphone and tap **"Start Shift & Stream GPS"**. Native HTML5 Geolocation (`watchPosition`) streams sub-second coordinates over low-latency WebSockets.
-2. **Passengers** experience a staged, clutter-free 3-step booking & tracking funnel: from destination selection to a filtered bus list, into a **Zomato-style live delivery tracking map** featuring an animated royal blue route line directly connecting the commuter to the incoming bus.
-3. **Transport Authorities** maintain centralized, relational SQL logging in [`transit.db`](file:///c:/Users/gowda/karavali-transit/transit.db) tracking driver shifts, vehicle velocities, and congestion bottlenecks.
+### 🛣️ Strict 9-Stop Corridor Alignment
+The entire platform strictly serves the 9 designated corridor stations in fixed sequential order:
+1. **Mangaluru** (Statebank, Hampankatta, Central)
+2. **Kuntikana** (AJ Hospital & Research Centre)
+3. **Kulur** (Kulur Bridge, KIADB)
+4. **Surathkal** (NITK Surathkal, Junction)
+5. **Mulki** (Bappanadu Temple, Bus Stand)
+6. **Padubidri** (Blue Flag Beach Road, Mahaganapathi Temple)
+7. **Kaup** (Lighthouse, Marigudi)
+8. **Udupi** (City & Service Bus Stand, Sri Krishna Matha)
+9. **Kundapura** (Shastri Circle, New Bus Stand)
 
 ---
 
@@ -30,277 +36,94 @@ Traditional public transit vehicle tracking depends on expensive, proprietary Io
 
 ```mermaid
 flowchart TD
-    subgraph DriverPortal["👨‍✈️ Staff / Conductor Portal"]
-        D1["Smartphone Mobile Browser"] -->|"HTML5 navigator.geolocation.watchPosition()"| D2["Shift Login & Telemetry Streamer"]
+    subgraph Conductors["👤 Conductor Operations"]
+        C1["Onboard Mobile Browser"] -->|"HTML5 Geolocation / WebSocket"| C2["Shift Terminal & GPS Streamer"]
     end
 
-    subgraph BackendServer["⚙️ Central Real-Time Node.js Backend"]
-        B1["Express REST Engine (Port 5000)"] <--> B2["Socket.IO WebSocket Hub"]
-        B2 -->|"Asynchronous Relational Logging"| B3[("SQLite Database (transit.db)\n(buses, driver_shifts, gps_telemetry)")]
+    subgraph Backend["⚙️ Central Real-Time Node.js Backend"]
+        B1["Express REST API (Port 5000)"] <--> B2["Socket.IO Telemetry Relay"]
+        B1 --> B3[("PostgreSQL Database\n(buses, conductors, shifts, telemetry)")]
     end
 
-    subgraph PassengerJourney["🧍 3-Step Passenger Radar (Port 5173)"]
-        P1["Step 1: Clean Destination Filter"] -->|"Search Incoming Buses"| P2["Step 2: Filtered Bus List"]
-        P2 -->|"Location Permission Prompt"| P3["Step 3: Zomato-Style Live Map Tracking"]
-        P3 -->|"Switch Bus / Exit Map"| P2
+    subgraph Passengers["🧍 Public Passenger Portal"]
+        P1["Journey Search (From ➔ To)"] --> P2["Matching Buses & Planned Timetable"]
+        P2 --> P3["Bus Route Details & 9-Stop Timeline"]
+        P3 --> P4["Live GPS Map & Floating Status HUD"]
     end
 
-    D2 -->|"emit('update_location')"| B2
-    B2 -->|"broadcast('live_location_broadcast')"| P3
+    subgraph FleetOwners["🏢 Fleet Owner Console"]
+        O1["Email OTP Authentication"] --> O2["Fleet Command Dashboard"]
+        O2 --> O3["Bus Registration & Timetable Management"]
+        O2 --> O4["Conductor Authorization & PIN Assignment"]
+    end
+
+    C2 -->|"emit('update_location')"| B2
+    B2 -->|"broadcast('bus_location_update')"| P4
 ```
 
 ---
 
-## 🗺️ Staged 3-Step Passenger Journey
+## 🚀 Key Platform Features
 
-```mermaid
-stateDiagram-v2
-    [*] --> Step1_DestinationSelection: User opens Passenger Radar
-    Step1_DestinationSelection --> Step2_FilteredBusList: Selects Destination & Clicks "Search Incoming Buses"
-    Step2_FilteredBusList --> LocationDialog: Clicks "Select & Track This Bus"
-    LocationDialog --> Step3_LiveTrackingMap: Grants Location / Uses Terminal Fallback
-    Step3_LiveTrackingMap --> Step2_FilteredBusList: Clicks "Switch Bus / Exit Map"
-```
+### 1. Passenger Portal
+- **Zero Registration Required**: 100% open access for passengers without signups or accounts.
+- **Single-Page Progressive Journey**:
+  - `Homepage`: Searchable autocomplete boarding & destination selection with 1-click popular journeys.
+  - `Bus Results`: Real-time active shift breakdown (`Active`, `All`, `Scheduled`) with planned departure/arrival times.
+  - `Bus Details`: Verified vertical timeline of all 9 corridor stops with boarding (green) and destination (red) indicators.
+  - `Live Tracking`: Interactive Leaflet map with NH-66 polyline, labeled stop pins, live bus marker, and floating HUD (`Next Stop`, `ETA`, `Speed`).
+- **Zero Ticket Fare Policy**: No pricing, ticket fares, or booking fees are displayed anywhere on the platform.
 
-### 1️⃣ Step 1: Destination/Route Selection Screen (Default Landing)
-- **Zero-Clutter Landing**: No map tiles or large bus lists are loaded initially, preventing cognitive overload for everyday commuters.
-- **Boarding Stop Display**: Clearly displays the passenger's current boarding terminal (*Mangaluru Statebank Central Terminal*).
-- **1-Tap Quick Destination Filter Pills**:
-  - `Surathkal / NITK` (10.5 km Coastal Corridor)
-  - `Udupi` (Coastal Express Artery)
-  - `Kuloor` (City Ordinary Corridor)
-  - `Statebank` (Central Inbound Terminal)
-  - `All Routes` (Full Fleet Overview)
-- **Search & Service Toggles**: Free-text search for route numbers (e.g. `15`) or bus names (e.g. `Vishal Express`), with filters for `All`, `⚡ Express`, or `🚌 Ordinary`.
-- **Primary CTA**: Large high-contrast button: **"Search Incoming Buses ➔"**.
+### 2. Fleet Owner Portal
+- Secure email authentication with 6-digit OTP delivery.
+- KPI summary: Total fleet vehicles, active on-shift buses, authorized conductors, and scheduled trips.
+- Fleet management table: Real-time status, secret conductor PINs, vehicle editing, and route schedules.
+- 4-Step Bus Registration Wizard: Basic specifications, route stops, timetable schedules, and confirmation.
 
----
-
-### 2️⃣ Step 2: Filtered Bus List Screen
-- **Targeted Corridor Display**: Shows only the active buses operating along the chosen destination corridor.
-- **Header Navigation**: Features a **"← Change Destination"** button to jump back to Step 1 without page reloads.
-- **Multi-Criteria Bus Sorting**:
-  - `⚡ Earliest ETA`: Prioritizes nearest arriving bus.
-  - `💰 Lowest Fare`: Displays most economical service first.
-  - `💺 Most Seats`: Sorts buses by crowd comfort (`Seats Available` ➔ `Standing Allowed` ➔ `Full`).
-- **Corridor Stage Fare Estimator**: Accurate coastal Karnataka fare pricing tags (e.g. `₹35 Express` / `₹25 Ordinary` for Surathkal; `₹95 Express` / `₹75 Ordinary` for Udupi).
-- **Comprehensive Bus Cards**:
-  - Route Tag & Vehicle Number (e.g., `Route #15 • KA-19-AB-4509`).
-  - Classification: `⚡ Express Service` (limited stops) vs `🚌 City / Ordinary` (all stops).
-  - Dynamic Stop Arrival Countdown (e.g., **`3 MINS`**), scheduled clock time (e.g., `1:15 PM`), and current velocity (`38 km/h`).
-  - Smart Delay Predictor: Dynamically identifies congestion bottlenecks (`✅ On Time` vs. `⚠️ +4m Late`).
-  - Crowd Load Indicators: `🟢 Seats Available`, `🟡 Standing Room`, `🔴 Full Capacity`.
-  - Night Safety Badge: `🌙 LAST BUS OF THE NIGHT` alert for late services.
-- **Action**: One-click **"Select & Track This Bus ➔"** initiates the location confirmation.
-
----
-
-### 3️⃣ Step 3: Zomato-Style Live Tracking Map View
-- **Location Permission Dialog**: Prompts *"Turn on your location to track this bus live"* before map activation, supporting native HTML5 GPS or terminal boarding stop fallback.
-- **Single-Bus Isolation**: All other fleet buses are hidden from the map view, focusing 100% on the commuter's incoming bus (identical to food delivery apps tracking your delivery partner).
-- **Passenger Pin (`🧍‍♂️ You`)**: High-contrast marker with an animated green radar wave ring showing the passenger's boarding location.
-- **Interactive Camera Controls**:
-  - `🔍 Fit Both`: Auto-frames both commuter stop and incoming bus with dynamic padding.
-  - `🚍 Follow Bus`: Locks camera tracking on the moving bus.
-  - `🎯 My Stop`: Centers viewport on passenger's boarding terminal.
-  - `⛶ Fullscreen Radar`: Expands map into an immersive full-screen tracking dashboard.
-- **1-Tap WhatsApp Live Trip Sharing & Deep-Links**:
-  - One-click WhatsApp sharing sends live arrival status, vehicle number, and ETA to family.
-  - Copyable deep-link URL parameters (`?bus=1&dest=Surathkal&lang=kn`) allow recipients to open the exact live radar view directly.
-- **Animated Royal Blue Route Polyline**: Royal blue navigation line (`#1d4ed8`) with moving dashes directly connecting the passenger pin to the approaching bus.
-- **Floating Telemetry HUD**: Displays real-time road distance (e.g. `2.4 km away from your stop`), stop arrival countdown, and vehicle speed.
-- **Native Web Audio Proximity Chime**: Automatically plays an alert chime (harmonic dual-tone `587 Hz` ➔ `880 Hz`) when the tracked bus enters the `< 1.2 km` radius of the passenger's stop, accompanied by an animated boarding banner with quick mute/unmute toggles.
-- **Docked Stop-by-Stop Corridor Progression**: Visual timeline stepper tracking 7 major NH-66 coastal highway nodes (`Statebank ➔ Hampankatta ➔ Lalbagh ➔ Nanthoor ➔ Kuloor ➔ Baikampady ➔ Surathkal`) with real-time passed (`✓`), approaching (`🚍`), and upcoming states.
-- **"← Switch Bus / Exit Map" Button**: Pinned navigation button that returns the commuter back to Step 2 to select another bus instantly without page reloading.
-
----
-
-## 🌐 Bilingual Kannada-English (ಕನ್ನಡ/EN) Localization
-- Instant one-tap bilingual toggle in the header persistent across sessions (`localStorage`).
-- Complete translation coverage for corridor stops, government branding, bus filters, crowd occupancy statuses, delay notices, and duty terminals.
-
----
-
-## 👨‍✈️ Conductor Duty Terminal (PIN-Secured Real-World Startup)
-
-- **Real-World Bus Check-In**: Conductors board their assigned bus (e.g., `KA-19-AB-4509`), enter the **4-digit Secret PIN** (e.g., `4509`) assigned by the bus owner, and tap **"Unlock Bus & Verify PIN"**.
-- **One-Tap Shift Start**: Once authenticated, the conductor launches tracking with a single tap: **"Start Shift & Stream GPS"** without needing to configure complex route details.
-- **Hardware-Free GPS Streaming**: Built on native browser HTML5 Geolocation (`navigator.geolocation.watchPosition`) with battery-saving stationary throttling.
-- **Real-Time Passenger Load Counter**: Dynamic passenger count stepper (`-1` / `+1`) with automatic capacity percentage calculation and one-tap occupancy toggles (`🟢 Seats Available`, `🟡 Standing Allowed`, `🔴 Full / Overcrowded`).
-- **Road Incident & Delay Broadcaster**: Instant corridor incident broadcast panel with 1-tap presets (e.g., Nanthoor traffic choke, Kuloor monsoon waterlogging, Baikampady road work, Night Last Bus advisory) that streams alerts live to passenger tickers via WebSockets.
-- **End-of-Shift Waybill & Revenue Ledger Modal**: When duty is completed, generates a formal government-style waybill with total commuters served, distance traversed, gross revenue collection, and 1-click printable receipt.
-- **Corridor Simulation Fallback**: Automatically activates a smooth, realistic 6-waypoint simulation along NH-66 for desktop/laptop evaluation.
-
----
-
-## 🏢 Fleet Owner Command Center (Email OTP)
-
-- **Owner Email OTP Authentication**: Registered owners enter their email (`vishal@gmail.com`) and verify a one-time code. In development, the generated code is shown in the UI and server log; production requires an email-delivery integration.
-- **Fleet Management & Bus Deployment**: Owners can add, update, and remove fleet buses operating on the NH-66 corridor.
-- **Secret Conductor PIN Administration**: Owners generate and manage unique 4-digit Secret PINs for each vehicle (with 1-click randomize and clipboard copy) to issue to their drivers.
-- **Real-Time Duty Oversight**: Real-time status indicators tracking which fleet buses are currently on active shift streaming live GPS versus resting at the depot.
-
----
-
-## 🗄️ Relational SQL Schema & Database Architecture
-
-Powered by SQLite ([`transit.db`](file:///c:/Users/gowda/karavali-transit/transit.db)) with complete PostgreSQL readiness ([`db.js`](file:///c:/Users/gowda/karavali-transit/db.js)).
-
-### Tables:
-1. **`buses`**:
-   - `bus_id`: Primary Key (Auto-increment)
-   - `bus_name`: Operator/Brand name (e.g., `Vishal Express`)
-   - `vehicle_number`: Unique registration string (`KA-19-AB-4509`)
-   - `route_number`: Highway corridor number (`15`, `NH-66`, `21`)
-   - `service_type`: `Express` or `City / Ordinary`
-   - `origin` & `destination`: Terminal endpoints
-   - `is_last_bus`: Night safety flag (0 or 1)
-2. **`driver_shifts`**:
-   - `shift_id`: Primary Key
-   - `driver_phone`, `vehicle_number`, `bus_name`, `route_name`
-   - `start_time`, `end_time`, `status`: Active shift logging
-3. **`gps_telemetry`**:
-   - `log_id`: Primary Key
-   - `bus_id`, `latitude`, `longitude`, `speed`, `delay_minutes`
-   - `recorded_at`: Telemetry timestamp
-
-### REST API Endpoints:
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/health` | Returns server operational status and database connection state |
-| `GET` | `/api/buses` | Retrieves all registered coastal express and ordinary buses |
-| `GET` | `/api/shifts` | Lists active and historical conductor operational duty records |
-| `GET` | `/api/telemetry` | Retrieves recent GPS coordinates and speed telemetry logs |
+### 3. Conductor Terminal
+- Travel agency email OTP verification and conductor mobile authorization.
+- One-tap shift activation linking mobile GPS coordinates to the live bus record.
+- Real-time passenger occupancy counter (`+1`, `-1`, `+5`, `-5`) with capacity badges (`Seats Available`, `Standing Allowed`, `Overcrowded`).
+- Stop progression timetable and delay/incident broadcaster.
 
 ---
 
 ## 🛠️ Technology Stack
 
-| Domain | Technology | Description |
-| :--- | :--- | :--- |
-| **Frontend Framework** | [React 19](https://react.dev/) + [Vite](https://vite.dev/) | Modern reactive architecture with sub-second HMR |
-| **Mapping Engine** | [Leaflet](https://leafletjs.com/) + [React-Leaflet](https://react-leaflet.js.org/) | Hardware-accelerated map rendering with OpenStreetMap tiles |
-| **Styling & UI** | Tailwind CSS + Official Custom CSS | Official Karnataka State Transit (`Karavali Sarige`) light mode |
-| **Iconography** | [Lucide React](https://lucide.dev/) | Clean, accessible vector icons |
-| **Real-Time WebSockets** | [Socket.IO](https://socket.io/) (Server + Client) | Sub-second bidirectional GPS telemetry broadcasting |
-| **Backend Framework** | [Node.js](https://nodejs.org/) + [Express](https://expressjs.com/) | RESTful API server and static asset handling |
-| **Database** | SQLite3 ([`transit.db`](file:///c:/Users/gowda/karavali-transit/transit.db)) + `pg` | Relational storage for fleet, shifts, and telemetry logs |
-| **Code Quality** | [Oxlint](https://oxc.rs/) | 0 warnings, 0 errors high-speed JavaScript/JSX linter |
+| Layer | Technology |
+|---|---|
+| **Frontend** | React 19, Vite 8, Tailwind CSS |
+| **Maps & Telemetry** | Leaflet, React-Leaflet, Socket.IO Client |
+| **Backend** | Node.js, Express 5, Socket.IO |
+| **Database** | PostgreSQL (Primary) / SQLite (Fallback) |
+| **Linting & Testing** | Oxlint, Node.js Native Test Runner (`node:test`) |
 
 ---
 
-## 🚀 Getting Started
+## 🏃 Running the Application
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v18.0 or newer)
-- `npm` (bundled with Node.js)
+- Node.js >= 18.0.0
+- PostgreSQL running locally on port 5432 with database `karavali_transit` (or SQLite fallback)
 
-### 1. Clone & Install
+### Installation & Startup
 ```bash
-git clone https://github.com/sanath-labs/Karavali-Transit.git
-cd Karavali-Transit
+# Install dependencies
 npm install
-```
 
-### 2. Start the Backend Server (Terminal 1)
-```bash
+# Start Express Backend (Port 5000)
 node server.js
-# OR
-npm run server
-# Central fleet telemetry engine starts on http://localhost:5000
+
+# Start Vite Frontend Dev Server (Port 5173)
+npx vite --host
 ```
 
-### 3. Start the Frontend Application (Terminal 2)
+### Running Tests
 ```bash
-npm run dev
-# Vite client starts on http://localhost:5173
+# Run all test suites
+npm test
+
+# Run corridor integrity & passenger flow tests
+node --test tests/passenger-portal-flow.test.js
+node --test tests/desktop-responsiveness.test.js
 ```
-
-For a remote API, set `VITE_API_URL` in the frontend environment. The local Vite development proxy defaults to `http://localhost:5000`; override it with `VITE_API_PROXY_TARGET` when needed.
-
-### 4. Run Automated Tests & Quality Checks
-```bash
-npm test        # Runs database smoke tests and passenger journey suite
-npm run lint    # Runs Oxlint inspection (0 warnings, 0 errors)
-npm run build   # Verifies production Vite bundle build
-```
-
----
-
-## 🏢 Fleet Owner Command Center & Bus Management
-
-The Fleet Owner Command Center provides private fleet agencies with complete operational autonomy:
-
-- **Authentication & Security:** Email OTP authentication with 12-hour encrypted bearer token sessions.
-- **Transactional PostgreSQL Bus Wizard:** 4-step wizard saving bus specifications, route corridors, ordered intermediate stops, and timetables inside an atomic PostgreSQL database transaction (`BEGIN`, `COMMIT`, `ROLLBACK`).
-- **Owner Dashboard (My Buses):** Responsive bus management table with real-time tracking indicators, view details panel with stops timeline, and prefilled modal editors.
-- **Conductor Authorization & PIN Lifecycle:** Grant duty authorization, validate Indian mobile numbers, and rotate encrypted 4-digit check-in PINs.
-- **Fleet Schedule Export:** Download complete fleet timetables and intermediate stops as structured CSV spreadsheets.
-
----
-
-## 📱 Conductor Portal & Operations Terminal
-
-The Conductor Portal provides a secure, streamlined mobile operations workflow for crew staff and drivers operating private buses along coastal corridors:
-
-```mermaid
-flowchart LR
-    S1["Step 1: Agency Email Entry"] -->|"Send 6-Digit OTP"| S2["Step 2: Email OTP Verification"]
-    S2 -->|"Agency Bearer Token"| S3["Step 3: Conductor Mobile Entry\n(Direct — No Mobile OTP)"]
-    S3 -->|"Status Check"| S4{"Existing Crew?"}
-    S4 -->|"Yes"| S5["Step 5: Duty Dashboard"]
-    S4 -->|"No"| S4b["Step 4: Fast Registration & Bus Assignment"]
-    S4b --> S5
-```
-
-### Authentication Workflow
-1. **STEP 1 — Travel Agency Email Entry**: Conductor inputs registered fleet owner Gmail (`POST /api/conductor/send-otp`).
-2. **STEP 2 — Email OTP Verification**: 6-digit numeric OTP validated with countdown timer and rate-limiting (`POST /api/conductor/verify-otp`).
-3. **STEP 3 — Conductor Mobile Entry**: 10-digit Indian mobile number input (`+91`). **No mobile OTP verification is required**, ensuring instantaneous field check-ins.
-4. **STEP 4 — Conductor Lookup / Quick Registration**:
-   - Existing conductors are identified instantly from the database and prompt bus confirmation (`POST /api/conductor/lookup`).
-   - New conductors provide full name and select assigned bus from the agency fleet, persisting in PostgreSQL (`POST /api/conductor/register`).
-5. **STEP 5 — Conductor Operations Dashboard**:
-   - **One-Tap Shift & Live GPS**: Native geolocation streams coordinates via WebSocket `update_location` with NH-66 corridor fallback simulator.
-   - **Real-Time Occupancy Controller**: Commuter counter (`+1`, `-1`, `+5`, `-5`) and status toggle (*Seats Available*, *Standing Allowed*, *Overcrowded*).
-   - **Route Stops Progression Checklist**: Live timetable stops progression tracking.
-   - **Corridor Incident Broadcaster**: Push immediate delay and weather alerts to passenger radar screens.
-   - **Duty Ledger & Waybill**: Conductor shift summary modal with complete audit logging.
-
----
-
-## 🧪 60-Second Live Demonstration Guide
-
-To experience real-time synchronization between Conductor and Passenger:
-
-1. **Tab 1 — Passenger Radar**:
-   - Open [`http://localhost:5173`](http://localhost:5173) in your browser.
-   - **Step 1**: Click **"Surathkal / NITK"** and click **"Search Incoming Buses ➔"**.
-   - **Step 2**: Review the filtered bus list (notice *Vishal Express*).
-   - **Step 3**: Click **"Select & Track This Bus"** and click **"Turn On Location & Track Bus"**.
-   - You now see the live Leaflet map with your pin (`🧍‍♂️`), the bus (`🚍`), and the animated blue route line!
-
-2. **Tab 2 — Conductor Portal**:
-   - Open a second browser tab at [`http://localhost:5173`](http://localhost:5173).
-   - Switch the top header to **Staff / Conductor Portal**.
-   - Click the preset **⚡ Vishal Express (#15)** and click **"Start Shift & Stream GPS"**.
-
-3. **Observe Tab 1**:
-   - Watch the bus marker on the map in Tab 1 move smoothly along NH-66 in real time!
-   - Notice the floating HUD update the distance (`2.4 km away from your stop`) and ETA countdown automatically.
-   - Click **"← Switch Bus / Exit Map"** anytime to return to Step 2 and track another vehicle!
-
----
-
-## 📚 Architectural & Technical Documentation
-
-- [`docs/PASSENGER_JOURNEY.md`](file:///c:/Users/gowda/karavali-transit/docs/PASSENGER_JOURNEY.md): Complete state machine specification for the 3-step passenger journey.
-- [`docs/API.md`](file:///c:/Users/gowda/karavali-transit/docs/API.md): Full REST endpoint specifications and Socket.IO event payloads.
-- [`docs/CORRIDORS.md`](file:///c:/Users/gowda/karavali-transit/docs/CORRIDORS.md): NH-66 coastal highway waypoint GPS coordinates and delay prediction formulas.
-- [`CONTRIBUTING.md`](file:///c:/Users/gowda/karavali-transit/CONTRIBUTING.md): Developer contributing guidelines and Git commit conventions.
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE) — free for public transit authorities, academic institutions, and developer portfolios.
