@@ -110,10 +110,21 @@ export default function PassengerPortal({
         [data.bus_id]: {
           ...(prev[data.bus_id] || {}),
           ...data,
-          timestamp: Date.now(),
+          timestamp: data.timestamp || Date.now(),
         },
       }))
       setSecondsAgo(0)
+    })
+
+    socket.on('bus_tracking_stopped', ({ bus_id }) => {
+      if (!bus_id) return
+      setLiveTelemetry((prev) => ({
+        ...prev,
+        [bus_id]: {
+          ...(prev[bus_id] || {}),
+          tracking_status: 'OFFLINE',
+        },
+      }))
     })
 
     return () => {
@@ -121,13 +132,7 @@ export default function PassengerPortal({
     }
   }, [])
 
-  // Seconds ago timer for Screen 4
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSecondsAgo((s) => (s >= 59 ? 15 : s + 1))
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [])
+  // Real-time telemetry dynamic elapsed counter
 
   // Initial Bus Search on Mount
   useEffect(() => {
