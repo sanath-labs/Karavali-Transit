@@ -245,19 +245,24 @@ async function seedRakeshFleetPg() {
         vehicle_number: 'KA 19 AB 1234',
         route_number: '001',
         service_type: 'Non AC',
-        origin: 'Surathkal',
-        destination: 'Udupi',
+        origin: 'Mangaluru',
+        destination: 'Kundapura',
         total_seats: 45,
         photo_url: '/images/coastal-private-bus.jpg',
-        departure_time: '10:40 AM',
+        departure_time: '09:55 AM',
         frequency: 'Daily',
-        journey_duration: '1 hour 35 minutes',
+        journey_duration: '3 hours 05 minutes',
+        conductor: { name: 'Manjunath Shetty', phone: '98451 12345' },
         stops: [
+          { stop_name: 'Mangaluru', planned_arrival: '09:55 AM' },
+          { stop_name: 'Kuntikana', planned_arrival: '10:05 AM' },
+          { stop_name: 'Kulur', planned_arrival: '10:15 AM' },
           { stop_name: 'Surathkal', planned_arrival: '10:40 AM' },
           { stop_name: 'Mulki', planned_arrival: '11:05 AM' },
-          { stop_name: 'Kaup', planned_arrival: '11:25 AM' },
-          { stop_name: 'Kundapura', planned_arrival: '11:50 AM' },
+          { stop_name: 'Padubidri', planned_arrival: '11:20 AM' },
+          { stop_name: 'Kaup', planned_arrival: '11:35 AM' },
           { stop_name: 'Udupi', planned_arrival: '12:15 PM' },
+          { stop_name: 'Kundapura', planned_arrival: '01:00 PM' },
         ],
       },
       {
@@ -265,38 +270,24 @@ async function seedRakeshFleetPg() {
         vehicle_number: 'KA 20 CD 5678',
         route_number: '002',
         service_type: 'AC',
-        origin: 'Surathkal',
-        destination: 'Udupi',
+        origin: 'Mangaluru',
+        destination: 'Kundapura',
         total_seats: 40,
         photo_url: '/images/coastal-private-bus.jpg',
-        departure_time: '11:15 AM',
+        departure_time: '10:30 AM',
         frequency: 'Daily',
-        journey_duration: '1 hour 35 minutes',
+        journey_duration: '3 hours 05 minutes',
+        conductor: { name: 'Santhosh Poojary', phone: '98452 23456' },
         stops: [
+          { stop_name: 'Mangaluru', planned_arrival: '10:30 AM' },
+          { stop_name: 'Kuntikana', planned_arrival: '10:40 AM' },
+          { stop_name: 'Kulur', planned_arrival: '10:50 AM' },
           { stop_name: 'Surathkal', planned_arrival: '11:15 AM' },
           { stop_name: 'Mulki', planned_arrival: '11:40 AM' },
-          { stop_name: 'Kaup', planned_arrival: '12:00 PM' },
-          { stop_name: 'Kundapura', planned_arrival: '12:25 PM' },
+          { stop_name: 'Padubidri', planned_arrival: '11:55 AM' },
+          { stop_name: 'Kaup', planned_arrival: '12:10 PM' },
           { stop_name: 'Udupi', planned_arrival: '12:50 PM' },
-        ],
-      },
-      {
-        bus_name: 'Shree Ganesh Travels',
-        vehicle_number: 'KA 19 EF 9012',
-        route_number: '003',
-        service_type: 'Non AC',
-        origin: 'Mangaluru',
-        destination: 'Surathkal',
-        total_seats: 50,
-        photo_url: '/images/coastal-private-bus.jpg',
-        departure_time: '08:15 AM',
-        frequency: 'Daily',
-        journey_duration: '40 minutes',
-        stops: [
-          { stop_name: 'Mangaluru', planned_arrival: '08:15 AM' },
-          { stop_name: 'Kottara Chowki', planned_arrival: '08:25 AM' },
-          { stop_name: 'Kulai', planned_arrival: '08:40 AM' },
-          { stop_name: 'Surathkal', planned_arrival: '08:55 AM' },
+          { stop_name: 'Kundapura', planned_arrival: '01:35 PM' },
         ],
       },
       {
@@ -304,19 +295,24 @@ async function seedRakeshFleetPg() {
         vehicle_number: 'KA 21 GH 3456',
         route_number: '004',
         service_type: 'Non AC',
-        origin: 'Surathkal',
-        destination: 'Udupi',
+        origin: 'Mangaluru',
+        destination: 'Kundapura',
         total_seats: 45,
         photo_url: '/images/coastal-private-bus.jpg',
-        departure_time: '12:30 PM',
+        departure_time: '11:45 AM',
         frequency: 'Daily',
-        journey_duration: '1 hour 35 minutes',
+        journey_duration: '3 hours 05 minutes',
+        conductor: { name: 'Pradeep Kumar', phone: '98453 34567' },
         stops: [
+          { stop_name: 'Mangaluru', planned_arrival: '11:45 AM' },
+          { stop_name: 'Kuntikana', planned_arrival: '11:55 AM' },
+          { stop_name: 'Kulur', planned_arrival: '12:05 PM' },
           { stop_name: 'Surathkal', planned_arrival: '12:30 PM' },
           { stop_name: 'Mulki', planned_arrival: '12:55 PM' },
-          { stop_name: 'Kaup', planned_arrival: '01:15 PM' },
-          { stop_name: 'Kundapura', planned_arrival: '01:40 PM' },
+          { stop_name: 'Padubidri', planned_arrival: '01:10 PM' },
+          { stop_name: 'Kaup', planned_arrival: '01:25 PM' },
           { stop_name: 'Udupi', planned_arrival: '02:05 PM' },
+          { stop_name: 'Kundapura', planned_arrival: '02:50 PM' },
         ],
       },
     ]
@@ -324,19 +320,13 @@ async function seedRakeshFleetPg() {
     for (const b of rakeshBuses) {
       const cleanVeh = b.vehicle_number.toUpperCase().replace(/\s+/g, '-')
       const exist = await pgPool.query(
-        `SELECT bus_id FROM buses WHERE UPPER(REPLACE(vehicle_number, ' ', '-')) = $1`,
+        "SELECT bus_id FROM buses WHERE UPPER(REPLACE(vehicle_number, ' ', '-')) = $1",
         [cleanVeh]
       )
       let busId
       if (exist.rows.length === 0) {
         const ins = await pgPool.query(
-          `INSERT INTO buses (
-            bus_name, vehicle_number, route_number, service_type,
-            origin, destination, is_last_bus, conductor_pin,
-            owner_email, total_seats, photo_url, departure_time,
-            frequency, journey_duration
-          ) VALUES ($1, $2, $3, $4, $5, $6, 0, '4509', 'rakesh@gmail.com', $7, $8, $9, $10, $11)
-          RETURNING bus_id`,
+          'INSERT INTO buses (bus_name, vehicle_number, route_number, service_type, origin, destination, is_last_bus, conductor_pin, owner_email, total_seats, photo_url, departure_time, frequency, journey_duration) VALUES ($1, $2, $3, $4, $5, $6, 0, \'4509\', \'rakesh@gmail.com\', $7, $8, $9, $10, $11) RETURNING bus_id',
           [
             b.bus_name,
             cleanVeh,
@@ -355,53 +345,41 @@ async function seedRakeshFleetPg() {
       } else {
         busId = exist.rows[0].bus_id
         await pgPool.query(
-          `UPDATE buses SET bus_name = $1, service_type = $2, departure_time = $3, origin = $4, destination = $5, owner_email = 'rakesh@gmail.com' WHERE bus_id = $6`,
+          "UPDATE buses SET bus_name = $1, service_type = $2, departure_time = $3, origin = $4, destination = $5, owner_email = 'rakesh@gmail.com' WHERE bus_id = $6",
           [b.bus_name, b.service_type, b.departure_time, b.origin, b.destination, busId]
         )
       }
 
-      if (b.vehicle_number === 'KA 19 AB 1234' || b.vehicle_number === 'KA 20 CD 5678' || b.vehicle_number === 'KA 21 GH 3456') {
-        await pgPool.query('DELETE FROM bus_route_stops WHERE bus_id = $1', [busId])
-        for (let i = 0; i < b.stops.length; i++) {
-          await pgPool.query(
-            'INSERT INTO bus_route_stops (bus_id, stop_order, stop_name, planned_arrival) VALUES ($1, $2, $3, $4)',
-            [busId, i + 1, b.stops[i].stop_name, b.stops[i].planned_arrival]
-          )
-        }
+      await pgPool.query('DELETE FROM bus_route_stops WHERE bus_id = $1', [busId])
+      for (let i = 0; i < b.stops.length; i++) {
+        await pgPool.query(
+          'INSERT INTO bus_route_stops (bus_id, stop_order, stop_name, planned_arrival) VALUES ($1, $2, $3, $4)',
+          [busId, i + 1, b.stops[i].stop_name, b.stops[i].planned_arrival]
+        )
+      }
+
+      const cCheck = await pgPool.query(
+        "SELECT conductor_id FROM conductors WHERE owner_email = 'rakesh@gmail.com' AND name = $1",
+        [b.conductor.name]
+      )
+      if (cCheck.rows.length === 0) {
+        await pgPool.query(
+          "INSERT INTO conductors (owner_email, name, phone, assigned_bus_id, status) VALUES ('rakesh@gmail.com', $1, $2, $3, 'Active')",
+          [b.conductor.name, b.conductor.phone, busId]
+        )
       } else {
-        const stopsCount = await pgPool.query('SELECT COUNT(*) AS count FROM bus_route_stops WHERE bus_id = $1', [busId])
-        if (Number(stopsCount.rows[0].count) === 0) {
-          for (let i = 0; i < b.stops.length; i++) {
-            await pgPool.query(
-              'INSERT INTO bus_route_stops (bus_id, stop_order, stop_name, planned_arrival) VALUES ($1, $2, $3, $4)',
-              [busId, i + 1, b.stops[i].stop_name, b.stops[i].planned_arrival]
-            )
-          }
-        }
+        await pgPool.query(
+          "UPDATE conductors SET assigned_bus_id = $1, phone = $2, status = 'Active' WHERE conductor_id = $3",
+          [busId, b.conductor.phone, cCheck.rows[0].conductor_id]
+        )
       }
     }
 
-    const condCount = await pgPool.query(
-      'SELECT COUNT(*) AS count FROM conductors WHERE LOWER(owner_email) = $1',
-      ['rakesh@gmail.com']
-    )
-    if (Number(condCount.rows[0].count) === 0) {
-      const defaultConds = [
-        ['rakesh@gmail.com', 'Manjunath Shetty', '98451 12345'],
-        ['rakesh@gmail.com', 'Santhosh Poojary', '98452 23456'],
-        ['rakesh@gmail.com', 'Pradeep Kumar', '98453 34567'],
-        ['rakesh@gmail.com', 'Dinesh Acharya', '98454 45678'],
-        ['rakesh@gmail.com', 'Raghavendra Rao', '98455 56789'],
-      ]
-      for (const c of defaultConds) {
-        await pgPool.query('INSERT INTO conductors (owner_email, name, phone) VALUES ($1, $2, $3)', c)
-      }
-    }
+    await pgPool.query("DELETE FROM buses WHERE owner_email = 'rakesh@gmail.com' AND UPPER(REPLACE(vehicle_number, ' ', '-')) NOT IN ('KA-19-AB-1234', 'KA-20-CD-5678', 'KA-21-GH-3456')")
   } catch (err) {
     console.warn('Could not seed Rakesh fleet:', err.message)
   }
 }
-
 // ============================================================================
 // SQLITE SCHEMA INITIALIZATION
 // ============================================================================
@@ -592,18 +570,23 @@ function seedRakeshFleetSqlite(cb) {
       vehicle_number: 'KA-19-AB-1234',
       route_number: '001',
       service_type: 'Non AC',
-      origin: 'Surathkal',
-      destination: 'Udupi',
+      origin: 'Mangaluru',
+      destination: 'Kundapura',
       total_seats: 45,
-      departure_time: '10:40 AM',
+      departure_time: '09:55 AM',
       frequency: 'Daily',
-      journey_duration: '1 hour 35 minutes',
+      journey_duration: '3 hours 05 minutes',
+      conductor: { name: 'Manjunath Shetty', phone: '98451 12345' },
       stops: [
+        { stop_name: 'Mangaluru', planned_arrival: '09:55 AM' },
+        { stop_name: 'Kuntikana', planned_arrival: '10:05 AM' },
+        { stop_name: 'Kulur', planned_arrival: '10:15 AM' },
         { stop_name: 'Surathkal', planned_arrival: '10:40 AM' },
         { stop_name: 'Mulki', planned_arrival: '11:05 AM' },
-        { stop_name: 'Kaup', planned_arrival: '11:25 AM' },
-        { stop_name: 'Kundapura', planned_arrival: '11:50 AM' },
+        { stop_name: 'Padubidri', planned_arrival: '11:20 AM' },
+        { stop_name: 'Kaup', planned_arrival: '11:35 AM' },
         { stop_name: 'Udupi', planned_arrival: '12:15 PM' },
+        { stop_name: 'Kundapura', planned_arrival: '01:00 PM' },
       ],
     },
     {
@@ -611,36 +594,23 @@ function seedRakeshFleetSqlite(cb) {
       vehicle_number: 'KA-20-CD-5678',
       route_number: '002',
       service_type: 'AC',
-      origin: 'Surathkal',
-      destination: 'Udupi',
+      origin: 'Mangaluru',
+      destination: 'Kundapura',
       total_seats: 40,
-      departure_time: '11:15 AM',
+      departure_time: '10:30 AM',
       frequency: 'Daily',
-      journey_duration: '1 hour 35 minutes',
+      journey_duration: '3 hours 05 minutes',
+      conductor: { name: 'Santhosh Poojary', phone: '98452 23456' },
       stops: [
+        { stop_name: 'Mangaluru', planned_arrival: '10:30 AM' },
+        { stop_name: 'Kuntikana', planned_arrival: '10:40 AM' },
+        { stop_name: 'Kulur', planned_arrival: '10:50 AM' },
         { stop_name: 'Surathkal', planned_arrival: '11:15 AM' },
         { stop_name: 'Mulki', planned_arrival: '11:40 AM' },
-        { stop_name: 'Kaup', planned_arrival: '12:00 PM' },
-        { stop_name: 'Kundapura', planned_arrival: '12:25 PM' },
+        { stop_name: 'Padubidri', planned_arrival: '11:55 AM' },
+        { stop_name: 'Kaup', planned_arrival: '12:10 PM' },
         { stop_name: 'Udupi', planned_arrival: '12:50 PM' },
-      ],
-    },
-    {
-      bus_name: 'Shree Ganesh Travels',
-      vehicle_number: 'KA-19-EF-9012',
-      route_number: '003',
-      service_type: 'Non AC',
-      origin: 'Mangaluru',
-      destination: 'Surathkal',
-      total_seats: 50,
-      departure_time: '08:15 AM',
-      frequency: 'Daily',
-      journey_duration: '40 minutes',
-      stops: [
-        { stop_name: 'Mangaluru', planned_arrival: '08:15 AM' },
-        { stop_name: 'Kottara Chowki', planned_arrival: '08:25 AM' },
-        { stop_name: 'Kulai', planned_arrival: '08:40 AM' },
-        { stop_name: 'Surathkal', planned_arrival: '08:55 AM' },
+        { stop_name: 'Kundapura', planned_arrival: '01:35 PM' },
       ],
     },
     {
@@ -648,18 +618,23 @@ function seedRakeshFleetSqlite(cb) {
       vehicle_number: 'KA-21-GH-3456',
       route_number: '004',
       service_type: 'Non AC',
-      origin: 'Surathkal',
-      destination: 'Udupi',
+      origin: 'Mangaluru',
+      destination: 'Kundapura',
       total_seats: 45,
-      departure_time: '12:30 PM',
+      departure_time: '11:45 AM',
       frequency: 'Daily',
-      journey_duration: '1 hour 35 minutes',
+      journey_duration: '3 hours 05 minutes',
+      conductor: { name: 'Pradeep Kumar', phone: '98453 34567' },
       stops: [
+        { stop_name: 'Mangaluru', planned_arrival: '11:45 AM' },
+        { stop_name: 'Kuntikana', planned_arrival: '11:55 AM' },
+        { stop_name: 'Kulur', planned_arrival: '12:05 PM' },
         { stop_name: 'Surathkal', planned_arrival: '12:30 PM' },
         { stop_name: 'Mulki', planned_arrival: '12:55 PM' },
-        { stop_name: 'Kaup', planned_arrival: '01:15 PM' },
-        { stop_name: 'Kundapura', planned_arrival: '01:40 PM' },
+        { stop_name: 'Padubidri', planned_arrival: '01:10 PM' },
+        { stop_name: 'Kaup', planned_arrival: '01:25 PM' },
         { stop_name: 'Udupi', planned_arrival: '02:05 PM' },
+        { stop_name: 'Kundapura', planned_arrival: '02:50 PM' },
       ],
     },
   ]
@@ -672,12 +647,7 @@ function seedRakeshFleetSqlite(cb) {
       (err, row) => {
         if (!row) {
           sqliteDb.run(
-            `INSERT INTO buses (
-              bus_name, vehicle_number, route_number, service_type,
-              origin, destination, is_last_bus, conductor_pin,
-              owner_email, total_seats, photo_url, departure_time,
-              frequency, journey_duration
-            ) VALUES (?, ?, ?, ?, ?, ?, 0, '4509', 'rakesh@gmail.com', ?, '/images/coastal-private-bus.jpg', ?, ?, ?)`,
+            'INSERT INTO buses (bus_name, vehicle_number, route_number, service_type, origin, destination, is_last_bus, conductor_pin, owner_email, total_seats, photo_url, departure_time, frequency, journey_duration) VALUES (?, ?, ?, ?, ?, ?, 0, \'4509\', \'rakesh@gmail.com\', ?, \'/images/coastal-private-bus.jpg\', ?, ?, ?)',
             [
               b.bus_name,
               b.vehicle_number,
@@ -700,6 +670,11 @@ function seedRakeshFleetSqlite(cb) {
                   stopStmt.run(busId, idx + 1, s.stop_name, s.planned_arrival)
                 })
                 stopStmt.finalize()
+
+                sqliteDb.run(
+                  "INSERT OR REPLACE INTO conductors (owner_email, name, phone, assigned_bus_id, status) VALUES ('rakesh@gmail.com', ?, ?, ?, 'Active')",
+                  [b.conductor.name, b.conductor.phone, busId]
+                )
               }
               remaining--
               if (remaining <= 0 && cb) cb()
@@ -711,23 +686,24 @@ function seedRakeshFleetSqlite(cb) {
             'UPDATE buses SET bus_name = ?, service_type = ?, departure_time = ?, origin = ?, destination = ?, owner_email = "rakesh@gmail.com" WHERE bus_id = ?',
             [b.bus_name, b.service_type, b.departure_time, b.origin, b.destination, busId],
             () => {
-              if (b.vehicle_number === 'KA-19-AB-1234' || b.vehicle_number === 'KA-20-CD-5678' || b.vehicle_number === 'KA-21-GH-3456') {
-                sqliteDb.run('DELETE FROM bus_route_stops WHERE bus_id = ?', [busId], () => {
-                  const stopStmt = sqliteDb.prepare(
-                    'INSERT INTO bus_route_stops (bus_id, stop_order, stop_name, planned_arrival) VALUES (?, ?, ?, ?)'
-                  )
-                  b.stops.forEach((s, idx) => {
-                    stopStmt.run(busId, idx + 1, s.stop_name, s.planned_arrival)
-                  })
-                  stopStmt.finalize(() => {
-                    remaining--
-                    if (remaining <= 0 && cb) cb()
-                  })
+              sqliteDb.run('DELETE FROM bus_route_stops WHERE bus_id = ?', [busId], () => {
+                const stopStmt = sqliteDb.prepare(
+                  'INSERT INTO bus_route_stops (bus_id, stop_order, stop_name, planned_arrival) VALUES (?, ?, ?, ?)'
+                )
+                b.stops.forEach((s, idx) => {
+                  stopStmt.run(busId, idx + 1, s.stop_name, s.planned_arrival)
                 })
-              } else {
-                remaining--
-                if (remaining <= 0 && cb) cb()
-              }
+                stopStmt.finalize(() => {
+                  sqliteDb.run(
+                    "UPDATE conductors SET assigned_bus_id = ?, phone = ?, status = 'Active' WHERE owner_email = 'rakesh@gmail.com' AND name = ?",
+                    [busId, b.conductor.phone, b.conductor.name],
+                    () => {
+                      remaining--
+                      if (remaining <= 0 && cb) cb()
+                    }
+                  )
+                })
+              })
             }
           )
         }
@@ -735,7 +711,6 @@ function seedRakeshFleetSqlite(cb) {
     )
   })
 }
-
 function seedDefaultStopsSqlite() {
   sqliteDb.get('SELECT COUNT(*) AS count FROM bus_route_stops', (_, row) => {
     if (row && row.count === 0) {
@@ -1585,245 +1560,118 @@ export async function getOwnerDashboardData(ownerEmail, activeBuses = {}) {
 // VERIFIED COASTAL STOPS & PASSENGER PORTAL DATA LAYER
 // ============================================================================
 
-export const VERIFIED_COASTAL_STOPS = [
+export const OFFICIAL_9_CORRIDOR_STOPS = [
   {
+    stop_id: 1,
     stop_name: 'Mangaluru',
-    stop_name_kn: 'ಮಂಗಳೂರು (ಸ್ಟೇಟ್‌ಬ್ಯಾಂಕ್)',
-    alternative_names: 'Mangalore, Statebank, Hampankatta, Service Bus Stand, Central, Nehru Maidan',
-    nearby_landmarks: 'DC Office, Town Hall, Nehru Maidan, Central Railway Station, Hampankatta Market',
+    stop_name_kn: 'ಮಂಗಳೂರು',
+    alternative_names: 'Mangalore, Statebank, Hampankatta, Central',
+    nearby_landmarks: 'DC Office, Town Hall, Nehru Maidan, Central Railway Station',
     locality: 'Statebank, Mangaluru',
     latitude: 12.8633,
     longitude: 74.8385,
   },
   {
-    stop_name: 'Hampankatta',
-    stop_name_kn: 'ಹಂಪನಕಟ್ಟೆ',
-    alternative_names: 'Hampankatte, University College, K.S. Rao Road, City Centre Mall',
-    nearby_landmarks: 'City Centre Mall, University College, Milagres Church, Light House Hill',
-    locality: 'Hampankatta, Mangaluru',
-    latitude: 12.8718,
-    longitude: 74.8430,
-  },
-  {
-    stop_name: 'Pumpwell',
-    stop_name_kn: 'ಪಂಪ್‌ವೆಲ್',
-    alternative_names: 'Pumpwell Circle, Mahaveer Circle, Kankanady Bypass, Father Muller, Indiana Hospital',
-    nearby_landmarks: 'Father Muller Hospital, KMC Hospital Ambedkar Circle, Indiana Hospital, Kankanady Railway Station',
-    locality: 'Kankanady, Mangaluru',
-    latitude: 12.8601,
-    longitude: 74.8649,
-  },
-  {
-    stop_name: 'Lalbagh',
-    stop_name_kn: 'ಲಾಲ್‌ಬಾಗ್',
-    alternative_names: 'Lalbagh Bus Stop, MCC, Ladyhill, Mangala Stadium, Bharath Mall',
-    nearby_landmarks: 'Mangalore City Corporation, Mangala Stadium, Kudroli Gokarnanatheshwara Temple, Bharath Mall',
-    locality: 'Lalbagh, Mangaluru',
-    latitude: 12.8821,
-    longitude: 74.8427,
-  },
-  {
+    stop_id: 2,
     stop_name: 'Kuntikana',
     stop_name_kn: 'ಕುಂತಿಕಾನ',
-    alternative_names: 'AJ Hospital Junction, Kuntikana Circle, Derebail Cross, AJ Hospital, AJ Dental College',
-    nearby_landmarks: 'AJ Hospital & Research Centre, AJ Dental College, Kuntikana Flyover, Derebail Church',
+    alternative_names: 'AJ Hospital, Kuntikana Circle, Derebail Cross',
+    nearby_landmarks: 'AJ Hospital & Research Centre, Kuntikana Flyover, Derebail Church',
     locality: 'Kuntikana, Mangaluru',
     latitude: 12.8988,
     longitude: 74.8512,
   },
   {
-    stop_name: 'Kottara Chowki',
-    stop_name_kn: 'ಕೊಟ್ಟಾರ ಚೌಕಿ',
-    alternative_names: 'Kottara, Chowki Junction, Infosys Kottara, Urwa Stores',
-    nearby_landmarks: 'Infosys Kottara, Highway Flyover, Derebail Konchady, Urwa Stores',
-    locality: 'Kottara, Mangaluru',
-    latitude: 12.9056,
-    longitude: 74.8361,
-  },
-  {
-    stop_name: 'Kuloor',
+    stop_id: 3,
+    stop_name: 'Kulur',
     stop_name_kn: 'ಕೂಳೂರು',
-    alternative_names: 'Kuloor Bridge, Kuloor Junction, Gurupura River Bridge, Tannirbhavi Cross',
-    nearby_landmarks: 'Kuloor Bridge, Panambur Cross, KIADB Industrial Area, Tannirbhavi Beach Cross',
-    locality: 'Kuloor, Mangaluru',
+    alternative_names: 'Kuloor, Kulur Bridge, Kulur Junction, Tannirbhavi Cross',
+    nearby_landmarks: 'Kulur River Bridge, KIADB Industrial Area, Tannirbhavi Beach Cross',
+    locality: 'Kulur, Mangaluru',
     latitude: 12.9234,
     longitude: 74.8257,
   },
   {
-    stop_name: 'Panambur',
-    stop_name_kn: 'ಪಣಂಬೂರು',
-    alternative_names: 'Panambur Beach Cross, NMPT Gate, New Mangalore Port, Panambur Beach',
-    nearby_landmarks: 'New Mangalore Port Authority (NMPT), Panambur Beach, MCF Plant, Indian Coast Guard',
-    locality: 'Panambur, Mangaluru',
-    latitude: 12.9463,
-    longitude: 74.8105,
-  },
-  {
-    stop_name: 'Baikampady',
-    stop_name_kn: 'ಬೈಕಂಪಾಡಿ',
-    alternative_names: 'Baikampady Industrial Area, APMC Market Baikampady, Meenakaliya',
-    nearby_landmarks: 'Baikampady Industrial Estate, APMC Yard, Meenakaliya Cross',
-    locality: 'Baikampady, Mangaluru',
-    latitude: 12.9691,
-    longitude: 74.8052,
-  },
-  {
-    stop_name: 'Kulai',
-    stop_name_kn: 'ಕುಳಾಯಿ',
-    alternative_names: 'Kulai Junction, Hosabettu Cross, Honnakatte, Chitrapura',
-    nearby_landmarks: 'Kulai Temple, Honnakatte Junction, Chitrapura Beach Cross',
-    locality: 'Kulai, Mangaluru',
-    latitude: 12.9842,
-    longitude: 74.8041,
-  },
-  {
+    stop_id: 4,
     stop_name: 'Surathkal',
     stop_name_kn: 'ಸುರತ್ಕಲ್',
-    alternative_names: 'Surathkal Bus Stand, NITK Surathkal, Surathkal Circle, NITK Beach, Govinda Dasa',
-    nearby_landmarks: 'NITK Surathkal Engineering College, Surathkal Lighthouse, Govinda Dasa College, Surathkal Railway Station',
+    alternative_names: 'NITK Surathkal, Surathkal Junction, Surathkal Bus Stand',
+    nearby_landmarks: 'NITK Surathkal Main Gate, Surathkal Railway Station, Surathkal Lighthouse',
     locality: 'Surathkal',
     latitude: 13.0068,
     longitude: 74.7954,
   },
   {
-    stop_name: 'Mukka',
-    stop_name_kn: 'ಮುಕ್ಕ',
-    alternative_names: 'Mukka Junction, Srinivas Hospital Mukka, Srinivas University, Mukka Beach',
-    nearby_landmarks: 'Srinivas Hospital & Medical College, Mukka Beach, Haleyangadi Gate',
-    locality: 'Mukka, Mangaluru',
-    latitude: 13.0321,
-    longitude: 74.7891,
-  },
-  {
+    stop_id: 5,
     stop_name: 'Mulki',
     stop_name_kn: 'ಮುಲ್ಕಿ',
-    alternative_names: 'Mulki Bus Stand, Mulki Car Street, Punaroor, Kateel Cross, Bappanadu',
-    nearby_landmarks: 'Kateel Shri Durgaparameshwari Temple Cross, Bappanadu Shri Durgaparameshwari Temple, Shambhavi River Bridge, Mulki Railway Station',
+    alternative_names: 'Mulki Bus Stand, Mulki Punaroor, Koluvail, Karnad',
+    nearby_landmarks: 'Bappanadu Durgaparameshwari Temple, Mulki Bus Stand, Shambhavi River Bridge',
     locality: 'Mulki',
     latitude: 13.0908,
     longitude: 74.7903,
   },
   {
+    stop_id: 6,
     stop_name: 'Padubidri',
     stop_name_kn: 'ಪಡುಬಿದ್ರಿ',
-    alternative_names: 'Padubidri Junction, Padubidre, Blue Flag Beach Cross, Suzlon',
-    nearby_landmarks: 'Padubidri End Point Beach, Blue Flag Beach, Mahalingeshwara Temple, Suzlon Industrial Area',
-    locality: 'Padubidri, Udupi',
+    alternative_names: 'Padubidre, Padubidri End Point, Blue Flag Beach Road',
+    nearby_landmarks: 'Padubidri Blue Flag Beach, Padubidri Mahaganapathi Temple, Karkala Cross',
+    locality: 'Padubidri',
     latitude: 13.1415,
     longitude: 74.7725,
   },
   {
-    stop_name: 'Uchila',
-    stop_name_kn: 'ಉಚ್ಚಿಲ',
-    alternative_names: 'Uchila Junction, Uchila Mahalakshmi, Yermal Cross, Mogaveera Bhavana',
-    nearby_landmarks: 'Shri Mahalakshmi Temple Uchila, Mogaveera Sabha Bhavana, Yermal Cross',
-    locality: 'Uchila, Udupi',
-    latitude: 13.1812,
-    longitude: 74.7571,
-  },
-  {
+    stop_id: 7,
     stop_name: 'Kaup',
     stop_name_kn: 'ಕಾಪು',
-    alternative_names: 'Kapu, Kaup Light House Cross, Kaup Bus Stand, Marigudi, Hosa Marigudi',
-    nearby_landmarks: 'Kaup Lighthouse & Beach, Sri Hosa Marigudi Temple, Hale Marigudi Temple, Vidyaniketan Group',
-    locality: 'Kaup, Udupi',
+    alternative_names: 'Kapu, Kaup Light House, Kaup Beach Cross, Marigudi',
+    nearby_landmarks: 'Kaup Lighthouse, Hale Mariamma Temple, Kaup Beach',
+    locality: 'Kaup',
     latitude: 13.2208,
     longitude: 74.7431,
   },
   {
-    stop_name: 'Katapadi',
-    stop_name_kn: 'ಕಟಪಾಡಿ',
-    alternative_names: 'Katapady Junction, Shirva Cross, Mattu Beach Cross, Venkataramana Temple',
-    nearby_landmarks: 'Katapadi Mattu Beach Cross, Shirva-Manipal Road Cross, Shree Venkataramana Temple',
-    locality: 'Katapadi, Udupi',
-    latitude: 13.2798,
-    longitude: 74.7402,
-  },
-  {
+    stop_id: 8,
     stop_name: 'Udupi',
     stop_name_kn: 'ಉಡುಪಿ',
-    alternative_names: 'Udupi City Bus Stand, Udupi Service Bus Stand, Karavali Bypass, Manipal Cross, Sri Krishna Matha',
-    nearby_landmarks: 'Sri Krishna Matha / Temple, City Bus Stand, Manipal MIT Cross (Tiger Circle), Udupi Railway Station (Indrali), MGM College',
-    locality: 'Udupi Town',
+    alternative_names: 'Udupi City Bus Stand, Service Bus Stand, Kalsanka, Diana Circle, Sri Krishna Matha',
+    nearby_landmarks: 'Sri Krishna Temple, Sri Krishna Matha, Diana Circle, Udupi Service Bus Stand, MGM College',
+    locality: 'Udupi',
     latitude: 13.3409,
     longitude: 74.7421,
   },
   {
-    stop_name: 'Santhekatte',
-    stop_name_kn: 'ಸಂತೆಕಟ್ಟೆ',
-    alternative_names: 'Kallianpur Cross, Robosoft Junction, Santhekatte Circle, Milagres College',
-    nearby_landmarks: 'Milagres College Kallianpur, Robosoft Technologies Campus, Mount Rosary Church',
-    locality: 'Santhekatte, Udupi',
-    latitude: 13.3765,
-    longitude: 74.7335,
-  },
-  {
-    stop_name: 'Brahmavara',
-    stop_name_kn: 'ಬ್ರಹ್ಮಾವರ',
-    alternative_names: 'Brahmavar Bus Stand, SMS College Cross, Barkur Cross',
-    nearby_landmarks: 'SMS College Brahmavara, Barkur Cross, Agricultural Research Station, Holy Family Church',
-    locality: 'Brahmavara, Udupi',
-    latitude: 13.4326,
-    longitude: 74.7472,
-  },
-  {
-    stop_name: 'Saligrama',
-    stop_name_kn: 'ಸಾಲಿಗ್ರಾಮ',
-    alternative_names: 'Saligrama Temple Cross, Gundmi, Guru Narasimha Temple, Padu Kere',
-    nearby_landmarks: 'Guru Narasimha Temple Saligrama, Kota Shivarama Karantha Theme Park, Padu Kere Beach Cross',
-    locality: 'Saligrama, Udupi',
-    latitude: 13.4831,
-    longitude: 74.7381,
-  },
-  {
-    stop_name: 'Kota',
-    stop_name_kn: 'ಕೋಟ',
-    alternative_names: 'Kota Bus Stand, Manuru Cross, Karantha Bhavana, Sea Walk',
-    nearby_landmarks: 'Dr. Kota Shivarama Karantha Smrithi Bhavana, Amrutheshwari Temple, Kota Manuru Sea Walk',
-    locality: 'Kota, Udupi',
-    latitude: 13.5123,
-    longitude: 74.7214,
-  },
-  {
+    stop_id: 9,
     stop_name: 'Kundapura',
     stop_name_kn: 'ಕುಂದಾಪುರ',
-    alternative_names: 'Kundapura Shastri Circle, Kundapur Old Bus Stand, Parijatha Cross, Kodi Sea Walk',
-    nearby_landmarks: 'Shastri Circle, Kundapura KSRTC & Private Bus Terminal, Kodi Sea Walk Beach, Kundeshwara Temple, Kundapura Railway Station',
+    alternative_names: 'Kundapur, Kundapura Shastri Circle, New Bus Stand, Old Bus Stand',
+    nearby_landmarks: 'Shastri Circle, Kundapura New Bus Stand, Kundeshwara Temple, Kodi Beach',
     locality: 'Kundapura',
-    latitude: 13.6288,
-    longitude: 74.6917,
-  },
-  {
-    stop_name: 'kollur',
-    stop_name_kn: 'ಕೊಲ್ಲೂರು',
-    alternative_names: 'Kollur Mookambika Temple, Mookambika Bus Stand, Kodachadri Hills',
-    nearby_landmarks: 'Sri Mookambika Temple, Kodachadri Hills Base, Souparnika River',
-    locality: 'Kollur, Udupi',
-    latitude: 13.8647,
-    longitude: 74.8142,
+    latitude: 13.6279,
+    longitude: 74.6931,
   },
 ]
 
+export const VERIFIED_COASTAL_STOPS = OFFICIAL_9_CORRIDOR_STOPS
+
 async function seedVerifiedBusStopsPg() {
   try {
-    const res = await pgPool.query('SELECT COUNT(*) AS count FROM bus_stops')
-    if (Number(res.rows[0].count) === 0) {
-      for (const stop of VERIFIED_COASTAL_STOPS) {
-        await pgPool.query(
-          `INSERT INTO bus_stops (stop_name, stop_name_kn, alternative_names, nearby_landmarks, locality, latitude, longitude)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (stop_name) DO NOTHING`,
-          [
-            stop.stop_name,
-            stop.stop_name_kn,
-            stop.alternative_names,
-            stop.nearby_landmarks,
-            stop.locality,
-            stop.latitude,
-            stop.longitude,
-          ]
-        )
-      }
+    await pgPool.query('DELETE FROM bus_stops')
+    for (const stop of OFFICIAL_9_CORRIDOR_STOPS) {
+      await pgPool.query(
+        'INSERT INTO bus_stops (stop_id, stop_name, stop_name_kn, alternative_names, nearby_landmarks, locality, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (stop_name) DO UPDATE SET stop_id = EXCLUDED.stop_id, stop_name_kn = EXCLUDED.stop_name_kn, alternative_names = EXCLUDED.alternative_names, nearby_landmarks = EXCLUDED.nearby_landmarks, locality = EXCLUDED.locality, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude',
+        [
+          stop.stop_id,
+          stop.stop_name,
+          stop.stop_name_kn,
+          stop.alternative_names,
+          stop.nearby_landmarks,
+          stop.locality,
+          stop.latitude,
+          stop.longitude,
+        ]
+      )
     }
   } catch (err) {
     console.error('Error seeding verified stops in PostgreSQL:', err.message)
@@ -1831,17 +1679,13 @@ async function seedVerifiedBusStopsPg() {
 }
 
 function seedVerifiedBusStopsSqlite(cb) {
-  sqliteDb.get('SELECT COUNT(*) AS count FROM bus_stops', (err, row) => {
-    if (err || (row && row.count > 0)) {
-      if (cb) cb()
-      return
-    }
-    const stmt = sqliteDb.prepare(`
-      INSERT OR IGNORE INTO bus_stops (stop_name, stop_name_kn, alternative_names, nearby_landmarks, locality, latitude, longitude)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `)
-    for (const stop of VERIFIED_COASTAL_STOPS) {
+  sqliteDb.run('DELETE FROM bus_stops', () => {
+    const stmt = sqliteDb.prepare(
+      'INSERT OR REPLACE INTO bus_stops (stop_id, stop_name, stop_name_kn, alternative_names, nearby_landmarks, locality, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    )
+    for (const stop of OFFICIAL_9_CORRIDOR_STOPS) {
       stmt.run(
+        stop.stop_id,
         stop.stop_name,
         stop.stop_name_kn,
         stop.alternative_names,
@@ -1856,7 +1700,6 @@ function seedVerifiedBusStopsSqlite(cb) {
     })
   })
 }
-
 function calculateHaversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371
   const dLat = ((lat2 - lat1) * Math.PI) / 180
@@ -1966,21 +1809,59 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
     return []
   }
 
+  // 1. Enforce that search is strictly within the 9 official corridor stops
+  const fromStop = OFFICIAL_9_CORRIDOR_STOPS.find((s) => {
+    const norm = normalizeStopSearchTerm(s.stop_name)
+    return norm === cleanFrom || s.stop_name.toLowerCase() === fromQuery.toLowerCase().trim()
+  })
+  const toStop = OFFICIAL_9_CORRIDOR_STOPS.find((s) => {
+    const norm = normalizeStopSearchTerm(s.stop_name)
+    return norm === cleanTo || s.stop_name.toLowerCase() === toQuery.toLowerCase().trim()
+  })
+
+  // Both stops must belong to the 9 official corridor stops
+  if (!fromStop || !toStop) {
+    return []
+  }
+
+  // Reject reverse journey or identical stop (Boarding must precede Destination)
+  if (fromStop.stop_id >= toStop.stop_id) {
+    return []
+  }
+
   const buses = await getBuses()
   const matched = []
 
   for (const bus of buses) {
+    // Strict Project Requirement: Must belong to the fixed corridor Mangaluru -> Kundapura
+    if (bus.origin !== 'Mangaluru' || bus.destination !== 'Kundapura') {
+      continue
+    }
+    // 5. Must have an active assigned conductor in conductors table
+    let conductor = null
+    if (isPostgres()) {
+      const cRes = await pgPool.query(
+        "SELECT conductor_id, name, phone, status FROM conductors WHERE assigned_bus_id = $1 AND (status = 'Active' OR status IS NULL) LIMIT 1",
+        [bus.bus_id]
+      )
+      conductor = cRes.rows[0] || null
+    } else {
+      conductor = await new Promise((resolve) => {
+        sqliteDb.get(
+          "SELECT conductor_id, name, phone, status FROM conductors WHERE assigned_bus_id = ? AND (status = 'Active' OR status IS NULL) LIMIT 1",
+          [bus.bus_id],
+          (err, row) => resolve(err ? null : row || null)
+        )
+      })
+    }
+
+    if (!conductor) {
+      continue
+    }
+
     let stops = await getBusRouteStops(bus.bus_id)
     if (!stops || stops.length < 2) {
-      // Fallback: If 0 route stops recorded in DB, infer from origin and destination
-      if (bus.origin && bus.destination) {
-        stops = [
-          { stop_order: 1, stop_name: bus.origin, planned_arrival: bus.departure_time || '07:00 AM' },
-          { stop_order: 2, stop_name: bus.destination, planned_arrival: '08:30 AM' },
-        ]
-      } else {
-        continue
-      }
+      continue
     }
 
     const fromIdx = stops.findIndex((s) => {
@@ -2014,8 +1895,8 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
         trackingStatus = 'SCHEDULED'
       }
 
-      let liveEtaMinutes = null
-      if (trackingStatus === 'LIVE' && activeData.latitude && activeData.longitude) {
+      let liveEtaMinutes = activeData.eta_minutes || null
+      if (trackingStatus === 'LIVE' && !liveEtaMinutes && activeData.latitude && activeData.longitude) {
         const remainingStops = Math.max(1, toIdx - fromIdx)
         const speed = activeData.speed > 10 ? activeData.speed : 32
         liveEtaMinutes = Math.max(2, Math.round((remainingStops * 6 * 60) / speed))
@@ -2026,7 +1907,7 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
         bus_name: bus.bus_name,
         vehicle_number: bus.vehicle_number,
         route_number: bus.route_number,
-        service_type: bus.service_type || 'Express',
+        service_type: bus.service_type || 'Non AC',
         origin: bus.origin,
         destination: bus.destination,
         route_name: `${bus.origin} ➔ ${bus.destination}`,
@@ -2038,7 +1919,7 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
         destination_stop: destinationStop.stop_name,
         destination_stop_order: destinationStop.stop_order,
         destination_planned_time: destinationStop.planned_arrival || '08:30 AM',
-        journey_duration: bus.journey_duration || '45 mins',
+        journey_duration: bus.journey_duration || '1 hour 35 minutes',
         tracking_status: trackingStatus,
         is_live: trackingStatus === 'LIVE',
         live_eta_minutes: liveEtaMinutes,
@@ -2046,6 +1927,9 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
         latitude: activeData.latitude || null,
         longitude: activeData.longitude || null,
         speed: activeData.speed || 0,
+        next_stop: activeData.next_stop || null,
+        conductor_name: conductor.name,
+        conductor_phone: conductor.phone,
         stops,
       })
     }
@@ -2059,7 +1943,6 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
 
   return matched
 }
-
 // 21. Get Bus Route With Enriched Stops & Landmarks
 export async function getBusRouteWithStops(busId) {
   const bus = await getBusById(busId)
