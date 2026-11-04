@@ -132,8 +132,6 @@ export default function PassengerPortal({
     }
   }, [])
 
-  // Real-time telemetry dynamic elapsed counter
-
   // Initial Bus Search on Mount
   useEffect(() => {
     handleSearchBuses('Surathkal', 'Udupi', false)
@@ -320,12 +318,52 @@ export default function PassengerPortal({
     return liveTelemetry[activeSelectedBus.bus_id] || activeSelectedBus
   }, [activeSelectedBus, liveTelemetry])
 
+  // Dynamic seconds ago counter based on actual hardware GPS timestamp
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const ts = trackedTelemetry?.timestamp
+      if (ts) {
+        const diff = Math.max(0, Math.floor((Date.now() - new Date(ts).getTime()) / 1000))
+        setSecondsAgo(diff)
+      } else {
+        setSecondsAgo(0)
+      }
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [trackedTelemetry?.timestamp])
+
+  const hasLiveCoordinates = useMemo(() => {
+    const lat = trackedTelemetry?.latitude
+    const lng = trackedTelemetry?.longitude
+    return Boolean(
+      typeof lat === 'number' &&
+        typeof lng === 'number' &&
+        lat >= 12.0 &&
+        lat <= 15.0 &&
+        lng >= 73.5 &&
+        lng <= 76.0
+    )
+  }, [trackedTelemetry])
+
+  const currentTrackingStatus = useMemo(() => {
+    if (!activeSelectedBus) return 'OFFLINE'
+    if (trackedTelemetry?.tracking_status) return trackedTelemetry.tracking_status
+    if (hasLiveCoordinates) {
+      const ts = trackedTelemetry?.timestamp ? new Date(trackedTelemetry.timestamp).getTime() : 0
+      if (ts > 0 && Date.now() - ts >= 120000) return 'LOCATION STALE'
+      return 'LIVE'
+    }
+    if (activeSelectedBus.is_on_shift) return 'NOT TRACKING'
+    return 'OFFLINE'
+  }, [activeSelectedBus, trackedTelemetry, hasLiveCoordinates])
+
   const busCoords = useMemo(() => {
-    if (trackedTelemetry?.latitude && trackedTelemetry?.longitude) {
+    if (hasLiveCoordinates) {
       return [trackedTelemetry.latitude, trackedTelemetry.longitude]
     }
-    return [13.165, 74.76]
-  }, [trackedTelemetry])
+    // Default corridor center (Kaup / Padubidri) for map centering when bus has not yet transmitted GPS
+    return [13.2208, 74.7431]
+  }, [hasLiveCoordinates, trackedTelemetry])
 
   // Full corridor 9-stop timeline list for Screen 3
   const corridorTimelineStops = useMemo(() => {
@@ -815,16 +853,18 @@ export default function PassengerPortal({
             )
           })}
 
-          {/* Live Bus Marker */}
-          {activeSelectedBus && (
-            <Marker position={busCoords} icon={busLiveIcon}>
+          {/* Live Bus Marker (Strictly when actual GPS coordinates exist) */}
+          {activeSelectedBus && hasLiveCoordinates && (
+            <Marker position={[trackedTelemetry.latitude, trackedTelemetry.longitude]} icon={busLiveIcon}>
               <Popup>
                 <div className="text-xs">
                   <strong>{activeSelectedBus.bus_name}</strong>
                   <br />
                   {activeSelectedBus.vehicle_number}
                   <br />
-                  Status: Live GPS Active
+                  Speed: {trackedTelemetry.speed || 0} km/h
+                  <br />
+                  Status: {currentTrackingStatus}
                 </div>
               </Popup>
             </Marker>
@@ -833,11 +873,21 @@ export default function PassengerPortal({
           <MapViewportController bounds={mapBounds} center={busCoords} />
         </MapContainer>
 
+        {/* Informational overlay when bus has not yet streamed GPS */}
+        {!hasLiveCoordinates && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-slate-900/90 text-white backdrop-blur-xs px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 pointer-events-none">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span>Waiting for onboard conductor to start live GPS telemetry</span>
+          </div>
+        )}
+
         {/* Floating Bottom HUD Card */}
         <LiveTrackingHud
           bus={activeSelectedBus}
           telemetry={trackedTelemetry}
+          status={currentTrackingStatus}
           secondsAgo={secondsAgo}
+          journeyInfo={{ from: currentStop, to: destination }}
         />
       </div>
     </div>
