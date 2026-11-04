@@ -1026,28 +1026,28 @@ try {
   if (durgaBus) {
     activeBuses[durgaBus.bus_id] = {
       ...durgaBus,
-      latitude: 13.0908,
-      longitude: 74.7903,
+      latitude: 13.1650,
+      longitude: 74.7600,
       speed: 42,
       heading: 350,
       is_on_shift: true,
       timestamp: Date.now(),
-      next_stop: 'Mulki',
-      eta_minutes: 25,
+      next_stop: 'Kaup',
+      eta_minutes: 18,
     }
   }
   const lakshmiBus = await getBusByVehicleNumber('KA 20 CD 5678')
   if (lakshmiBus) {
     activeBuses[lakshmiBus.bus_id] = {
       ...lakshmiBus,
-      latitude: 13.0321,
-      longitude: 74.7891,
+      latitude: 13.0450,
+      longitude: 74.7890,
       speed: 38,
       heading: 355,
       is_on_shift: true,
       timestamp: Date.now(),
-      next_stop: 'Mukka',
-      eta_minutes: 40,
+      next_stop: 'Mulki',
+      eta_minutes: 25,
     }
   }
 } catch (e) {
