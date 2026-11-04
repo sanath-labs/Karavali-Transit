@@ -18,7 +18,8 @@ import PopularJourneys from './components/PopularJourneys.jsx'
 import BusCard from './components/BusCard.jsx'
 import RouteTimeline from './components/RouteTimeline.jsx'
 import LiveTrackingHud from './components/LiveTrackingHud.jsx'
-import { busLiveIcon, stopPinIcon, MapViewportController } from './components/MapMarkers.jsx'
+import { busLiveIcon, stopPinIcon } from './mapIcons.js'
+import { MapViewportController } from './components/MapMarkers.jsx'
 
 export default function PassengerPortal({
   preselectedStop,
