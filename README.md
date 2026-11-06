@@ -61,6 +61,37 @@ flowchart TD
     B2 -->|"broadcast('bus_location_update')"| P4
 ```
 
+### 🔄 Live Telemetry Sequence Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor C as Conductor (Onboard Phone)
+    participant UI as Conductor Portal
+    participant API as Express API & Postgres
+    participant WS as Socket.IO Server
+    participant P as Passenger Portal & Map
+
+    C->>UI: Clicks "Start Live Tracking"
+    UI->>C: Prompts Browser Location Permission
+    C-->>UI: Grants High-Accuracy Sensor Access
+    UI->>UI: navigator.geolocation.watchPosition()
+    UI->>API: POST /api/conductor/gps-location (Bearer token)
+    API->>API: Validate Session & Bus Assignment
+    API->>API: Validate NH-66 Corridor Bounding Box & Speed
+    API->>API: Persist in PostgreSQL (gps_telemetry)
+    API->>WS: Broadcast live_location_broadcast
+    WS->>P: Streams Lat, Lng, Speed, Accuracy
+    P->>P: Dynamically updates Leaflet Marker & Status (LIVE)
+    
+    opt Stop Tracking or Shift Conclusion
+        C->>UI: Clicks "Stop Tracking"
+        UI->>API: POST /api/conductor/stop-tracking
+        API->>WS: Broadcast tracking_status: OFFLINE
+        WS->>P: Marker switches to OFFLINE standby
+    end
+```
+
 ---
 
 ## 🚀 Key Platform Features
