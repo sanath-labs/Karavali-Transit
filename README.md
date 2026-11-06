@@ -95,6 +95,13 @@ flowchart TD
   - `NOT TRACKING`: Shift registered, waiting for conductor to click *Start Live Tracking*.
   - `OFFLINE`: Conductor stopped tracking or duty shift completed.
 
+### 5. Security & Validation Architecture
+- **Cryptographic Conductor Session Tokens**: Conductor credentials issue 12-hour cryptographic Bearer tokens upon duty check-in.
+- **Server-Side Bus Assignment Enforcement**: Rejects any GPS update where the conductor is not assigned to the requested bus (HTTP 403 Forbidden).
+- **Corridor Geofence Bounding Box**: Validates latitude (12.0° – 15.0° N) and longitude (73.5° – 76.0° E); rejects out-of-corridor updates (HTTP 400).
+- **Speed Anomaly & Satellite Accuracy Filtering**: Rejects speeds exceeding 110 km/h and satellite accuracy fixes worse than 1000m.
+- **Timestamp Freshness Verification**: Rejects expired or futuristic timestamps (> 5 mins past or > 1 min future).
+
 ---
 
 ## 🛠️ Technology Stack
