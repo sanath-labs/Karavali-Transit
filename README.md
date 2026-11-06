@@ -116,6 +116,29 @@ flowchart TD
 
 ---
 
+## 📡 REST API Reference
+
+### Real-Time GPS & Conductor Operations
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `POST` | `/api/conductor/lookup` | Public | Verify travel agency conductor mobile status and retrieve assigned buses. |
+| `POST` | `/api/conductor/register` | Public | Fast crew registration under travel agency and token generation. |
+| `POST` | `/api/conductor/start-duty` | Conductor | Initialize active shift, link assigned bus, and issue session Bearer token. |
+| `POST` | `/api/conductor/gps-location` | Authenticated | Ingest real-time smartphone GPS coordinates (`lat`, `lng`, `accuracy`, `speed`, `heading`). |
+| `POST` | `/api/conductor/stop-tracking` | Authenticated | Pause GPS streaming and mark bus `OFFLINE`. |
+
+### Public Passenger Information
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/public/stops/search?q=` | Search 9 corridor stops by English, Kannada, or nearby landmarks. |
+| `GET` | `/api/public/buses/search?from=&to=` | Journey search matching forward order across the 9 official corridor stops. |
+| `GET` | `/api/public/buses/:id` | Retrieve public bus timetable and live status without pricing/fare data. |
+| `GET` | `/api/public/buses/:id/route` | Complete 9-stop corridor timeline and planned stop arrivals. |
+| `GET` | `/api/public/buses/:id/location` | Current tracking status (`LIVE`, `LOCATION STALE`, `NOT TRACKING`, `OFFLINE`) and GPS coordinates. |
+| `POST` | `/api/public/feedback` | Submit passenger feedback and ratings. |
+
+---
+
 ## 🏃 Running the Application
 
 ### Prerequisites
