@@ -86,6 +86,15 @@ flowchart TD
 - Real-time passenger occupancy counter (`+1`, `-1`, `+5`, `-5`) with capacity badges (`Seats Available`, `Standing Allowed`, `Overcrowded`).
 - Stop progression timetable and delay/incident broadcaster.
 
+### 4. Real-Time Smartphone GPS Hardware Telemetry
+- **Actual Hardware Sensor GPS**: Uses `navigator.geolocation.watchPosition` with `{ enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }` on the onboard conductor's smartphone browser.
+- **Strictly No Simulation**: All simulated waypoints, random generators, and hardcoded demo GPS coordinates are completely eliminated.
+- **Dynamic 4-State Tracking Lifecycle**:
+  - `LIVE`: Hardware GPS active and streaming updates within the last 120 seconds.
+  - `LOCATION STALE`: Shift active but no satellite ping received for > 2 minutes.
+  - `NOT TRACKING`: Shift registered, waiting for conductor to click *Start Live Tracking*.
+  - `OFFLINE`: Conductor stopped tracking or duty shift completed.
+
 ---
 
 ## 🛠️ Technology Stack
