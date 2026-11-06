@@ -162,7 +162,27 @@ npx vite --host
 # Run all test suites
 npm test
 
+# Run real-time GPS tracking & conductor security suite
+node --test tests/conductor-gps-tracking.test.js
+
 # Run corridor integrity & passenger flow tests
 node --test tests/passenger-portal-flow.test.js
 node --test tests/desktop-responsiveness.test.js
+
+# Code quality and zero-warning lint check
+npx oxlint
+
+# Production build verification
+npm run build
 ```
+
+### Automated GPS Verification Checklist
+- [x] Conductor Bearer token issuance during shift initialization
+- [x] Rejection of unauthenticated GPS updates (HTTP 401)
+- [x] Rejection of bus assignment mismatches (HTTP 403)
+- [x] Coastal Karnataka corridor boundary enforcement (HTTP 400)
+- [x] Impossible bus speed spike rejection (> 110 km/h)
+- [x] Sensor GPS ingestion and PostgreSQL `gps_telemetry` persistence
+- [x] Real-time Leaflet bus marker updating via Socket.IO
+- [x] Stop tracking transition to `OFFLINE` status
+- [x] Automatic stale location detection (> 120s inactivity)
