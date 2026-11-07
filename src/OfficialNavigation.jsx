@@ -16,9 +16,14 @@ export default function OfficialNavigation({
   onSelectCorridorStop,
   onNavigateHome,
   onNavigateRadar,
+  activeModal: externalActiveModal,
+  setActiveModal: externalSetActiveModal,
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [activeModal, setActiveModal] = useState(null) // 'findStop' | 'helpdesk' | 'feedback' | 'contact'
+  const [internalActiveModal, setInternalActiveModal] = useState(null)
+
+  const activeModal = externalActiveModal !== undefined ? externalActiveModal : internalActiveModal
+  const setActiveModal = externalSetActiveModal || setInternalActiveModal
 
   return (
     <>
