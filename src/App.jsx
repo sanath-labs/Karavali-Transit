@@ -13,6 +13,7 @@ function App() {
   const [role, setRole] = useState('passenger') // 'passenger' | 'conductor' | 'owner'
   const [passengerScreen, setPassengerScreen] = useState(1) // 1: Home, 2: Radar/Results, 3: Details, 4: Tracking
   const [preselectedStop, setPreselectedStop] = useState(null)
+  const [activeModal, setActiveModal] = useState(null)
 
   // BILINGUAL LOCALIZATION (English & Kannada / ಕನ್ನಡ)
   const [lang, setLang] = useState(() => {
@@ -155,6 +156,8 @@ function App() {
           setRole('passenger')
           setPassengerScreen(2)
         }}
+        activeModal={activeModal}
+        setActiveModal={setActiveModal}
       />
 
       {/* 2. MAIN PORTAL CONTENT */}
@@ -163,6 +166,8 @@ function App() {
           <PassengerPortal
             preselectedStop={preselectedStop}
             initialScreen={passengerScreen}
+            lang={lang}
+            onOpenFindStop={() => setActiveModal('findStop')}
           />
         )}
 
