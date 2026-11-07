@@ -286,3 +286,27 @@ All frontend improvements pass the following verification checks:
 - [x] **Mobile Responsiveness**: Verified across mobile (375px), tablet (768px), and desktop (1280px+).
 - [x] **Corridor Preservation**: Exactly 9 official stops maintained sequentially.
 - [x] **Portal Separation**: Owner and Conductor portals remain completely intact.
+
+---
+
+## 🧑‍✈️ Conductor Authentication & Onboarding Lifecycle
+
+The Conductor authentication workflow is engineered for simplicity, security, and immediate field readiness on drivers' and conductors' mobile devices:
+
+```
+[ Step 1: Sign In ] ──── OTP ────► [ Step 2: Verify ] ──── Mobile ────► [ Step 3: Bus Shift ]
+  Travel Agency Email               6-Digit OTP Box                       Live Sensor GPS
+```
+
+### 1. Step 1: Conductor Sign In Card
+- **Professional Brand Icon**: Features a high-contrast transit bus icon replacing generic symbols.
+- **Agency Email Validation**: Accepts the registered agency owner's Gmail address (`Enter registered Gmail address`).
+- **Owner Scope**: Ensures crew operates strictly under an authorized fleet agency.
+- **Verification Trigger**: Generates a cryptographically random 6-digit OTP code delivered directly to the fleet agency inbox.
+- **Direct Link**: Seamlessly allows conductors to return to the public Passenger Radar anytime.
+
+### 2. Step 2: 6-Digit OTP Verification Screen
+- **Individual Input Cells**: Six discrete digit boxes with automatic forward focus progression and backspace handling.
+- **Native Clipboard Support**: Instant auto-fill of all 6 digits when copied from an email client or SMS relay.
+- **Rate-Limited Resend**: A 25-second countdown timer prevents OTP spamming and enforces network stability.
+- **Agency Token Issuance**: Successful verification unlocks an authenticated 12-hour session bearer token for duty operations.
