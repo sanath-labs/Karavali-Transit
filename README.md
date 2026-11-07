@@ -228,3 +228,12 @@ The Karavali-Transit frontend adheres to public transportation design principles
 - **Zero Login Barrier**: No passenger login, signups, or authentication required. A clear notice (`✓ No passenger login required`) is visible directly above the journey search form.
 - **Bilingual Localization**: Seamless language switching between English and Kannada (ಕನ್ನಡ) across all headings, navigation items, stop names, and status alerts.
 - **Fixed NH-66 Corridor Alignment**: Strictly limited to the 9 official stations in immutable order without fictitious stops, ticket booking, or fares.
+
+### ⌨️ Keyboard Accessibility & Touch Targets
+| Element | Touch Target / Shortcut | Standard |
+|---|---|---|
+| Stop Dropdown Combobox | `min-h-[48px]` | `role="combobox"`, `aria-expanded`, `Enter`/`Space` to open |
+| Dropdown List Options | `min-h-[44px]` | `role="listbox"`, `ArrowDown`/`ArrowUp` navigation, `Enter` to select, `Escape` to dismiss |
+| Stop Swap Button | `44x44px` | Bidirectional stop swapping maintaining valid forward corridor sequence |
+| Find Available Buses Button | `min-h-[48px]` | Primary action button with high-contrast text and active state feedback |
+| Popular Journey Chips | `min-h-[42px]` | 1-tap journey search shortcuts for rapid commuter access |
