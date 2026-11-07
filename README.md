@@ -332,3 +332,11 @@ Upon shift activation, conductors access the operational terminal equipped with 
 - **`Stop Tracking`**: Immediately unregisters the hardware geolocation watcher (`navigator.geolocation.clearWatch`) and notifies the backend to broadcast `OFFLINE` status, preventing stale or trailing GPS pings.
 - **Web Audio Feedback**: On-demand audio synthesizer alerts conductors during key duty transitions (shift activation, GPS fix acquisition, proximity warnings).
 - **Proximity Geofencing**: Proximity chimes trigger when the vehicle approaches within 1.2 km of the next scheduled corridor stop.
+
+### 👥 Onboard Occupancy & Road Incident Engine
+- **Crowd Capacity Tracker**: Intuitive stepping buttons (`+1`, `-1`, `+5`, `-5`) calculate live occupancy ratios against total vehicle seats:
+  - `Seats Available` (< 80% capacity)
+  - `Standing Allowed` (80% – 100% capacity)
+  - `Overcrowded` (> 100% capacity)
+- **Incident Broadcaster**: Conductors can broadcast highway conditions (Heavy Rain, Waterlogging, NH-66 Diversion, Bridge Maintenance) directly to passenger radar maps.
+- **Shift Summary Ledger**: At duty conclusion, conductors review total passengers boarded, estimated distance traveled, shift duration, and operational revenue ledger before closing duty.
