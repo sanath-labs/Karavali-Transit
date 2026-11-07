@@ -214,3 +214,30 @@ test('Conductor Mobile Sanitization: Lookup supports +91 prefix and whitespace v
   assert.equal(foundPlain.name, 'Ramesh Shenoy')
 })
 
+test('Conductor Frontend Contract: Verify Sign In card labels, placeholders, and OTP specifications', async () => {
+  const fs = await import('node:fs/promises')
+  const content = await fs.readFile('src/ConductorPortal.jsx', 'utf-8')
+
+  // 1. Heading and description
+  assert.ok(content.includes('Conductor Sign In'), 'Must contain exact heading "Conductor Sign In"')
+  assert.ok(content.includes('Access your assigned bus and start live GPS tracking.'), 'Must contain exact description')
+
+  // 2. Input and placeholder
+  assert.ok(content.includes('Travel Agency Email'), 'Must have clearly labelled Travel Agency Email')
+  assert.ok(content.includes('Enter registered Gmail address'), 'Must have placeholder "Enter registered Gmail address"')
+  assert.ok(content.includes('Use the email registered by your fleet owner.'), 'Must have helper text')
+
+  // 3. Primary button and security note
+  assert.ok(content.includes('Send Verification OTP'), 'Must have primary button "Send Verification OTP"')
+  assert.ok(content.includes('Secure verification code sent to your travel agency inbox'), 'Must have security message')
+
+  // 4. Return link
+  assert.ok(content.includes('Return to Passenger Radar'), 'Must preserve Return to Passenger Radar link')
+
+  // 5. OTP verification screen
+  assert.ok(content.includes('Verify Your Email'), 'Must have OTP heading "Verify Your Email"')
+  assert.ok(content.includes('Verify OTP'), 'Must have verify button "Verify OTP"')
+  assert.ok(content.includes('Resend OTP Code'), 'Must have resend OTP capability')
+})
+
+
