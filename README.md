@@ -261,3 +261,15 @@ The floating HUD card provides deterministic transparency on bus progress along 
 - **`LOCATION STALE`** (Amber): Shift is active but no satellite ping received for > 2 minutes. Alert shown to passenger.
 - **`NOT TRACKING`** (Blue): Bus is scheduled/on shift, but conductor has not started mobile GPS broadcasting. Timetable schedule is displayed.
 - **`OFFLINE`** (Slate): Service is currently off duty or finished shift. Verified timetable planned arrival is presented without simulated data.
+
+---
+
+## 🧭 Corridor Journey Matching & Empty State Mechanics
+
+### Sequential Corridor Ordering
+Bus search requires forward direction along the coastal alignment:
+$$\text{StopOrder}(\text{Boarding}) < \text{StopOrder}(\text{Destination})$$
+
+1. **Forward Searches** (e.g. `Surathkal` [#4] ➔ `Udupi` [#8]): Matched against verified timetable records where both stops are present in order.
+2. **Reverse Searches** (e.g. `Kundapura` [#9] ➔ `Mangaluru` [#1]): Southbound alignment is handled cleanly by stopping inverted searches and directing passengers to forward trips.
+3. **Empty States**: If zero active or scheduled buses operate for a specific stop pair under an active filter (`Active`, `All`, `Scheduled`), a helpful card displays guidance with a single-click modification button to return to the search view.
