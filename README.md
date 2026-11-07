@@ -320,3 +320,15 @@ The Conductor authentication workflow is engineered for simplicity, security, an
 - **Active Crew Card**: Displays conductor identity, registered phone, and assigned vehicle number.
 - **Dynamic Bus Allocation**: Conductors can confirm their allocated bus or select another available fleet vehicle for their current shift.
 - **Shift Initialization**: One-tap duty activation registers the shift in PostgreSQL `driver_shifts` and activates the real-time sensor telemetry controller.
+
+---
+
+## 🛰️ Conductor Hardware GPS Telemetry & Shift Terminal
+
+Upon shift activation, conductors access the operational terminal equipped with real-time controls:
+
+### Start Live Tracking & Stop Tracking Controls
+- **`Start Live Tracking`**: Initiates `navigator.geolocation.watchPosition` with `{ enableHighAccuracy: true }`. Validates that GPS coordinates reside within the coastal highway bounding box and starts streaming telemetry at 3–5 second intervals to Socket.IO.
+- **`Stop Tracking`**: Immediately unregisters the hardware geolocation watcher (`navigator.geolocation.clearWatch`) and notifies the backend to broadcast `OFFLINE` status, preventing stale or trailing GPS pings.
+- **Web Audio Feedback**: On-demand audio synthesizer alerts conductors during key duty transitions (shift activation, GPS fix acquisition, proximity warnings).
+- **Proximity Geofencing**: Proximity chimes trigger when the vehicle approaches within 1.2 km of the next scheduled corridor stop.
