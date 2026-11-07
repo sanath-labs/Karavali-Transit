@@ -7,6 +7,7 @@ import {
   Flag,
   RotateCw,
   Compass,
+  ArrowRight,
 } from 'lucide-react'
 import io from 'socket.io-client'
 import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet'
@@ -25,6 +26,7 @@ export default function PassengerPortal({
   preselectedStop,
   onOpenFindStop,
   initialScreen = 1,
+  lang = 'en',
 }) {
   // Page Navigation (1 = Search/Home, 2 = Results, 3 = Details, 4 = Live Tracking)
   const [screen, setScreen] = useState(initialScreen)
@@ -143,6 +145,7 @@ export default function PassengerPortal({
     const q = fromQuery.trim().toLowerCase()
     return OFFICIAL_9_CORRIDOR_STOPS.filter(
       (s) =>
+        s.stop_id < 9 && // Kundapura is northern terminus
         s.stop_name !== destination &&
         (!q ||
           s.stop_name.toLowerCase().includes(q) ||
@@ -167,6 +170,22 @@ export default function PassengerPortal({
           s.alternative_names.toLowerCase().includes(q))
     )
   }, [toQuery, currentStop])
+
+  // Select From stop with automatic destination adjustment if needed
+  const handleSelectFromStop = (stopName) => {
+    setCurrentStop(stopName)
+    const newFromObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === stopName)
+    const currentToObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === destination)
+
+    if (newFromObj && currentToObj && currentToObj.stop_id <= newFromObj.stop_id) {
+      const nextStop = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id > newFromObj.stop_id)
+      if (nextStop) {
+        setDestination(nextStop.stop_name)
+      } else {
+        setDestination('Kundapura')
+      }
+    }
+  }
 
   // Real Search Buses API handler
   const handleSearchBuses = async (fromVal = currentStop, toVal = destination, shouldSwitchScreen = true) => {
@@ -212,18 +231,26 @@ export default function PassengerPortal({
     }
   }
 
-  // Swap From & To
+  // Swap From & To safely while preserving forward corridor alignment
   const handleSwapStops = () => {
     const fromObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === currentStop)
     const toObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === destination)
+    const fromId = fromObj?.stop_id || 1
+    const toId = toObj?.stop_id || 8
 
-    if (toObj && fromObj && toObj.stop_id < fromObj.stop_id) {
+    if (toId < 9) {
       setCurrentStop(destination)
-      setDestination(currentStop)
+      const next = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id > toId)
+      setDestination(next ? next.stop_name : 'Kundapura')
     } else {
-      setCurrentStop(destination)
-      const nextStop = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id > (toObj?.stop_id || 1))
-      setDestination(nextStop ? nextStop.stop_name : 'Kundapura')
+      const prev = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id < fromId)
+      if (prev) {
+        setDestination(currentStop)
+        setCurrentStop(prev.stop_name)
+      } else {
+        setCurrentStop('Surathkal')
+        setDestination('Udupi')
+      }
     }
   }
 
@@ -405,21 +432,11 @@ export default function PassengerPortal({
   }, [])
 
   // ==========================================================================
-  // PAGE 1: PASSENGER HOMEPAGE (RESPONSIVE FULL-WIDTH DESKTOP LAYOUT)
+  // PAGE 1: PASSENGER HOMEPAGE (CLEAN, ACCESSIBLE, RESPONSIVE LAYOUT)
   // ==========================================================================
   const renderHomepage = () => (
-    <div className="w-full flex flex-col space-y-8 select-none">
-      {/* Page Title & Corridor Scope */}
-      <div className="space-y-1">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight m-0">
-          Find and Track Buses
-        </h1>
-        <p className="text-sm font-semibold text-slate-600 m-0">
-          Real-time passenger information on the Mangaluru – Kundapura NH-66 coastal highway corridor
-        </p>
-      </div>
-
-      {/* Main Journey Search Panel */}
+    <div className="w-full flex flex-col space-y-7 select-none">
+      {/* 1. Main Journey Search Panel */}
       <JourneySearchCard
         currentStop={currentStop}
         destination={destination}
@@ -433,64 +450,87 @@ export default function PassengerPortal({
         setToQuery={setToQuery}
         fromSuggestions={fromSuggestions}
         toSuggestions={toSuggestions}
-        onSelectFromStop={(stop) => setCurrentStop(stop)}
+        onSelectFromStop={handleSelectFromStop}
         onSelectToStop={(stop) => setDestination(stop)}
         onSwapStops={handleSwapStops}
         onSearchBuses={() => handleSearchBuses()}
         loadingBuses={loadingBuses}
+        lang={lang}
       />
 
-      {/* Popular Journeys */}
+      {/* 2. Popular Journeys Shortcuts */}
       <PopularJourneys
         routes={POPULAR_ROUTES}
         onSelectJourney={(from, to) => handleSearchBuses(from, to)}
+        lang={lang}
       />
 
-      {/* Bus Stop Discovery Helper Banner */}
+      {/* 3. Compact "Find a Bus Stop" Helper Card */}
       <div
         onClick={() => onOpenFindStop && onOpenFindStop()}
-        className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs flex items-center justify-between gap-4 cursor-pointer hover:border-blue-400 transition"
+        className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover:border-blue-400 hover:shadow-xs flex items-center justify-between gap-4 cursor-pointer transition"
+        role="button"
+        tabIndex={0}
+        aria-label="Find nearest bus stop helper"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            if (onOpenFindStop) onOpenFindStop()
+          }
+        }}
       >
         <div className="flex items-center gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
             <Compass size={22} strokeWidth={2.2} />
           </div>
           <div>
-            <h3 className="text-sm font-extrabold text-slate-900 m-0">
-              Need help identifying your nearest bus stop?
-            </h3>
-            <p className="text-xs text-slate-500 font-medium m-0 mt-0.5">
-              Search by familiar landmarks such as NITK, hospitals, temples, or use on-demand distance lookup.
+            <h2 className="text-sm font-black text-slate-900 m-0">
+              {lang === 'kn' ? 'ನಿಮ್ಮ ಸಮೀಪದ ಬಸ್ ನಿಲ್ದಾಣ ಹುಡುಕಿ' : 'Need help identifying your nearest bus stop?'}
+            </h2>
+            <p className="text-xs text-slate-600 font-medium m-0 mt-0.5">
+              {lang === 'kn'
+                ? 'ಎನ್ಐಟಿಕೆ, ಆಸ್ಪತ್ರೆಗಳು, ದೇವಸ್ಥಾನಗಳಂತಹ ಸ್ಥಳಗಳಿಂದ ಹುಡುಕಿ ಅಥವಾ ಜಿಪಿಎಸ್ ದೂರವನ್ನು ಬಳಸಿ.'
+                : 'Search by familiar landmarks such as NITK, hospitals, temples, or use on-demand distance lookup.'}
             </p>
           </div>
         </div>
-        <span className="text-xs font-extrabold text-blue-600 hover:underline shrink-0 hidden sm:inline-block">
-          Find a Stop →
+        <span className="text-xs font-black text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3.5 py-2 rounded-xl shrink-0 transition flex items-center gap-1">
+          <span>{lang === 'kn' ? 'ನಿಲ್ದಾಣ ಹುಡುಕಿ' : 'Find a Stop'}</span>
+          <ArrowRight size={13} strokeWidth={2.4} />
         </span>
       </div>
 
-      {/* Official Corridor Overview Table */}
+      {/* 4. Official Corridor Overview */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
-        <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider m-0">
-          Official Route Corridor Sequence
-        </h3>
-        <p className="text-xs text-slate-500 m-0">
-          Private express and ordinary services operate on a single highway alignment serving these 9 designated stations:
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider m-0">
+            {lang === 'kn' ? 'ಅಧಿಕೃತ 9 ಹೆದ್ದಾರಿ ನಿಲ್ದಾಣಗಳು' : 'Official 9-Station Corridor Alignment'}
+          </h3>
+          <span className="text-[11px] font-semibold text-slate-500">
+            NH-66 Coastal Highway
+          </span>
+        </div>
+        <p className="text-xs text-slate-600 m-0 leading-relaxed">
+          {lang === 'kn'
+            ? 'ಎಲ್ಲಾ ಖಾಸಗಿ ಎಕ್ಸ್‌ಪ್ರೆಸ್ ಬಸ್‌ಗಳು ಈ 9 ಗೊತ್ತುಪಡಿಸಿದ ನಿಲ್ದಾಣಗಳ ಮೂಲಕ ನಿಯಮಿತವಾಗಿ ಸಂಚರಿಸುತ್ತವೆ:'
+            : 'All private express and ordinary corridor services operate sequentially through these 9 designated stops:'}
         </p>
+
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-9 gap-2 pt-1 text-center">
           {OFFICIAL_9_CORRIDOR_STOPS.map((s) => (
-            <div
+            <button
               key={s.stop_id}
+              type="button"
               onClick={() => {
-                setCurrentStop(s.stop_name)
+                handleSelectFromStop(s.stop_name)
                 handleSearchBuses(s.stop_name, destination)
               }}
-              className="p-2.5 rounded-xl border border-slate-100 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 cursor-pointer transition text-left sm:text-center"
+              className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-400 cursor-pointer transition text-left sm:text-center active:scale-95 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              <span className="block text-[10px] font-bold text-slate-400">Stop #{s.stop_id}</span>
-              <strong className="block text-xs font-black text-slate-900">{s.stop_name}</strong>
-              <span className="block text-[10px] text-slate-500">{s.stop_name_kn}</span>
-            </div>
+              <span className="block text-[10px] font-bold text-slate-500">Stop #{s.stop_id}</span>
+              <strong className="block text-xs font-black text-slate-900 mt-0.5">{s.stop_name}</strong>
+              <span className="block text-[10px] text-slate-500 font-semibold">{s.stop_name_kn}</span>
+            </button>
           ))}
         </div>
       </div>
@@ -498,37 +538,38 @@ export default function PassengerPortal({
   )
 
   // ==========================================================================
-  // PAGE 2: MATCHING BUS RESULTS (RESPONSIVE FULL-WIDTH DESKTOP GRID)
+  // PAGE 2: MATCHING BUS RESULTS (RESPONSIVE FULL-WIDTH GRID)
   // ==========================================================================
   const renderBusesPage = () => (
     <div className="w-full flex flex-col space-y-6 select-none">
       {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => setScreen(1)}
-            className="w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-700 transition cursor-pointer"
+            className="w-10 h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-700 transition cursor-pointer shadow-2xs active:scale-95"
             aria-label="Back to Journey Search"
+            title="Back to Journey Search"
           >
-            <ArrowLeft size={18} strokeWidth={2.4} />
+            <ArrowLeft size={19} strokeWidth={2.4} />
           </button>
           <div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 m-0">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 m-0">
               Buses: {currentStop} → {destination}
             </h1>
-            <p className="text-xs font-semibold text-slate-500 m-0 mt-0.5">
-              Select an active service to view route timeline or track in real-time
+            <p className="text-xs font-semibold text-slate-600 m-0 mt-0.5">
+              Select an active service to view timetable details or live tracking
             </p>
           </div>
         </div>
 
-        {/* Filter Pills */}
+        {/* Filter Pills: Active, All, Scheduled */}
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setActiveFilter('active')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
               activeFilter === 'active'
                 ? 'bg-blue-600 text-white shadow-2xs'
                 : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -541,7 +582,7 @@ export default function PassengerPortal({
           <button
             type="button"
             onClick={() => setActiveFilter('all')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+            className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
               activeFilter === 'all'
                 ? 'bg-blue-600 text-white shadow-2xs'
                 : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -553,7 +594,7 @@ export default function PassengerPortal({
           <button
             type="button"
             onClick={() => setActiveFilter('scheduled')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
               activeFilter === 'scheduled'
                 ? 'bg-blue-600 text-white shadow-2xs'
                 : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -564,46 +605,64 @@ export default function PassengerPortal({
         </div>
       </div>
 
-      {/* Bus Cards List / Grid */}
+      {/* Bus Cards List / Grid or Helpful Empty State */}
       {loadingBuses ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-xs">
-          <RotateCw size={32} className="mx-auto text-blue-600 animate-spin mb-3" />
-          <h3 className="text-sm font-extrabold text-slate-900 m-0">Searching Corridor Services...</h3>
-          <p className="text-xs text-slate-500 mt-1">Connecting to live PostgreSQL tracking session</p>
+        <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3">
+          <RotateCw size={32} className="mx-auto text-blue-600 animate-spin" />
+          <h3 className="text-base font-black text-slate-900 m-0">Searching Corridor Services...</h3>
+          <p className="text-xs text-slate-500 font-medium m-0">Connecting to PostgreSQL transit network database</p>
         </div>
       ) : searchError ? (
-        <div className="p-6 bg-white rounded-2xl border border-rose-200 shadow-xs text-center space-y-3">
+        <div className="p-8 bg-white rounded-2xl border border-rose-200 shadow-xs text-center space-y-4">
           <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
             <MapPin size={24} />
           </div>
-          <h3 className="text-sm font-extrabold text-rose-900 m-0">Search Notice</h3>
-          <p className="text-xs text-slate-600 max-w-md mx-auto m-0">{searchError}</p>
+          <div className="space-y-1">
+            <h3 className="text-base font-black text-rose-900 m-0">Search Notice</h3>
+            <p className="text-xs text-slate-600 max-w-md mx-auto m-0 leading-relaxed">{searchError}</p>
+          </div>
           <button
             type="button"
             onClick={() => setScreen(1)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold cursor-pointer"
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black cursor-pointer shadow-xs transition"
           >
             Modify Boarding &amp; Destination
           </button>
         </div>
       ) : displayedBuses.length === 0 ? (
-        <div className="text-center py-16 px-6 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3">
-          <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-            <Bus size={24} />
+        <div className="text-center py-16 px-6 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+            <Bus size={28} strokeWidth={2.2} />
           </div>
-          <h3 className="text-sm font-extrabold text-slate-900 m-0">
-            No matching buses in this filter
-          </h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto m-0">
-            Try switching to &quot;All ({buses.length})&quot; or selecting another stop pair along the NH-66 corridor.
-          </p>
-          <button
-            type="button"
-            onClick={() => setScreen(1)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
-          >
-            ← Modify Journey
-          </button>
+          <div className="space-y-1">
+            <h3 className="text-base sm:text-lg font-black text-slate-900 m-0">
+              No buses found matching this journey
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto m-0 leading-relaxed">
+              There are currently no active or scheduled buses between{' '}
+              <strong className="text-slate-900">{currentStop}</strong> and{' '}
+              <strong className="text-slate-900">{destination}</strong> in this filter view.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            {activeFilter !== 'all' && buses.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveFilter('all')}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-black transition cursor-pointer"
+              >
+                Show All ({buses.length}) Buses
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setScreen(1)}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-xs"
+            >
+              ← Modify Boarding &amp; Destination
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -623,25 +682,25 @@ export default function PassengerPortal({
   )
 
   // ==========================================================================
-  // PAGE 3: BUS DETAILS (RESPONSIVE 2-COLUMN DESKTOP LAYOUT)
+  // PAGE 3: BUS DETAILS (RESPONSIVE 2-COLUMN TIMETABLE LAYOUT)
   // ==========================================================================
   const renderDetailsPage = () => (
     <div className="w-full flex flex-col space-y-6 select-none">
       {/* Top Header Bar */}
-      <div className="flex items-center gap-3 pb-2 border-b border-slate-200">
+      <div className="flex items-center gap-3 pb-3 border-b border-slate-200">
         <button
           type="button"
           onClick={() => setScreen(2)}
-          className="w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-700 transition cursor-pointer"
+          className="w-10 h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-700 transition cursor-pointer shadow-2xs"
           aria-label="Back to Bus Results"
         >
-          <ArrowLeft size={18} strokeWidth={2.4} />
+          <ArrowLeft size={19} strokeWidth={2.4} />
         </button>
         <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 m-0">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 m-0">
             Bus Details &amp; Route Timeline
           </h1>
-          <p className="text-xs font-semibold text-slate-500 m-0 mt-0.5">
+          <p className="text-xs font-semibold text-slate-600 m-0 mt-0.5">
             {activeSelectedBus?.bus_name} ({activeSelectedBus?.vehicle_number})
           </p>
         </div>
@@ -651,7 +710,6 @@ export default function PassengerPortal({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           {/* Left Column: Bus Summary & Departure/Arrival */}
           <div className="space-y-4">
-            {/* Overview Card */}
             <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3.5">
@@ -659,17 +717,17 @@ export default function PassengerPortal({
                     <Bus size={24} strokeWidth={2.4} />
                   </div>
                   <div>
-                    <h2 className="text-base sm:text-lg font-extrabold text-slate-900 m-0 leading-tight">
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 m-0 leading-tight">
                       {activeSelectedBus.bus_name}
                     </h2>
-                    <p className="text-xs font-semibold text-slate-500 m-0 mt-0.5">
-                      {activeSelectedBus.vehicle_number} • {activeSelectedBus.service_type || 'Non AC'}
+                    <p className="text-xs font-semibold text-slate-600 m-0 mt-0.5">
+                      {activeSelectedBus.vehicle_number} • {activeSelectedBus.service_type || 'Non AC Express'}
                     </p>
                   </div>
                 </div>
 
                 {activeSelectedBus.is_live ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-800 border border-emerald-300">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     Active GPS
                   </span>
@@ -682,11 +740,11 @@ export default function PassengerPortal({
 
               {/* Conductor Contact Info */}
               {activeSelectedBus.conductor_name && (
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs">
-                  <span className="text-slate-400 font-bold block uppercase text-[10px]">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                  <span className="text-slate-500 font-bold block uppercase text-[10px]">
                     Assigned Conductor
                   </span>
-                  <strong className="text-slate-900 font-extrabold">
+                  <strong className="text-slate-900 font-black text-sm block mt-0.5">
                     {activeSelectedBus.conductor_name}
                   </strong>
                   <span className="text-slate-600 block mt-0.5 font-medium">
@@ -697,32 +755,32 @@ export default function PassengerPortal({
 
               {/* Departure & Arrival Cards */}
               <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="bg-sky-50/70 border border-sky-100 rounded-xl p-3.5">
+                <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3.5">
                   <div className="flex items-center gap-1.5 text-blue-700 mb-1">
                     <Clock size={15} strokeWidth={2.4} />
                     <span className="text-[10px] font-bold uppercase tracking-wider">
-                      Departure
+                      Boarding Time
                     </span>
                   </div>
                   <strong className="text-base font-black text-slate-900 block leading-tight">
                     {activeSelectedBus.boarding_planned_time || '10:40 AM'}
                   </strong>
-                  <span className="text-xs font-semibold text-slate-600">
+                  <span className="text-xs font-bold text-slate-700">
                     {currentStop}
                   </span>
                 </div>
 
-                <div className="bg-rose-50/70 border border-rose-100 rounded-xl p-3.5">
+                <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-3.5">
                   <div className="flex items-center gap-1.5 text-rose-700 mb-1">
                     <Flag size={15} strokeWidth={2.4} />
                     <span className="text-[10px] font-bold uppercase tracking-wider">
-                      Arrival (Planned)
+                      Planned Arrival
                     </span>
                   </div>
                   <strong className="text-base font-black text-slate-900 block leading-tight">
                     {activeSelectedBus.destination_planned_time || '12:15 PM'}
                   </strong>
-                  <span className="text-xs font-semibold text-slate-600">
+                  <span className="text-xs font-bold text-slate-700">
                     {destination}
                   </span>
                 </div>
@@ -732,9 +790,9 @@ export default function PassengerPortal({
               <button
                 type="button"
                 onClick={() => handleTrackBusDirectly(activeSelectedBus)}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold text-sm rounded-xl shadow-xs flex items-center justify-center gap-2 transition cursor-pointer"
+                className="w-full min-h-[48px] py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-sm rounded-xl shadow-xs flex items-center justify-center gap-2 transition cursor-pointer"
               >
-                <MapPin size={17} strokeWidth={2.4} />
+                <MapPin size={18} strokeWidth={2.4} />
                 <span>Track This Bus on Live Map</span>
               </button>
             </div>
@@ -743,16 +801,16 @@ export default function PassengerPortal({
           {/* Right Column: Route & Stop Timings Vertical Timeline */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
             <div>
-              <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider m-0">
-                Route &amp; Stop Timings
+              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider m-0">
+                Official Corridor Stops &amp; Timings
               </h3>
-              <p className="text-xs text-slate-500 m-0 mt-0.5">
+              <p className="text-xs text-slate-500 font-medium m-0 mt-0.5">
                 Verified timetable along the official 9-stop corridor alignment
               </p>
             </div>
 
             {loadingRoute ? (
-              <div className="text-center py-8 text-xs font-semibold text-slate-400">
+              <div className="text-center py-8 text-xs font-semibold text-slate-500">
                 <RotateCw size={24} className="mx-auto text-blue-600 animate-spin mb-2" />
                 Loading verified corridor timetable...
               </div>
@@ -770,26 +828,26 @@ export default function PassengerPortal({
   )
 
   // ==========================================================================
-  // PAGE 4: LIVE TRACKING MAP (RESPONSIVE FULL-WIDTH DESKTOP LAYOUT)
+  // PAGE 4: LIVE TRACKING MAP (LARGE LEAFLET MAP & HUD)
   // ==========================================================================
   const renderTrackingPage = () => (
     <div className="w-full flex flex-col space-y-4 select-none">
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => setScreen(3)}
-            className="w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-700 transition cursor-pointer"
+            className="w-10 h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-700 transition cursor-pointer shadow-2xs"
             aria-label="Back to Bus Details"
           >
-            <ArrowLeft size={18} strokeWidth={2.4} />
+            <ArrowLeft size={19} strokeWidth={2.4} />
           </button>
           <div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 m-0">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 m-0">
               Live Bus Tracking
             </h1>
-            <p className="text-xs font-semibold text-slate-500 m-0 mt-0.5">
+            <p className="text-xs font-semibold text-slate-600 m-0 mt-0.5">
               {activeSelectedBus?.bus_name} ({activeSelectedBus?.vehicle_number}) • Mangaluru ➔ Kundapura Corridor
             </p>
           </div>
@@ -798,14 +856,14 @@ export default function PassengerPortal({
         <button
           type="button"
           onClick={() => setScreen(2)}
-          className="px-3.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition cursor-pointer hidden sm:block"
+          className="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-800 transition cursor-pointer hidden sm:block shadow-2xs"
         >
           View Bus List
         </button>
       </div>
 
-      {/* Responsive Map Container */}
-      <div className="relative w-full h-[520px] sm:h-[600px] rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
+      {/* Large Responsive Map Container */}
+      <div className="relative w-full h-[560px] sm:h-[640px] md:h-[700px] rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
         <MapContainer
           center={busCoords}
           zoom={11}
@@ -846,7 +904,7 @@ export default function PassengerPortal({
                       {stop.stop_name} ({stop.stop_name_kn})
                     </strong>
                     <br />
-                    Locality: {stop.locality}
+                    Stop #{stop.stop_id} • Locality: {stop.locality}
                   </div>
                 </Popup>
               </Marker>
@@ -873,11 +931,11 @@ export default function PassengerPortal({
           <MapViewportController bounds={mapBounds} center={busCoords} />
         </MapContainer>
 
-        {/* Informational overlay when bus has not yet streamed GPS */}
+        {/* Informational overlay when conductor has not yet started GPS telemetry */}
         {!hasLiveCoordinates && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-slate-900/90 text-white backdrop-blur-xs px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 pointer-events-none">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            <span>Waiting for onboard conductor to start live GPS telemetry</span>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-slate-900/90 text-white backdrop-blur-xs px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 pointer-events-none text-center">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+            <span>Waiting for onboard conductor to start live GPS telemetry • Showing timetable schedule</span>
           </div>
         )}
 
