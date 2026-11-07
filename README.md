@@ -237,3 +237,27 @@ The Karavali-Transit frontend adheres to public transportation design principles
 | Stop Swap Button | `44x44px` | Bidirectional stop swapping maintaining valid forward corridor sequence |
 | Find Available Buses Button | `min-h-[48px]` | Primary action button with high-contrast text and active state feedback |
 | Popular Journey Chips | `min-h-[42px]` | 1-tap journey search shortcuts for rapid commuter access |
+
+---
+
+## 📡 Live Tracking HUD Status Engine
+
+The floating HUD card provides deterministic transparency on bus progress along the NH-66 corridor:
+
+```
++----------------------------------------------------------------+
+|  Vishal Express (KA-19-F-3210)                    [ LIVE GPS ]  |
++-------------------------------+--------------------------------+
+|  Destination: Udupi           |  Telemetry Speed: 48 km/h      |
++-------------------------------+--------------------------------+
+|  Crew: Suresh Poojary         |  Planned Departure: 10:40 AM   |
++-------------------------------+--------------------------------+
+|  * Last updated: 10:42:15 AM (4s ago)                          |
++----------------------------------------------------------------+
+```
+
+### Telemetry Lifecycle States
+- **`LIVE GPS`** (Green): Active hardware GPS coordinates received within the last 120 seconds. Real sensor speed displayed.
+- **`LOCATION STALE`** (Amber): Shift is active but no satellite ping received for > 2 minutes. Alert shown to passenger.
+- **`NOT TRACKING`** (Blue): Bus is scheduled/on shift, but conductor has not started mobile GPS broadcasting. Timetable schedule is displayed.
+- **`OFFLINE`** (Slate): Service is currently off duty or finished shift. Verified timetable planned arrival is presented without simulated data.
