@@ -217,3 +217,14 @@ npm run build
 - [x] Real-time Leaflet bus marker updating via Socket.IO
 - [x] Stop tracking transition to `OFFLINE` status
 - [x] Automatic stale location detection (> 120s inactivity)
+
+---
+
+## ♿ Passenger Portal Usability & Accessibility Standards
+
+The Karavali-Transit frontend adheres to public transportation design principles emphasizing simplicity, legibility, and usability:
+
+- **Legibility & Contrast**: High-contrast slate color palette (`text-slate-900`, `text-slate-800`, `text-slate-700`) exceeding WCAG AA minimum contrast ratio (4.5:1).
+- **Zero Login Barrier**: No passenger login, signups, or authentication required. A clear notice (`✓ No passenger login required`) is visible directly above the journey search form.
+- **Bilingual Localization**: Seamless language switching between English and Kannada (ಕನ್ನಡ) across all headings, navigation items, stop names, and status alerts.
+- **Fixed NH-66 Corridor Alignment**: Strictly limited to the 9 official stations in immutable order without fictitious stops, ticket booking, or fares.
