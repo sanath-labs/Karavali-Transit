@@ -18,10 +18,8 @@ import {
   Play,
   Plus,
   Printer,
-  Radio,
   ShieldCheck,
   Square,
-  Users,
   Volume2,
   VolumeX,
   X,
@@ -226,6 +224,20 @@ export default function ConductorPortal({
   const handleOtpKeyDown = (idx, e) => {
     if (e.key === 'Backspace' && !otpCode[idx] && idx > 0) {
       otpRefs[idx - 1].current?.focus()
+    }
+  }
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault()
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+    if (pasted) {
+      const next = [...otpCode]
+      for (let i = 0; i < pasted.length; i++) {
+        next[i] = pasted[i]
+      }
+      setOtpCode(next)
+      const nextIdx = Math.min(pasted.length, 5)
+      otpRefs[nextIdx]?.current?.focus()
     }
   }
 
@@ -660,22 +672,22 @@ export default function ConductorPortal({
   // =========================================================================
   if (step === 1) {
     return (
-      <div className="conductor-portal-root flex-1 flex items-center justify-center p-6 bg-slate-50 min-h-[85vh]">
-        <div className="conductor-auth-card bg-white border border-slate-200 rounded-3xl p-8 max-w-md w-full shadow-xl space-y-6">
+      <div className="conductor-portal-root flex-1 flex items-center justify-center p-4 sm:p-6 bg-slate-50 min-h-[85vh] select-none">
+        <div className="conductor-auth-card bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-xs space-y-6">
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-2xl bg-blue-600 text-white flex items-center justify-center mx-auto shadow-md">
-              <Radio size={32} />
+            <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center mx-auto shadow-xs">
+              <Bus size={28} strokeWidth={2.4} />
             </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight m-0">
-              Conductor / Driver Sign In
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight m-0">
+              Conductor Sign In
             </h1>
-            <p className="text-xs font-semibold text-slate-500 m-0">
-              Sign in under your travel agency to access live duty terminal
+            <p className="text-xs sm:text-sm font-medium text-slate-600 m-0 leading-relaxed">
+              Access your assigned bus and start live GPS tracking.
             </p>
           </div>
 
           {authError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2.5">
               <AlertTriangle size={16} className="text-rose-600 shrink-0" />
               <span>{authError}</span>
             </div>
@@ -683,43 +695,52 @@ export default function ConductorPortal({
 
           <form onSubmit={handleSendEmailOtp} className="space-y-4 text-xs">
             <div>
-              <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
-                Travel Agency Gmail Address <span className="text-rose-500">*</span>
+              <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span>
+                  Travel Agency Email <span className="text-rose-500">*</span>
+                </span>
               </label>
               <div className="relative">
-                <Mail size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                <Mail size={17} className="absolute left-3.5 top-3.5 text-slate-400" />
                 <input
                   type="email"
-                  placeholder="e.g. rakesh@gmail.com"
+                  placeholder="Enter registered Gmail address"
                   value={agencyEmail}
                   onChange={(e) => setAgencyEmail(e.target.value)}
                   required
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-900 focus:border-blue-600 outline-none text-sm transition"
+                  className="w-full pl-10 pr-4 py-3 min-h-[46px] rounded-xl border border-slate-300 font-bold text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 outline-none text-sm transition"
+                  autoFocus
                 />
               </div>
-              <span className="text-[11px] text-slate-400 mt-1 block">
-                Enter your fleet agency owner's registered email
+              <span className="text-[11px] text-slate-500 font-medium mt-1.5 block">
+                Use the email registered by your fleet owner.
               </span>
             </div>
 
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              className="w-full min-h-[48px] py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-sm rounded-xl shadow-xs transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
-              <span>{authLoading ? 'Sending OTP Code...' : 'Send OTP'}</span>
-              <ArrowRight size={16} />
+              <span>{authLoading ? 'Sending Verification OTP...' : 'Send Verification OTP'}</span>
+              <ArrowRight size={17} strokeWidth={2.4} />
             </button>
+
+            {/* Secure Email Verification Message */}
+            <div className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-500 pt-1 text-center">
+              <ShieldCheck size={14} className="text-emerald-600 shrink-0" />
+              <span>Secure verification code sent to your travel agency inbox</span>
+            </div>
           </form>
 
           {onExitToPassenger && (
-            <div className="pt-2 border-t border-slate-100 text-center">
+            <div className="pt-3 border-t border-slate-100 text-center">
               <button
                 type="button"
                 onClick={onExitToPassenger}
-                className="text-xs font-bold text-slate-500 hover:text-blue-600 inline-flex items-center gap-1.5 cursor-pointer"
+                className="text-xs font-bold text-slate-500 hover:text-blue-600 inline-flex items-center gap-1.5 transition cursor-pointer"
               >
-                <ArrowLeft size={14} />
+                <ArrowLeft size={14} strokeWidth={2.4} />
                 <span>Return to Passenger Radar</span>
               </button>
             </div>
@@ -734,27 +755,27 @@ export default function ConductorPortal({
   // =========================================================================
   if (step === 2) {
     return (
-      <div className="conductor-portal-root flex-1 flex items-center justify-center p-6 bg-slate-50 min-h-[85vh]">
-        <div className="conductor-auth-card bg-white border border-slate-200 rounded-3xl p-8 max-w-md w-full shadow-xl space-y-6">
+      <div className="conductor-portal-root flex-1 flex items-center justify-center p-4 sm:p-6 bg-slate-50 min-h-[85vh] select-none">
+        <div className="conductor-auth-card bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-xs space-y-6">
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center mx-auto shadow-sm">
-              <Mail size={32} />
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center mx-auto shadow-xs">
+              <Mail size={26} strokeWidth={2.2} />
             </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight m-0">
-              Verify Travel Agency Email
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight m-0">
+              Verify Your Email
             </h1>
-            <p className="text-xs font-semibold text-slate-500 m-0">
-              We have sent a 6-digit OTP to <strong>{agencyEmail}</strong>
+            <p className="text-xs sm:text-sm font-medium text-slate-600 m-0">
+              We have sent a 6-digit OTP to <strong className="text-slate-900">{agencyEmail}</strong>
             </p>
           </div>
 
           {previewOtp && (
-            <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between">
-              <span>Development OTP: <strong>{previewOtp}</strong></span>
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between">
+              <span>Development OTP: <strong className="font-mono text-sm tracking-widest">{previewOtp}</strong></span>
               <button
                 type="button"
                 onClick={() => setOtpCode(previewOtp.split(''))}
-                className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg font-bold text-[11px] cursor-pointer"
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] cursor-pointer transition shadow-2xs"
               >
                 Auto-Fill Code
               </button>
@@ -762,14 +783,14 @@ export default function ConductorPortal({
           )}
 
           {authError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2.5">
               <AlertTriangle size={16} className="text-rose-600 shrink-0" />
               <span>{authError}</span>
             </div>
           )}
 
           <form onSubmit={handleVerifyOtp} className="space-y-6">
-            <div className="flex justify-center gap-2">
+            <div className="flex justify-center gap-2 sm:gap-2.5" onPaste={handleOtpPaste}>
               {otpCode.map((digit, idx) => (
                 <input
                   key={idx}
@@ -780,7 +801,7 @@ export default function ConductorPortal({
                   value={digit}
                   onChange={(e) => handleOtpDigitChange(idx, e.target.value)}
                   onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                  className="w-12 h-14 rounded-xl border border-slate-300 text-center text-xl font-black text-slate-900 focus:border-blue-600 outline-none transition"
+                  className="w-11 sm:w-12 h-14 rounded-xl border border-slate-300 text-center text-xl font-black text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 outline-none transition shadow-2xs"
                   autoFocus={idx === 0}
                 />
               ))}
@@ -789,12 +810,12 @@ export default function ConductorPortal({
             <div className="flex items-center justify-between text-xs font-bold text-slate-500">
               <span>
                 {resendCountdown > 0 ? (
-                  `Resend code in ${resendCountdown}s`
+                  `Didn't receive the OTP? Resend in ${resendCountdown}s`
                 ) : (
                   <button
                     type="button"
                     onClick={handleSendEmailOtp}
-                    className="text-blue-600 hover:text-blue-800 cursor-pointer font-extrabold"
+                    className="text-blue-600 hover:text-blue-800 cursor-pointer font-black"
                   >
                     Resend OTP Code
                   </button>
@@ -803,7 +824,7 @@ export default function ConductorPortal({
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="text-slate-500 hover:text-slate-800 cursor-pointer"
+                className="text-slate-600 hover:text-slate-900 cursor-pointer font-semibold"
               >
                 ← Back
               </button>
@@ -812,12 +833,25 @@ export default function ConductorPortal({
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              className="w-full min-h-[48px] py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-sm rounded-xl shadow-xs transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
-              <span>{authLoading ? 'Verifying...' : 'Verify & Continue'}</span>
-              <ArrowRight size={16} />
+              <span>{authLoading ? 'Verifying...' : 'Verify OTP'}</span>
+              <ArrowRight size={17} strokeWidth={2.4} />
             </button>
           </form>
+
+          {onExitToPassenger && (
+            <div className="pt-3 border-t border-slate-100 text-center">
+              <button
+                type="button"
+                onClick={onExitToPassenger}
+                className="text-xs font-bold text-slate-500 hover:text-blue-600 inline-flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <ArrowLeft size={14} strokeWidth={2.4} />
+                <span>Return to Passenger Radar</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -828,38 +862,38 @@ export default function ConductorPortal({
   // =========================================================================
   if (step === 3) {
     return (
-      <div className="conductor-portal-root flex-1 flex items-center justify-center p-6 bg-slate-50 min-h-[85vh]">
-        <div className="conductor-auth-card bg-white border border-slate-200 rounded-3xl p-8 max-w-md w-full shadow-xl space-y-6">
+      <div className="conductor-portal-root flex-1 flex items-center justify-center p-4 sm:p-6 bg-slate-50 min-h-[85vh] select-none">
+        <div className="conductor-auth-card bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-xs space-y-6">
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center mx-auto shadow-sm">
-              <ShieldCheck size={32} />
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center mx-auto shadow-xs">
+              <Bus size={28} strokeWidth={2.4} />
             </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight m-0">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight m-0">
               Conductor Mobile Sign In
             </h1>
-            <p className="text-xs font-semibold text-slate-500 m-0">
-              Enter your mobile number to unlock your duty credentials
+            <p className="text-xs sm:text-sm font-medium text-slate-600 m-0">
+              Enter your mobile number to unlock your duty credentials.
             </p>
           </div>
 
           {/* Verified Agency Chip */}
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 flex items-center justify-between">
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between">
             <div className="text-xs">
-              <span className="text-[10px] uppercase font-black text-blue-500 block">Verified Agency</span>
+              <span className="text-[10px] uppercase font-black text-slate-500 block">Verified Agency</span>
               <strong className="text-slate-900 font-extrabold">{agencyName || 'Coastal Travels'}</strong>
               <span className="text-slate-500 block text-[11px] font-semibold">{agencyEmail}</span>
             </div>
             <button
               type="button"
               onClick={() => setStep(1)}
-              className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+              className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
             >
               Change
             </button>
           </div>
 
           {authError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2.5">
               <AlertTriangle size={16} className="text-rose-600 shrink-0" />
               <span>{authError}</span>
             </div>
@@ -867,24 +901,24 @@ export default function ConductorPortal({
 
           <form onSubmit={handleLookupConductor} className="space-y-4 text-xs">
             <div>
-              <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+              <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
                 Conductor 10-Digit Mobile Number <span className="text-rose-500">*</span>
               </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-2.5 font-black text-slate-500 text-sm select-none flex items-center gap-1">
-                <Phone size={13} className="text-slate-400" /> +91
-              </span>
-              <input
-                type="tel"
-                placeholder="98451 12345"
-                value={conductorPhone}
-                onChange={(e) => setConductorPhone(e.target.value)}
-                required
-                className="w-full pl-16 pr-4 py-2.5 rounded-xl border border-slate-300 font-extrabold text-slate-900 focus:border-blue-600 outline-none text-sm transition"
-                autoFocus
-              />
-            </div>
-              <span className="text-[11px] text-slate-400 mt-1 block">
+              <div className="relative">
+                <span className="absolute left-3.5 top-3.5 font-black text-slate-500 text-sm select-none flex items-center gap-1">
+                  <Phone size={14} className="text-slate-400" /> +91
+                </span>
+                <input
+                  type="tel"
+                  placeholder="98451 12345"
+                  value={conductorPhone}
+                  onChange={(e) => setConductorPhone(e.target.value)}
+                  required
+                  className="w-full pl-16 pr-4 py-3 min-h-[46px] rounded-xl border border-slate-300 font-extrabold text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 outline-none text-sm transition"
+                  autoFocus
+                />
+              </div>
+              <span className="text-[11px] text-slate-500 font-medium mt-1.5 block">
                 Direct check-in — no conductor mobile OTP required
               </span>
             </div>
@@ -892,18 +926,18 @@ export default function ConductorPortal({
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              className="w-full min-h-[48px] py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-sm rounded-xl shadow-xs transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
               <span>{authLoading ? 'Checking Credentials...' : 'Check Conductor Duty Status'}</span>
-              <ArrowRight size={16} />
+              <ArrowRight size={17} strokeWidth={2.4} />
             </button>
           </form>
 
-          <div className="text-center">
+          <div className="text-center pt-2">
             <button
               type="button"
               onClick={() => setStep(2)}
-              className="text-xs font-bold text-slate-500 hover:text-slate-800"
+              className="text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
             >
               ← Back to OTP verification
             </button>
@@ -918,18 +952,18 @@ export default function ConductorPortal({
   // =========================================================================
   if (step === 4) {
     return (
-      <div className="conductor-portal-root flex-1 flex items-center justify-center p-6 bg-slate-50 min-h-[85vh]">
-        <div className="conductor-auth-card bg-white border border-slate-200 rounded-3xl p-8 max-w-lg w-full shadow-xl space-y-6">
+      <div className="conductor-portal-root flex-1 flex items-center justify-center p-4 sm:p-6 bg-slate-50 min-h-[85vh] select-none">
+        <div className="conductor-auth-card bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 max-w-lg w-full shadow-xs space-y-6">
           <div className="text-center space-y-2">
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-sm ${
-              isExistingConductor ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto shadow-xs ${
+              isExistingConductor ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
             }`}>
-              <Users size={32} />
+              <Bus size={28} strokeWidth={2.4} />
             </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight m-0">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight m-0">
               {isExistingConductor ? 'Welcome Back, Conductor!' : 'Register New Crew Conductor'}
             </h1>
-            <p className="text-xs font-semibold text-slate-500 m-0">
+            <p className="text-xs sm:text-sm font-medium text-slate-600 m-0">
               {isExistingConductor
                 ? `Authorized conductor credentials verified under ${agencyName}`
                 : `Complete fast onboard registration under ${agencyName}`}
@@ -937,7 +971,7 @@ export default function ConductorPortal({
           </div>
 
           {authError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
+            <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2.5">
               <AlertTriangle size={16} className="text-rose-600 shrink-0" />
               <span>{authError}</span>
             </div>
@@ -947,7 +981,7 @@ export default function ConductorPortal({
             {/* If New Conductor: Full Name input */}
             {!isExistingConductor ? (
               <div>
-                <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
                   Conductor Full Name <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -956,13 +990,13 @@ export default function ConductorPortal({
                   value={conductorName}
                   onChange={(e) => setConductorName(e.target.value)}
                   required
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-900 focus:border-blue-600 outline-none text-sm transition"
+                  className="w-full px-4 py-3 min-h-[46px] rounded-xl border border-slate-300 font-bold text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 outline-none text-sm transition"
                   autoFocus
                 />
               </div>
             ) : (
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-extrabold text-sm">
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-sm shrink-0">
                   {conductorRecord?.name?.charAt(0) || 'C'}
                 </div>
                 <div>
@@ -974,13 +1008,13 @@ export default function ConductorPortal({
 
             {/* Bus Selection for Duty */}
             <div>
-              <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+              <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
                 Select Fleet Bus for Today's Duty Shift <span className="text-rose-500">*</span>
               </label>
               <select
                 value={selectedBusId}
                 onChange={(e) => setSelectedBusId(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-900 bg-white focus:border-blue-600 outline-none text-sm transition cursor-pointer"
+                className="w-full px-4 py-3 min-h-[46px] rounded-xl border border-slate-300 font-bold text-slate-900 bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 outline-none text-sm transition cursor-pointer"
                 required
               >
                 {agencyBuses.map((bus) => (
@@ -989,7 +1023,7 @@ export default function ConductorPortal({
                   </option>
                 ))}
               </select>
-              <span className="text-[11px] text-slate-400 mt-1 block">
+              <span className="text-[11px] text-slate-500 font-medium mt-1.5 block">
                 Select the bus you are operating along the coastal highway corridor
               </span>
             </div>
@@ -997,18 +1031,18 @@ export default function ConductorPortal({
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              className="w-full min-h-[48px] py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-sm rounded-xl shadow-xs transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
               <span>{isExistingConductor ? 'Start Duty & Enter Dashboard' : 'Register & Start Duty'}</span>
-              <ArrowRight size={16} />
+              <ArrowRight size={17} strokeWidth={2.4} />
             </button>
           </form>
 
-          <div className="text-center">
+          <div className="text-center pt-2">
             <button
               type="button"
               onClick={() => setStep(3)}
-              className="text-xs font-bold text-slate-500 hover:text-slate-800"
+              className="text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
             >
               ← Change Mobile Number
             </button>
