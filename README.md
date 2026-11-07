@@ -310,3 +310,13 @@ The Conductor authentication workflow is engineered for simplicity, security, an
 - **Native Clipboard Support**: Instant auto-fill of all 6 digits when copied from an email client or SMS relay.
 - **Rate-Limited Resend**: A 25-second countdown timer prevents OTP spamming and enforces network stability.
 - **Agency Token Issuance**: Successful verification unlocks an authenticated 12-hour session bearer token for duty operations.
+
+### 3. Step 3: Conductor Mobile Lookup (No Secondary OTP)
+- **Fast Mobile Check-In**: Eliminates secondary mobile OTP friction in field transit conditions. Conductors enter their 10-digit mobile number with `+91` sanitization.
+- **Agency Authorization Lookup**: The server queries the authorized conductors ledger under the verified agency.
+- **Instant Bus Pre-Selection**: If the fleet owner previously assigned a bus to this conductor, the assigned vehicle and route are automatically pre-selected.
+
+### 4. Step 4: Crew Confirmation & Shift Initialization
+- **Active Crew Card**: Displays conductor identity, registered phone, and assigned vehicle number.
+- **Dynamic Bus Allocation**: Conductors can confirm their allocated bus or select another available fleet vehicle for their current shift.
+- **Shift Initialization**: One-tap duty activation registers the shift in PostgreSQL `driver_shifts` and activates the real-time sensor telemetry controller.
