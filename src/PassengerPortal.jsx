@@ -31,6 +31,12 @@ export default function PassengerPortal({
   // Page Navigation (1 = Search/Home, 2 = Results, 3 = Details, 4 = Live Tracking)
   const [screen, setScreen] = useState(initialScreen)
 
+  useEffect(() => {
+    if (initialScreen) {
+      setScreen(initialScreen)
+    }
+  }, [initialScreen])
+
   // Search Fields (Default: Surathkal -> Udupi along the 9 corridor stops)
   const [currentStop, setCurrentStop] = useState('Surathkal')
   const [destination, setDestination] = useState('Udupi')
@@ -92,6 +98,20 @@ export default function PassengerPortal({
       }
     })
 
+    socket.on('shift_broadcast', (data) => {
+      if (!data || !data.bus_id) return
+      setLiveTelemetry((prev) => ({
+        ...prev,
+        [data.bus_id]: {
+          ...(prev[data.bus_id] || {}),
+          ...data,
+          is_on_shift: true,
+          tracking_status: data.tracking_status || 'NOT TRACKING',
+          conductor_name: data.conductor_name || prev[data.bus_id]?.conductor_name,
+        },
+      }))
+    })
+
     socket.on('live_location_broadcast', (data) => {
       if (!data || !data.bus_id) return
       setLiveTelemetry((prev) => ({
@@ -99,7 +119,9 @@ export default function PassengerPortal({
         [data.bus_id]: {
           ...(prev[data.bus_id] || {}),
           ...data,
-          timestamp: Date.now(),
+          is_on_shift: data.is_on_shift !== undefined ? data.is_on_shift : true,
+          tracking_status: data.tracking_status || (data.latitude && data.longitude ? 'LIVE' : 'NOT TRACKING'),
+          timestamp: data.timestamp || Date.now(),
         },
       }))
       setSecondsAgo(0)
@@ -112,6 +134,8 @@ export default function PassengerPortal({
         [data.bus_id]: {
           ...(prev[data.bus_id] || {}),
           ...data,
+          is_on_shift: data.is_on_shift !== undefined ? data.is_on_shift : true,
+          tracking_status: data.tracking_status || (data.latitude && data.longitude ? 'LIVE' : 'NOT TRACKING'),
           timestamp: data.timestamp || Date.now(),
         },
       }))
@@ -125,6 +149,7 @@ export default function PassengerPortal({
         [bus_id]: {
           ...(prev[bus_id] || {}),
           tracking_status: 'OFFLINE',
+          is_on_shift: false,
         },
       }))
     })
@@ -177,14 +202,19 @@ export default function PassengerPortal({
     const newFromObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === stopName)
     const currentToObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === destination)
 
+    let nextTo = destination
     if (newFromObj && currentToObj && currentToObj.stop_id <= newFromObj.stop_id) {
       const nextStop = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id > newFromObj.stop_id)
-      if (nextStop) {
-        setDestination(nextStop.stop_name)
-      } else {
-        setDestination('Kundapura')
-      }
+      nextTo = nextStop ? nextStop.stop_name : 'Kundapura'
+      setDestination(nextTo)
     }
+    handleSearchBuses(stopName, nextTo, false)
+  }
+
+  // Select Destination stop and refresh matching corridor buses
+  const handleSelectToStop = (stopName) => {
+    setDestination(stopName)
+    handleSearchBuses(currentStop, stopName, false)
   }
 
   // Real Search Buses API handler
@@ -238,20 +268,27 @@ export default function PassengerPortal({
     const fromId = fromObj?.stop_id || 1
     const toId = toObj?.stop_id || 8
 
+    let nextFrom = currentStop
+    let nextTo = destination
+
     if (toId < 9) {
-      setCurrentStop(destination)
+      nextFrom = destination
       const next = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id > toId)
-      setDestination(next ? next.stop_name : 'Kundapura')
+      nextTo = next ? next.stop_name : 'Kundapura'
     } else {
       const prev = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id < fromId)
       if (prev) {
-        setDestination(currentStop)
-        setCurrentStop(prev.stop_name)
+        nextTo = currentStop
+        nextFrom = prev.stop_name
       } else {
-        setCurrentStop('Surathkal')
-        setDestination('Udupi')
+        nextFrom = 'Surathkal'
+        nextTo = 'Udupi'
       }
     }
+
+    setCurrentStop(nextFrom)
+    setDestination(nextTo)
+    handleSearchBuses(nextFrom, nextTo, false)
   }
 
   // Select Bus for Details (Screen 3)
@@ -294,51 +331,93 @@ export default function PassengerPortal({
     }
   }
 
+  // Combine static DB search results with live telemetry & active shifts
+  const enrichedBuses = useMemo(() => {
+    return buses.map((bus) => {
+      const live = liveTelemetry[bus.bus_id]
+      if (!live) return bus
+
+      const hasCoords = Boolean(
+        typeof live.latitude === 'number' &&
+          typeof live.longitude === 'number' &&
+          live.latitude >= 12.0 &&
+          live.latitude <= 15.0 &&
+          live.longitude >= 73.5 &&
+          live.longitude <= 76.0
+      )
+
+      const isOnShift = Boolean(
+        live.is_on_shift ||
+          bus.is_on_shift ||
+          live.tracking_status === 'LIVE' ||
+          live.tracking_status === 'LOCATION STALE' ||
+          live.tracking_status === 'NOT TRACKING'
+      )
+
+      const isLiveTracking = Boolean(
+        live.tracking_status === 'LIVE' ||
+          (hasCoords && isOnShift && live.tracking_status !== 'OFFLINE' && live.tracking_status !== 'LOCATION STALE')
+      )
+
+      const trackingStatus =
+        live.tracking_status ||
+        (isLiveTracking ? 'LIVE' : isOnShift ? 'NOT TRACKING' : bus.tracking_status || 'SCHEDULED')
+
+      return {
+        ...bus,
+        ...live,
+        conductor_name: live.conductor_name || bus.conductor_name,
+        conductor_phone: live.conductor_phone || live.driver_phone || bus.conductor_phone,
+        tracking_status: trackingStatus,
+        is_live: isLiveTracking,
+        is_on_shift: isOnShift,
+        latitude: hasCoords ? live.latitude : bus.latitude,
+        longitude: hasCoords ? live.longitude : bus.longitude,
+        speed: live.speed !== undefined ? live.speed : bus.speed,
+        timestamp: live.timestamp || bus.timestamp,
+      }
+    })
+  }, [buses, liveTelemetry])
+
+  const isBusActive = (b) => {
+    return Boolean(
+      b.is_live ||
+        b.is_on_shift ||
+        b.tracking_status === 'LIVE' ||
+        b.tracking_status === 'LOCATION STALE' ||
+        b.tracking_status === 'NOT TRACKING'
+    )
+  }
+
   // Filter counts for Screen 2
   const activeCount = useMemo(
-    () =>
-      buses.filter(
-        (b) =>
-          b.is_live ||
-          b.tracking_status === 'LIVE' ||
-          b.tracking_status === 'LOCATION STALE'
-      ).length,
-    [buses]
+    () => enrichedBuses.filter(isBusActive).length,
+    [enrichedBuses]
   )
 
   const scheduledCount = useMemo(
-    () =>
-      buses.filter(
-        (b) =>
-          b.tracking_status === 'SCHEDULED' ||
-          (!b.is_live && b.tracking_status !== 'LIVE' && b.tracking_status !== 'LOCATION STALE')
-      ).length,
-    [buses]
+    () => enrichedBuses.filter((b) => !isBusActive(b)).length,
+    [enrichedBuses]
   )
 
   const displayedBuses = useMemo(() => {
     if (activeFilter === 'active') {
-      return buses.filter(
-        (b) =>
-          b.is_live ||
-          b.tracking_status === 'LIVE' ||
-          b.tracking_status === 'LOCATION STALE'
-      )
+      return enrichedBuses.filter(isBusActive)
     }
     if (activeFilter === 'scheduled') {
-      return buses.filter(
-        (b) =>
-          b.tracking_status === 'SCHEDULED' ||
-          (!b.is_live && b.tracking_status !== 'LIVE' && b.tracking_status !== 'LOCATION STALE')
-      )
+      return enrichedBuses.filter((b) => !isBusActive(b))
     }
-    return buses
-  }, [buses, activeFilter])
+    return enrichedBuses
+  }, [enrichedBuses, activeFilter])
 
   // Real-time telemetry for the selected bus
   const activeSelectedBus = useMemo(() => {
-    return selectedBus || buses[0] || null
-  }, [selectedBus, buses])
+    if (selectedBus) {
+      const match = enrichedBuses.find((b) => b.bus_id === selectedBus.bus_id)
+      return match || selectedBus
+    }
+    return enrichedBuses[0] || null
+  }, [selectedBus, enrichedBuses])
 
   const trackedTelemetry = useMemo(() => {
     if (!activeSelectedBus) return null
@@ -451,9 +530,9 @@ export default function PassengerPortal({
         fromSuggestions={fromSuggestions}
         toSuggestions={toSuggestions}
         onSelectFromStop={handleSelectFromStop}
-        onSelectToStop={(stop) => setDestination(stop)}
+        onSelectToStop={handleSelectToStop}
         onSwapStops={handleSwapStops}
-        onSearchBuses={() => handleSearchBuses()}
+        onSearchBuses={() => handleSearchBuses(currentStop, destination, true)}
         loadingBuses={loadingBuses}
         lang={lang}
       />
