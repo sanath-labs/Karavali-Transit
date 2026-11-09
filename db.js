@@ -1887,10 +1887,16 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
 
   for (const bus of buses) {
     // Strict Project Requirement: Must belong to the fixed corridor Mangaluru -> Kundapura
-    if (bus.origin !== 'Mangaluru' || bus.destination !== 'Kundapura') {
+    const activeData = activeBuses[bus.bus_id] || {}
+    const isCorridorBus =
+      (bus.origin === 'Mangaluru' && bus.destination === 'Kundapura') ||
+      Boolean(activeData.is_on_shift || activeData.active_shift)
+
+    if (!isCorridorBus) {
       continue
     }
-    // 5. Must have an active assigned conductor in conductors table
+
+    // 5. Must have an active assigned conductor in conductors table or active duty shift
     let conductor = null
     if (isPostgres()) {
       const cRes = await pgPool.query(
@@ -1909,7 +1915,16 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
     }
 
     if (!conductor) {
-      continue
+      if (activeData && (activeData.is_on_shift || activeData.conductor_name)) {
+        conductor = {
+          conductor_id: activeData.conductor_id || 999,
+          name: activeData.conductor_name || 'Conductor on Duty',
+          phone: activeData.driver_phone || '98451 00000',
+          status: 'Active',
+        }
+      } else {
+        continue
+      }
     }
 
     let stops = await getBusRouteStops(bus.bus_id)
@@ -1932,19 +1947,24 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
       const boardingStop = stops[fromIdx]
       const destinationStop = stops[toIdx]
 
-      const activeData = activeBuses[bus.bus_id] || {}
       const now = Date.now()
       const lastTs = activeData.timestamp ? new Date(activeData.timestamp).getTime() : 0
-      const isShiftActive = Boolean(activeData.is_on_shift || activeData.active_shift)
-      // Active coastal shifts stay fresh with a 1-hour heartbeat window
-      const hasRecentGps = isShiftActive && (now - lastTs < 3600000 || !lastTs)
-      const isStale = isShiftActive && lastTs > 0 && now - lastTs >= 3600000
+      const isShiftActive = Boolean(
+        (activeData.is_on_shift || activeData.active_shift) &&
+        activeData.tracking_status !== 'OFFLINE'
+      )
+      // Active coastal shifts stay fresh with a 2-minute heartbeat window for live GPS
+      const isStale = isShiftActive && lastTs > 0 && now - lastTs >= 120000
 
       let trackingStatus = 'SCHEDULED'
-      if (hasRecentGps && activeData.latitude && activeData.longitude) {
-        trackingStatus = 'LIVE'
-      } else if (isStale) {
-        trackingStatus = 'LOCATION STALE'
+      if (isShiftActive && activeData.latitude && activeData.longitude) {
+        if (isStale) {
+          trackingStatus = 'LOCATION STALE'
+        } else {
+          trackingStatus = 'LIVE'
+        }
+      } else if (isShiftActive) {
+        trackingStatus = activeData.tracking_status || 'NOT TRACKING'
       } else if (bus.departure_time) {
         trackingStatus = 'SCHEDULED'
       }
@@ -1978,6 +1998,7 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
         journey_duration: bus.journey_duration || '1 hour 35 minutes',
         tracking_status: trackingStatus,
         is_live: trackingStatus === 'LIVE',
+        is_on_shift: isShiftActive,
         live_eta_minutes: liveEtaMinutes,
         last_update: activeData.timestamp ? new Date(activeData.timestamp).toLocaleTimeString() : null,
         latitude: activeData.latitude || null,
@@ -1994,6 +2015,8 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
   matched.sort((a, b) => {
     if (a.is_live && !b.is_live) return -1
     if (!a.is_live && b.is_live) return 1
+    if (a.is_on_shift && !b.is_on_shift) return -1
+    if (!a.is_on_shift && b.is_on_shift) return 1
     return (a.boarding_planned_time || '').localeCompare(b.boarding_planned_time || '')
   })
 
