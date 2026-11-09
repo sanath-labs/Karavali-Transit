@@ -794,11 +794,17 @@ app.post('/api/conductor/start-duty', async (req, res) => {
     activeBuses[bus.bus_id].tracking_status = 'NOT TRACKING'
   }
 
-  io.emit('shift_broadcast', {
+  const broadcastPayload = {
     ...shiftData,
     bus_id: bus.bus_id,
-    conductor_name,
-  })
+    conductor_name: activeBuses[bus.bus_id].conductor_name,
+    is_on_shift: true,
+    tracking_status: activeBuses[bus.bus_id].tracking_status,
+  }
+
+  io.emit('shift_broadcast', broadcastPayload)
+  io.emit('live_location_broadcast', toPublicBus(activeBuses[bus.bus_id]))
+  io.emit('bus_location_update', toPublicBus(activeBuses[bus.bus_id]))
 
   res.json({
     success: true,
@@ -957,6 +963,10 @@ app.post('/api/conductor/stop-tracking', requireConductorSession, async (req, re
   if (activeBuses[busIdNum]) {
     activeBuses[busIdNum].tracking_status = 'OFFLINE'
     activeBuses[busIdNum].is_on_shift = false
+    activeBuses[busIdNum].active_shift = null
+    activeBuses[busIdNum].latitude = null
+    activeBuses[busIdNum].longitude = null
+    activeBuses[busIdNum].speed = 0
     io.emit('bus_tracking_stopped', { bus_id: busIdNum })
     io.emit('live_location_broadcast', toPublicBus(activeBuses[busIdNum]))
     io.emit('bus_location_update', toPublicBus(activeBuses[busIdNum]))
@@ -1089,6 +1099,8 @@ app.get('/api/public/buses/:id', async (req, res) => {
         latitude: active.latitude || null,
         longitude: active.longitude || null,
         speed: active.speed || 0,
+        is_on_shift: Boolean(active.is_on_shift),
+        tracking_status: active.tracking_status || (active.is_on_shift ? 'NOT TRACKING' : 'SCHEDULED'),
         is_live: Boolean(active.is_on_shift && active.timestamp && (Date.now() - new Date(active.timestamp).getTime() < 120000)),
         last_update: active.timestamp ? new Date(active.timestamp).toLocaleTimeString() : null,
       },
