@@ -374,3 +374,29 @@ Conductor Taps "Start Live Tracking" (POST /api/conductor/gps-location)
 2. **Instant Live Transition**: Once the conductor starts streaming coordinates, the badge flips to `LIVE`, telemetry speed is displayed, and the live bus pin appears on the Leaflet radar map.
 3. **Clean Teardown**: When tracking is stopped, coordinates and active shift flags are cleanly flushed to `OFFLINE` standby, avoiding lingering ghost markers.
 4. **Adaptive Commuter Discovery**: The passenger results grid automatically defaults to displaying active buses when available, and seamlessly shows scheduled corridor departures without showing empty screens when no live shifts are active.
+
+---
+
+## 🧪 Comprehensive Regression & End-to-End Test Suite
+
+Run all verification tests across database, GPS security, passenger radar, and conductor flows:
+
+```bash
+# Run conductor shift to passenger radar synchronization suite
+node --test tests/conductor-shift-passenger-radar.test.js
+
+# Run passenger portal journey discovery & landmark tests
+node --test tests/passenger-portal-flow.test.js
+
+# Run conductor hardware GPS telemetry & corridor boundary tests
+node --test tests/conductor-gps-tracking.test.js
+
+# Run conductor authentication & OTP contract tests
+node --test tests/conductor-portal-flow.test.js
+
+# Run zero-warning code quality linter
+npx oxlint
+
+# Run client production build
+npm run build
+```
