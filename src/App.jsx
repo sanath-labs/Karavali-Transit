@@ -118,14 +118,43 @@ function App() {
       }
     }
 
+    const handleShiftBroadcast = (data) => {
+      if (!data || !data.bus_id) return
+      setLiveBuses((prev) => ({
+        ...prev,
+        [data.bus_id]: {
+          ...(prev[data.bus_id] || {}),
+          ...data,
+          is_on_shift: true,
+          tracking_status: data.tracking_status || 'NOT TRACKING',
+        },
+      }))
+    }
+
+    const handleTrackingStopped = ({ bus_id }) => {
+      if (!bus_id) return
+      setLiveBuses((prev) => ({
+        ...prev,
+        [bus_id]: {
+          ...(prev[bus_id] || {}),
+          tracking_status: 'OFFLINE',
+          is_on_shift: false,
+        },
+      }))
+    }
+
     socket.on('sync_buses', handleSyncBuses)
+    socket.on('shift_broadcast', handleShiftBroadcast)
     socket.on('live_location_broadcast', handleLocationBroadcast)
     socket.on('bus_location_update', handleLocationBroadcast)
+    socket.on('bus_tracking_stopped', handleTrackingStopped)
 
     return () => {
       socket.off('sync_buses', handleSyncBuses)
+      socket.off('shift_broadcast', handleShiftBroadcast)
       socket.off('live_location_broadcast', handleLocationBroadcast)
       socket.off('bus_location_update', handleLocationBroadcast)
+      socket.off('bus_tracking_stopped', handleTrackingStopped)
     }
   }, [])
 
@@ -168,6 +197,8 @@ function App() {
             initialScreen={passengerScreen}
             lang={lang}
             onOpenFindStop={() => setActiveModal('findStop')}
+            liveBuses={liveBuses}
+            socket={socket}
           />
         )}
 
