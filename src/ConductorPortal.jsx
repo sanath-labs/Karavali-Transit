@@ -304,6 +304,68 @@ export default function ConductorPortal({
     }
   }
 
+  const loadBusStops = async (busId) => {
+    if (!busId) return
+    try {
+      const res = await fetch(apiUrl(`/api/conductor/buses/${busId}/stops`))
+      const data = await res.json()
+      if (res.ok && data.stops) {
+        setRouteStops(data.stops)
+      }
+    } catch (err) {
+      console.error('Failed to load stops:', err)
+    }
+  }
+
+  // =========================================================================
+  // STEP 5: LIVE SHIFT OPERATIONS & TELEMETRY
+  // =========================================================================
+  const handleStartShift = async (busToStart = activeBus, conductorToUse = conductorRecord) => {
+    const bus = busToStart || activeBus
+    if (!bus) {
+      alert('Please select a fleet bus for duty.')
+      return
+    }
+    const startedAt = getNow()
+    setAuthLoading(true)
+    try {
+      const token = conductorToken || localStorage.getItem('karavali_conductor_token') || ''
+      const res = await fetch(apiUrl('/api/conductor/start-duty'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bus_id: bus.bus_id,
+          vehicle_number: bus.vehicle_number,
+          driver_phone: conductorPhone,
+          conductor_name: conductorName || conductorToUse?.name || conductorRecord?.name,
+          conductor_id: conductorToUse?.conductor_id || conductorRecord?.conductor_id,
+          conductor_token: token,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setIsOnShift(true)
+        setShiftStartTime(startedAt)
+        setShiftData(data.shift)
+        if (data.conductor_token) {
+          setConductorToken(data.conductor_token)
+          try {
+            localStorage.setItem('karavali_conductor_token', data.conductor_token)
+          } catch {}
+        }
+        playDutyChime(880, 0.2)
+        setNotice(`Duty shift initialized for ${bus.vehicle_number}. Click "Start Live Tracking" to stream GPS.`)
+        setStep(5)
+      } else {
+        alert(data.error || 'Failed to start shift.')
+      }
+    } catch (err) {
+      alert(`Shift start error: ${err.message}`)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
   // =========================================================================
   // STEP 4: REGISTER NEW CONDUCTOR OR CONFIRM EXISTING
   // =========================================================================
@@ -317,8 +379,12 @@ export default function ConductorPortal({
       const matchedBus = agencyBuses.find((b) => String(b.bus_id) === String(selectedBusId)) || agencyBuses[0] || null
       setActiveBus(matchedBus)
       loadBusStops(matchedBus?.bus_id)
-      setStep(5)
-      setNotice(`Welcome back, ${conductorRecord.name}! Ready for duty.`)
+      if (matchedBus) {
+        await handleStartShift(matchedBus, conductorRecord)
+      } else {
+        setStep(5)
+        setNotice(`Welcome back, ${conductorRecord.name}! Ready for duty.`)
+      }
       return
     }
 
@@ -352,73 +418,17 @@ export default function ConductorPortal({
         const matchedBus = agencyBuses.find((b) => String(b.bus_id) === String(selectedBusId)) || agencyBuses[0] || null
         setActiveBus(matchedBus)
         loadBusStops(matchedBus?.bus_id)
-        setStep(5)
-        setNotice(`Conductor ${data.conductor.name} registered and checked in!`)
+        if (matchedBus) {
+          await handleStartShift(matchedBus, data.conductor)
+        } else {
+          setStep(5)
+          setNotice(`Conductor ${data.conductor.name} registered and checked in!`)
+        }
       } else {
         setAuthError(data.error || 'Registration failed.')
       }
     } catch (err) {
       setAuthError(`Registration error: ${err.message}`)
-    } finally {
-      setAuthLoading(false)
-    }
-  }
-
-  const loadBusStops = async (busId) => {
-    if (!busId) return
-    try {
-      const res = await fetch(apiUrl(`/api/conductor/buses/${busId}/stops`))
-      const data = await res.json()
-      if (res.ok && data.stops) {
-        setRouteStops(data.stops)
-      }
-    } catch (err) {
-      console.error('Failed to load stops:', err)
-    }
-  }
-
-  // =========================================================================
-  // STEP 5: LIVE SHIFT OPERATIONS & TELEMETRY
-  // =========================================================================
-  const handleStartShift = async () => {
-    if (!activeBus) {
-      alert('Please select a fleet bus for duty.')
-      return
-    }
-    const startedAt = getNow()
-    setAuthLoading(true)
-    try {
-      const token = conductorToken || localStorage.getItem('karavali_conductor_token') || ''
-      const res = await fetch(apiUrl('/api/conductor/start-duty'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bus_id: activeBus.bus_id,
-          vehicle_number: activeBus.vehicle_number,
-          driver_phone: conductorPhone,
-          conductor_name: conductorName || conductorRecord?.name,
-          conductor_id: conductorRecord?.conductor_id,
-          conductor_token: token,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok && data.success) {
-        setIsOnShift(true)
-        setShiftStartTime(startedAt)
-        setShiftData(data.shift)
-        if (data.conductor_token) {
-          setConductorToken(data.conductor_token)
-          try {
-            localStorage.setItem('karavali_conductor_token', data.conductor_token)
-          } catch {}
-        }
-        playDutyChime(880, 0.2)
-        setNotice(`Duty shift initialized for ${activeBus.vehicle_number}. Click "Start Live Tracking" to stream GPS.`)
-      } else {
-        alert(data.error || 'Failed to start shift.')
-      }
-    } catch (err) {
-      alert(`Shift start error: ${err.message}`)
     } finally {
       setAuthLoading(false)
     }
