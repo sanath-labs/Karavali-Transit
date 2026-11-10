@@ -373,3 +373,4 @@ Conductor Taps "Start Live Tracking" (POST /api/conductor/gps-location)
 1. **Zero Waiting for Satellites**: When a conductor starts a shift, the bus immediately becomes visible in Passenger Radar under `Active` as `NOT TRACKING` until GPS lock is obtained.
 2. **Instant Live Transition**: Once the conductor starts streaming coordinates, the badge flips to `LIVE`, telemetry speed is displayed, and the live bus pin appears on the Leaflet radar map.
 3. **Clean Teardown**: When tracking is stopped, coordinates and active shift flags are cleanly flushed to `OFFLINE` standby, avoiding lingering ghost markers.
+4. **Adaptive Commuter Discovery**: The passenger results grid automatically defaults to displaying active buses when available, and seamlessly shows scheduled corridor departures without showing empty screens when no live shifts are active.
