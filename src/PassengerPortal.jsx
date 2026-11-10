@@ -27,6 +27,8 @@ export default function PassengerPortal({
   onOpenFindStop,
   initialScreen = 1,
   lang = 'en',
+  liveBuses = {},
+  socket: propSocket = null,
 }) {
   // Page Navigation (1 = Search/Home, 2 = Results, 3 = Details, 4 = Live Tracking)
   const [screen, setScreen] = useState(initialScreen)
@@ -67,7 +69,7 @@ export default function PassengerPortal({
   const [buses, setBuses] = useState([])
   const [loadingBuses, setLoadingBuses] = useState(false)
   const [searchError, setSearchError] = useState('')
-  const [activeFilter, setActiveFilter] = useState('active') // 'active' | 'all' | 'scheduled'
+  const [activeFilter, setActiveFilter] = useState('all') // 'all' | 'active' | 'scheduled'
 
   // Selected Bus Details (Screen 3 & Screen 4)
   const [selectedBus, setSelectedBus] = useState(null)
@@ -76,8 +78,15 @@ export default function PassengerPortal({
 
   // Real-time Telemetry & Seconds Elapsed Timer (Screen 4)
   const [secondsAgo, setSecondsAgo] = useState(15)
-  const [liveTelemetry, setLiveTelemetry] = useState({})
+  const [liveTelemetry, setLiveTelemetry] = useState(liveBuses || {})
   const socketRef = useRef(null)
+
+  // Sync liveTelemetry when liveBuses prop updates from App
+  useEffect(() => {
+    if (liveBuses && Object.keys(liveBuses).length > 0) {
+      setLiveTelemetry((prev) => ({ ...prev, ...liveBuses }))
+    }
+  }, [liveBuses])
 
   // Popular Routes
   const POPULAR_ROUTES = [
@@ -89,7 +98,7 @@ export default function PassengerPortal({
 
   // Setup WebSocket Telemetry Connection
   useEffect(() => {
-    const socket = io(socketUrl)
+    const socket = propSocket || io(socketUrl)
     socketRef.current = socket
 
     socket.on('sync_buses', (synced) => {
@@ -155,9 +164,11 @@ export default function PassengerPortal({
     })
 
     return () => {
-      socket.disconnect()
+      if (!propSocket) {
+        socket.disconnect()
+      }
     }
-  }, [])
+  }, [propSocket])
 
   // Initial Bus Search on Mount
   useEffect(() => {
@@ -238,6 +249,15 @@ export default function PassengerPortal({
         } else {
           setSelectedBus(null)
         }
+        const hasActive = data.buses.some(
+          (b) =>
+            b.is_live ||
+            b.is_on_shift ||
+            b.tracking_status === 'LIVE' ||
+            b.tracking_status === 'LOCATION STALE' ||
+            b.tracking_status === 'NOT TRACKING'
+        )
+        setActiveFilter(hasActive ? 'active' : 'all')
       } else {
         setBuses([])
         setSelectedBus(null)
@@ -402,7 +422,8 @@ export default function PassengerPortal({
 
   const displayedBuses = useMemo(() => {
     if (activeFilter === 'active') {
-      return enrichedBuses.filter(isBusActive)
+      const activeOnly = enrichedBuses.filter(isBusActive)
+      return activeOnly.length > 0 ? activeOnly : enrichedBuses
     }
     if (activeFilter === 'scheduled') {
       return enrichedBuses.filter((b) => !isBusActive(b))
