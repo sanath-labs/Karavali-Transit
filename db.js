@@ -766,6 +766,53 @@ export async function recordShift(data) {
   })
 }
 
+// 1b. Shift Closing / End Duty
+export async function endShift(data = {}) {
+  const shiftId = data.shift_id ? Number(data.shift_id) : null
+  const vehicleNumber = data.vehicle_number ? String(data.vehicle_number).trim() : null
+
+  if (isPostgres()) {
+    if (shiftId) {
+      const res = await pgPool.query(
+        "UPDATE driver_shifts SET status = 'COMPLETED', end_time = CURRENT_TIMESTAMP WHERE shift_id = $1 RETURNING *",
+        [shiftId]
+      )
+      return res.rows[0] || null
+    } else if (vehicleNumber) {
+      const res = await pgPool.query(
+        "UPDATE driver_shifts SET status = 'COMPLETED', end_time = CURRENT_TIMESTAMP WHERE vehicle_number = $1 AND status = 'ACTIVE' RETURNING *",
+        [vehicleNumber]
+      )
+      return res.rows[0] || null
+    }
+    return null
+  }
+
+  return new Promise((resolve) => {
+    if (shiftId) {
+      sqliteDb.run(
+        "UPDATE driver_shifts SET status = 'COMPLETED', end_time = CURRENT_TIMESTAMP WHERE shift_id = ?",
+        [shiftId],
+        function (err) {
+          if (err) resolve(null)
+          else resolve({ shift_id: shiftId, status: 'COMPLETED' })
+        }
+      )
+    } else if (vehicleNumber) {
+      sqliteDb.run(
+        "UPDATE driver_shifts SET status = 'COMPLETED', end_time = CURRENT_TIMESTAMP WHERE vehicle_number = ? AND status = 'ACTIVE'",
+        [vehicleNumber],
+        function (err) {
+          if (err) resolve(null)
+          else resolve({ vehicle_number: vehicleNumber, status: 'COMPLETED' })
+        }
+      )
+    } else {
+      resolve(null)
+    }
+  })
+}
+
 // 2. GPS Telemetry Recording
 export async function recordTelemetry(data) {
   if (isPostgres()) {
