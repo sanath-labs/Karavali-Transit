@@ -119,4 +119,56 @@ test('Conductor Shift to Passenger Radar Synchronization Suite', async (t) => {
     assert.equal(found.is_live, false)
     assert.notEqual(found.tracking_status, 'LIVE')
   })
+
+  await t.test('6. Ended Shift Excludes Bus from Active Passenger Radar Filter', async () => {
+    // End duty shift explicitly
+    const endRes = await fetch(`${baseUrl}/api/conductor/end-duty`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bus_id: testBus.bus_id,
+        vehicle_number: testBus.vehicle_number,
+      }),
+    })
+    const endData = await endRes.json()
+    assert.equal(endRes.status, 200)
+    assert.equal(endData.success, true)
+    assert.equal(endData.tracking_status, 'OFFLINE')
+    assert.equal(endData.is_on_shift, false)
+
+    // Verify search results reflect inactive status
+    const searchRes = await fetch(`${baseUrl}/api/public/buses/search?from=Surathkal&to=Udupi`)
+    const searchData = await searchRes.json()
+    const found = searchData.buses.find((b) => b.bus_id === testBus.bus_id)
+    assert.ok(found, 'Bus should still appear in full corridor timetable')
+    assert.equal(found.is_on_shift, false, 'is_on_shift must be false after duty shift ends')
+    assert.equal(found.is_live, false, 'is_live must be false')
+
+    const isBusActive = (b) => {
+      if (b.tracking_status === 'OFFLINE' || b.tracking_status === 'SCHEDULED' || b.is_on_shift === false) {
+        return false
+      }
+      return Boolean(
+        b.is_live ||
+        b.is_on_shift ||
+        b.tracking_status === 'LIVE' ||
+        b.tracking_status === 'LOCATION STALE' ||
+        b.tracking_status === 'NOT TRACKING'
+      )
+    }
+
+    assert.equal(isBusActive(found), false, 'Ended shift bus must NOT qualify as active in Passenger Radar')
+
+    // Active filter list check
+    const activeList = searchData.buses.filter(isBusActive)
+    assert.ok(!activeList.some((b) => b.bus_id === testBus.bus_id), 'Bus must NOT be present in Active filter list')
+
+    // Database shifts check: active shifts endpoint must not list this vehicle as active
+    const shiftsRes = await fetch(`${baseUrl}/api/shifts`)
+    const activeShifts = await shiftsRes.json()
+    assert.ok(
+      !activeShifts.some((s) => s.vehicle_number === testBus.vehicle_number && s.status === 'ACTIVE'),
+      'Driver shifts table must not have ACTIVE status for ended duty'
+    )
+  })
 })
