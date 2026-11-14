@@ -96,6 +96,13 @@ export default function PassengerPortal({
     { from: 'Mulki', to: 'Udupi' },
   ]
 
+  const currentStopRef = useRef(currentStop)
+  const destinationRef = useRef(destination)
+  useEffect(() => {
+    currentStopRef.current = currentStop
+    destinationRef.current = destination
+  }, [currentStop, destination])
+
   // Setup WebSocket Telemetry Connection
   useEffect(() => {
     const socket = propSocket || io(socketUrl)
@@ -109,27 +116,32 @@ export default function PassengerPortal({
 
     socket.on('shift_broadcast', (data) => {
       if (!data || !data.bus_id) return
+      const isShiftOn = data.is_on_shift !== false && data.tracking_status !== 'OFFLINE'
       setLiveTelemetry((prev) => ({
         ...prev,
         [data.bus_id]: {
           ...(prev[data.bus_id] || {}),
           ...data,
-          is_on_shift: true,
-          tracking_status: data.tracking_status || 'NOT TRACKING',
+          is_on_shift: isShiftOn,
+          tracking_status: data.tracking_status || (isShiftOn ? 'NOT TRACKING' : 'OFFLINE'),
           conductor_name: data.conductor_name || prev[data.bus_id]?.conductor_name,
+          ...(isShiftOn ? {} : { latitude: null, longitude: null, speed: 0, is_live: false }),
         },
       }))
     })
 
     socket.on('live_location_broadcast', (data) => {
       if (!data || !data.bus_id) return
+      const isExplicitOffline = data.tracking_status === 'OFFLINE' || data.is_on_shift === false
       setLiveTelemetry((prev) => ({
         ...prev,
         [data.bus_id]: {
           ...(prev[data.bus_id] || {}),
           ...data,
-          is_on_shift: data.is_on_shift !== undefined ? data.is_on_shift : true,
-          tracking_status: data.tracking_status || (data.latitude && data.longitude ? 'LIVE' : 'NOT TRACKING'),
+          is_on_shift: !isExplicitOffline && (data.is_on_shift !== undefined ? data.is_on_shift : true),
+          tracking_status: isExplicitOffline
+            ? 'OFFLINE'
+            : (data.tracking_status || (data.latitude && data.longitude ? 'LIVE' : 'NOT TRACKING')),
           timestamp: data.timestamp || Date.now(),
         },
       }))
@@ -138,20 +150,23 @@ export default function PassengerPortal({
 
     socket.on('bus_location_update', (data) => {
       if (!data || !data.bus_id) return
+      const isExplicitOffline = data.tracking_status === 'OFFLINE' || data.is_on_shift === false
       setLiveTelemetry((prev) => ({
         ...prev,
         [data.bus_id]: {
           ...(prev[data.bus_id] || {}),
           ...data,
-          is_on_shift: data.is_on_shift !== undefined ? data.is_on_shift : true,
-          tracking_status: data.tracking_status || (data.latitude && data.longitude ? 'LIVE' : 'NOT TRACKING'),
+          is_on_shift: !isExplicitOffline && (data.is_on_shift !== undefined ? data.is_on_shift : true),
+          tracking_status: isExplicitOffline
+            ? 'OFFLINE'
+            : (data.tracking_status || (data.latitude && data.longitude ? 'LIVE' : 'NOT TRACKING')),
           timestamp: data.timestamp || Date.now(),
         },
       }))
       setSecondsAgo(0)
     })
 
-    socket.on('bus_tracking_stopped', ({ bus_id }) => {
+    const handleStopOrEnd = ({ bus_id }) => {
       if (!bus_id) return
       setLiveTelemetry((prev) => ({
         ...prev,
@@ -159,13 +174,23 @@ export default function PassengerPortal({
           ...(prev[bus_id] || {}),
           tracking_status: 'OFFLINE',
           is_on_shift: false,
+          is_live: false,
+          latitude: null,
+          longitude: null,
+          speed: 0,
         },
       }))
-    })
+    }
+
+    socket.on('bus_tracking_stopped', handleStopOrEnd)
+    socket.on('shift_ended', handleStopOrEnd)
 
     return () => {
       if (!propSocket) {
         socket.disconnect()
+      } else {
+        socket.off('bus_tracking_stopped', handleStopOrEnd)
+        socket.off('shift_ended', handleStopOrEnd)
       }
     }
   }, [propSocket])
@@ -249,14 +274,19 @@ export default function PassengerPortal({
         } else {
           setSelectedBus(null)
         }
-        const hasActive = data.buses.some(
-          (b) =>
+        const isEntryActive = (b) => {
+          if (b.tracking_status === 'OFFLINE' || b.tracking_status === 'SCHEDULED' || b.is_on_shift === false) {
+            return false
+          }
+          return Boolean(
             b.is_live ||
-            b.is_on_shift ||
-            b.tracking_status === 'LIVE' ||
-            b.tracking_status === 'LOCATION STALE' ||
-            b.tracking_status === 'NOT TRACKING'
-        )
+              b.is_on_shift ||
+              b.tracking_status === 'LIVE' ||
+              b.tracking_status === 'LOCATION STALE' ||
+              b.tracking_status === 'NOT TRACKING'
+          )
+        }
+        const hasActive = data.buses.some(isEntryActive)
         setActiveFilter(hasActive ? 'active' : 'all')
       } else {
         setBuses([])
@@ -366,22 +396,25 @@ export default function PassengerPortal({
           live.longitude <= 76.0
       )
 
-      const isOnShift = Boolean(
-        live.is_on_shift ||
-          bus.is_on_shift ||
-          live.tracking_status === 'LIVE' ||
-          live.tracking_status === 'LOCATION STALE' ||
-          live.tracking_status === 'NOT TRACKING'
+      // Explicit offline check: Conductor ended shift, stopped tracking, or marked OFFLINE
+      const isExplicitlyOffline = Boolean(
+        live.tracking_status === 'OFFLINE' ||
+        live.tracking_status === 'SCHEDULED' ||
+        live.is_on_shift === false
       )
 
-      const isLiveTracking = Boolean(
+      const isOnShift = !isExplicitlyOffline && Boolean(
+        live.is_on_shift !== undefined ? live.is_on_shift : bus.is_on_shift
+      )
+
+      const isLiveTracking = !isExplicitlyOffline && Boolean(
         live.tracking_status === 'LIVE' ||
-          (hasCoords && isOnShift && live.tracking_status !== 'OFFLINE' && live.tracking_status !== 'LOCATION STALE')
+        (hasCoords && isOnShift && live.tracking_status !== 'LOCATION STALE')
       )
 
-      const trackingStatus =
-        live.tracking_status ||
-        (isLiveTracking ? 'LIVE' : isOnShift ? 'NOT TRACKING' : bus.tracking_status || 'SCHEDULED')
+      const trackingStatus = isExplicitlyOffline
+        ? (bus.departure_time ? 'SCHEDULED' : 'OFFLINE')
+        : (live.tracking_status || (isLiveTracking ? 'LIVE' : isOnShift ? 'NOT TRACKING' : bus.tracking_status || 'SCHEDULED'))
 
       return {
         ...bus,
@@ -391,15 +424,18 @@ export default function PassengerPortal({
         tracking_status: trackingStatus,
         is_live: isLiveTracking,
         is_on_shift: isOnShift,
-        latitude: hasCoords ? live.latitude : bus.latitude,
-        longitude: hasCoords ? live.longitude : bus.longitude,
-        speed: live.speed !== undefined ? live.speed : bus.speed,
-        timestamp: live.timestamp || bus.timestamp,
+        latitude: isExplicitlyOffline ? null : (hasCoords ? live.latitude : bus.latitude),
+        longitude: isExplicitlyOffline ? null : (hasCoords ? live.longitude : bus.longitude),
+        speed: isExplicitlyOffline ? 0 : (live.speed !== undefined ? live.speed : bus.speed),
+        timestamp: isExplicitlyOffline ? null : (live.timestamp || bus.timestamp),
       }
     })
   }, [buses, liveTelemetry])
 
   const isBusActive = (b) => {
+    if (b.tracking_status === 'OFFLINE' || b.tracking_status === 'SCHEDULED' || b.is_on_shift === false) {
+      return false
+    }
     return Boolean(
       b.is_live ||
         b.is_on_shift ||
@@ -422,8 +458,7 @@ export default function PassengerPortal({
 
   const displayedBuses = useMemo(() => {
     if (activeFilter === 'active') {
-      const activeOnly = enrichedBuses.filter(isBusActive)
-      return activeOnly.length > 0 ? activeOnly : enrichedBuses
+      return enrichedBuses.filter(isBusActive)
     }
     if (activeFilter === 'scheduled') {
       return enrichedBuses.filter((b) => !isBusActive(b))

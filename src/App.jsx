@@ -120,13 +120,15 @@ function App() {
 
     const handleShiftBroadcast = (data) => {
       if (!data || !data.bus_id) return
+      const isShiftOn = data.is_on_shift !== false && data.tracking_status !== 'OFFLINE'
       setLiveBuses((prev) => ({
         ...prev,
         [data.bus_id]: {
           ...(prev[data.bus_id] || {}),
           ...data,
-          is_on_shift: true,
-          tracking_status: data.tracking_status || 'NOT TRACKING',
+          is_on_shift: isShiftOn,
+          tracking_status: data.tracking_status || (isShiftOn ? 'NOT TRACKING' : 'OFFLINE'),
+          ...(isShiftOn ? {} : { latitude: null, longitude: null, speed: 0, is_live: false }),
         },
       }))
     }
@@ -139,6 +141,10 @@ function App() {
           ...(prev[bus_id] || {}),
           tracking_status: 'OFFLINE',
           is_on_shift: false,
+          is_live: false,
+          latitude: null,
+          longitude: null,
+          speed: 0,
         },
       }))
     }
@@ -148,6 +154,7 @@ function App() {
     socket.on('live_location_broadcast', handleLocationBroadcast)
     socket.on('bus_location_update', handleLocationBroadcast)
     socket.on('bus_tracking_stopped', handleTrackingStopped)
+    socket.on('shift_ended', handleTrackingStopped)
 
     return () => {
       socket.off('sync_buses', handleSyncBuses)
@@ -155,6 +162,7 @@ function App() {
       socket.off('live_location_broadcast', handleLocationBroadcast)
       socket.off('bus_location_update', handleLocationBroadcast)
       socket.off('bus_tracking_stopped', handleTrackingStopped)
+      socket.off('shift_ended', handleTrackingStopped)
     }
   }, [])
 
