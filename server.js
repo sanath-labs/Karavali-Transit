@@ -8,6 +8,7 @@ import {
   createOwner,
   deleteBus,
   deleteConductor,
+  endShift,
   getActiveShifts,
   getAllBusStops,
   getBuses,
@@ -967,9 +968,24 @@ app.post('/api/conductor/stop-tracking', requireConductorSession, async (req, re
     activeBuses[busIdNum].latitude = null
     activeBuses[busIdNum].longitude = null
     activeBuses[busIdNum].speed = 0
+    activeBuses[busIdNum].last_telemetry_at = null
+
+    const offlinePayload = {
+      bus_id: busIdNum,
+      vehicle_number: activeBuses[busIdNum].vehicle_number,
+      is_on_shift: false,
+      tracking_status: 'OFFLINE',
+      is_live: false,
+      latitude: null,
+      longitude: null,
+      speed: 0,
+    }
+    io.emit('shift_broadcast', offlinePayload)
     io.emit('bus_tracking_stopped', { bus_id: busIdNum })
+    io.emit('shift_ended', { bus_id: busIdNum, vehicle_number: activeBuses[busIdNum].vehicle_number })
     io.emit('live_location_broadcast', toPublicBus(activeBuses[busIdNum]))
     io.emit('bus_location_update', toPublicBus(activeBuses[busIdNum]))
+    io.emit('sync_buses', publicBusSnapshot(activeBuses))
   }
 
   res.json({
@@ -978,6 +994,68 @@ app.post('/api/conductor/stop-tracking', requireConductorSession, async (req, re
     tracking_status: 'OFFLINE',
   })
 })
+
+// 18b. CONDUCTOR DUTY: End Shift & Mark Offline in Passenger Radar
+const handleEndDutyShift = async (req, res) => {
+  const { bus_id, vehicle_number, shift_id } = req.body || {}
+
+  // Resolve bus
+  let busIdNum = Number(bus_id)
+  let bus = null
+  if (busIdNum) {
+    bus = await getBusById(busIdNum)
+  } else if (vehicle_number) {
+    bus = await getBusByVehicleNumber(vehicle_number)
+    if (bus) busIdNum = bus.bus_id
+  }
+
+  // End shift in database
+  await endShift({
+    shift_id: shift_id ? Number(shift_id) : null,
+    vehicle_number: vehicle_number || bus?.vehicle_number,
+  })
+
+  if (busIdNum && activeBuses[busIdNum]) {
+    activeBuses[busIdNum].tracking_status = 'OFFLINE'
+    activeBuses[busIdNum].is_on_shift = false
+    activeBuses[busIdNum].active_shift = null
+    activeBuses[busIdNum].latitude = null
+    activeBuses[busIdNum].longitude = null
+    activeBuses[busIdNum].speed = 0
+    activeBuses[busIdNum].last_telemetry_at = null
+  }
+
+  const broadcastPayload = {
+    bus_id: busIdNum,
+    vehicle_number: bus?.vehicle_number || vehicle_number,
+    is_on_shift: false,
+    tracking_status: 'OFFLINE',
+    is_live: false,
+    latitude: null,
+    longitude: null,
+    speed: 0,
+  }
+
+  io.emit('shift_broadcast', broadcastPayload)
+  io.emit('shift_ended', { bus_id: busIdNum, vehicle_number: bus?.vehicle_number || vehicle_number })
+  io.emit('bus_tracking_stopped', { bus_id: busIdNum })
+  if (busIdNum && activeBuses[busIdNum]) {
+    io.emit('live_location_broadcast', toPublicBus(activeBuses[busIdNum]))
+    io.emit('bus_location_update', toPublicBus(activeBuses[busIdNum]))
+  }
+  io.emit('sync_buses', publicBusSnapshot(activeBuses))
+
+  res.json({
+    success: true,
+    message: 'Duty shift ended successfully. Bus marked OFFLINE and removed from active radar.',
+    bus_id: busIdNum,
+    tracking_status: 'OFFLINE',
+    is_on_shift: false,
+  })
+}
+
+app.post('/api/conductor/end-duty', handleEndDutyShift)
+app.post('/api/conductor/end-shift', handleEndDutyShift)
 
 // 17. CONDUCTOR ROUTE STOPS: Get Timetable Stops for Active Bus
 app.get('/api/conductor/buses/:busId/stops', async (req, res) => {
@@ -1255,8 +1333,80 @@ io.on('connection', (socket) => {
     io.emit('shift_broadcast', data)
   })
 
+  socket.on('end_shift', async (data) => {
+    if (!data) return
+    const busIdNum = Number(data.bus_id)
+    if (data.vehicle_number || data.shift_id) {
+      await endShift({
+        shift_id: data.shift_id ? Number(data.shift_id) : null,
+        vehicle_number: data.vehicle_number,
+      })
+    }
+    if (busIdNum && activeBuses[busIdNum]) {
+      activeBuses[busIdNum].tracking_status = 'OFFLINE'
+      activeBuses[busIdNum].is_on_shift = false
+      activeBuses[busIdNum].active_shift = null
+      activeBuses[busIdNum].latitude = null
+      activeBuses[busIdNum].longitude = null
+      activeBuses[busIdNum].speed = 0
+      activeBuses[busIdNum].last_telemetry_at = null
+    }
+    const payload = {
+      bus_id: busIdNum,
+      vehicle_number: data.vehicle_number || activeBuses[busIdNum]?.vehicle_number,
+      is_on_shift: false,
+      tracking_status: 'OFFLINE',
+      is_live: false,
+      latitude: null,
+      longitude: null,
+      speed: 0,
+    }
+    io.emit('shift_broadcast', payload)
+    io.emit('shift_ended', { bus_id: busIdNum, vehicle_number: data.vehicle_number })
+    io.emit('bus_tracking_stopped', { bus_id: busIdNum })
+    if (busIdNum && activeBuses[busIdNum]) {
+      io.emit('live_location_broadcast', toPublicBus(activeBuses[busIdNum]))
+      io.emit('bus_location_update', toPublicBus(activeBuses[busIdNum]))
+    }
+    io.emit('sync_buses', publicBusSnapshot(activeBuses))
+  })
+
   socket.on('update_location', async (data) => {
     if (!data || !data.bus_id) return
+
+    // Handle explicit offline or end of tracking update
+    const isOffline = data.tracking_status === 'OFFLINE' || data.is_on_shift === false
+    if (isOffline) {
+      const busIdNum = Number(data.bus_id)
+      if (activeBuses[busIdNum]) {
+        activeBuses[busIdNum].tracking_status = 'OFFLINE'
+        activeBuses[busIdNum].is_on_shift = false
+        activeBuses[busIdNum].active_shift = null
+        activeBuses[busIdNum].latitude = null
+        activeBuses[busIdNum].longitude = null
+        activeBuses[busIdNum].speed = 0
+        activeBuses[busIdNum].last_telemetry_at = null
+      }
+      const offlinePayload = {
+        bus_id: busIdNum,
+        vehicle_number: data.vehicle_number || activeBuses[busIdNum]?.vehicle_number,
+        is_on_shift: false,
+        tracking_status: 'OFFLINE',
+        is_live: false,
+        latitude: null,
+        longitude: null,
+        speed: 0,
+      }
+      io.emit('shift_broadcast', offlinePayload)
+      io.emit('bus_tracking_stopped', { bus_id: busIdNum })
+      io.emit('shift_ended', { bus_id: busIdNum, vehicle_number: data.vehicle_number })
+      if (activeBuses[busIdNum]) {
+        io.emit('live_location_broadcast', toPublicBus(activeBuses[busIdNum]))
+        io.emit('bus_location_update', toPublicBus(activeBuses[busIdNum]))
+      }
+      io.emit('sync_buses', publicBusSnapshot(activeBuses))
+      return
+    }
 
     // Verify token if provided
     if (data.token) {
