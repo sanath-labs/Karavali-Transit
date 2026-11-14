@@ -605,11 +605,70 @@ export default function ConductorPortal({
     setShowShiftSummaryModal(true)
   }
 
-  const handleConfirmEndShift = () => {
+  const handleConfirmEndShift = async () => {
+    if (geoWatchId !== null) {
+      if (navigator.geolocation && navigator.geolocation.clearWatch) {
+        navigator.geolocation.clearWatch(geoWatchId)
+      }
+      setGeoWatchId(null)
+    }
+
+    const token =
+      conductorToken || localStorage.getItem('karavali_conductor_token') || ''
+
+    if (activeBus) {
+      // 1. Notify Backend API to end duty shift & update database ledger
+      try {
+        await fetch(apiUrl('/api/conductor/end-duty'), {
+          method: 'POST',
+          headers: conductorHeaders(token, { 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            bus_id: activeBus.bus_id,
+            vehicle_number: activeBus.vehicle_number,
+            shift_id: shiftData?.shift_id,
+          }),
+        })
+      } catch (err) {
+        console.warn('End duty shift API warning:', err.message)
+      }
+
+      // Also call stop-tracking as safety fallback
+      try {
+        await fetch(apiUrl('/api/conductor/stop-tracking'), {
+          method: 'POST',
+          headers: conductorHeaders(token, { 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ bus_id: activeBus.bus_id }),
+        })
+      } catch (err) {
+        console.warn('Stop tracking fallback warning:', err.message)
+      }
+
+      // 2. Broadcast shift termination & offline status via WebSocket
+      if (socket && socket.connected) {
+        socket.emit('end_shift', {
+          bus_id: activeBus.bus_id,
+          vehicle_number: activeBus.vehicle_number,
+          shift_id: shiftData?.shift_id,
+          token,
+        })
+        socket.emit('update_location', {
+          bus_id: activeBus.bus_id,
+          vehicle_number: activeBus.vehicle_number,
+          tracking_status: 'OFFLINE',
+          is_on_shift: false,
+          token,
+          timestamp: Date.now(),
+        })
+      }
+    }
+
     setIsOnShift(false)
+    setIsLiveTracking(false)
+    setGpsStatus('STOPPED')
     setShowShiftSummaryModal(false)
+    setShiftData(null)
     playDutyChime(440, 0.3)
-    setNotice(`Shift for ${activeBus?.vehicle_number} ended successfully. Ledger saved.`)
+    setNotice(`Shift for ${activeBus?.vehicle_number || 'bus'} ended successfully. Ledger saved.`)
   }
 
   // Adjust Passenger Boarding Count
@@ -662,10 +721,10 @@ export default function ConductorPortal({
     }))
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (isOnShift) {
       if (!window.confirm('You have an active duty shift running. End shift and log out?')) return
-      handleEndShift()
+      await handleConfirmEndShift()
     }
     setStep(1)
     setAgencyEmail('rakesh@gmail.com')
