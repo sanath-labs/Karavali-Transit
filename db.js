@@ -195,6 +195,15 @@ async function initPostgresSchema() {
       message TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+    -- Relational Query Optimization Indexes
+    CREATE INDEX IF NOT EXISTS idx_bus_route_stops_bus ON bus_route_stops(bus_id, stop_order);
+    CREATE INDEX IF NOT EXISTS idx_conductors_assigned_bus ON conductors(assigned_bus_id);
+    CREATE INDEX IF NOT EXISTS idx_conductors_owner_email ON conductors(owner_email);
+    CREATE INDEX IF NOT EXISTS idx_buses_owner_email ON buses(owner_email);
+    CREATE INDEX IF NOT EXISTS idx_driver_shifts_status ON driver_shifts(vehicle_number, status);
+    CREATE INDEX IF NOT EXISTS idx_gps_telemetry_bus_time ON gps_telemetry(bus_id, recorded_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_owner_activities_owner ON owner_activities(owner_email, created_at DESC);
   `)
 
   // Check seed buses
@@ -526,6 +535,15 @@ function initSqliteSchema() {
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `)
+
+      // Relational Query Optimization Indexes (SQLite)
+      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_bus_route_stops_bus ON bus_route_stops(bus_id, stop_order)')
+      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_conductors_assigned_bus ON conductors(assigned_bus_id)')
+      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_conductors_owner_email ON conductors(owner_email)')
+      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_buses_owner_email ON buses(owner_email)')
+      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_driver_shifts_status ON driver_shifts(vehicle_number, status)')
+      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_gps_telemetry_bus_time ON gps_telemetry(bus_id, recorded_at DESC)')
+      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_owner_activities_owner ON owner_activities(owner_email, created_at DESC)')
 
       sqliteDb.get('SELECT COUNT(*) AS count FROM buses', (err, row) => {
         if (err) {
