@@ -854,6 +854,38 @@ export async function recordTelemetry(data) {
   })
 }
 
+// 2b. Automated GPS Telemetry Log Retention Pruning
+export async function pruneOldTelemetry(retentionDays = 7) {
+  const days = Math.max(1, Number(retentionDays) || 7)
+  if (isPostgres()) {
+    try {
+      const res = await pgPool.query(
+        "DELETE FROM gps_telemetry WHERE recorded_at < NOW() - ($1 || ' days')::INTERVAL RETURNING log_id",
+        [days]
+      )
+      return res.rowCount || 0
+    } catch (err) {
+      console.warn('[Telemetry Prune Warning]', err.message)
+      return 0
+    }
+  }
+
+  return new Promise((resolve) => {
+    sqliteDb.run(
+      "DELETE FROM gps_telemetry WHERE recorded_at < datetime('now', '-' || ? || ' days')",
+      [days],
+      function (err) {
+        if (err) {
+          console.warn('[Telemetry Prune SQLite Warning]', err.message)
+          resolve(0)
+        } else {
+          resolve(this.changes || 0)
+        }
+      }
+    )
+  })
+}
+
 // 3. Fetch Route Stops for a Bus
 export async function getBusRouteStops(busId) {
   if (isPostgres()) {

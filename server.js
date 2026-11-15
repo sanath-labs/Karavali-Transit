@@ -30,6 +30,7 @@ import {
   initDB,
   insertOwnerActivity,
   isDbConnected,
+  pruneOldTelemetry,
   recordShift,
   recordTelemetry,
   saveBus,
@@ -1484,9 +1485,19 @@ setInterval(() => {
   }
 }, 15000)
 
+// Periodic GPS Telemetry Retention Pruning (runs every 6 hours)
+setInterval(() => {
+  pruneOldTelemetry(7).catch((err) => console.warn('[Periodic Prune Warning]', err.message))
+}, 6 * 3600 * 1000)
+
 const PORT = process.env.PORT || 5000
 
 await initDB()
+
+// Run startup telemetry cleanup asynchronously
+pruneOldTelemetry(7).then((count) => {
+  if (count > 0) console.log(`[Telemetry Pruner] Cleaned ${count} telemetry records older than 7 days`)
+}).catch(() => {})
 
 server.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`)
