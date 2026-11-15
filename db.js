@@ -1917,6 +1917,72 @@ export async function getAllBusStops() {
   })
 }
 
+// Helper to batch-load all route stops grouped by bus_id to eliminate N+1 queries
+async function getAllBusRouteStopsGrouped() {
+  if (isPostgres()) {
+    const res = await pgPool.query(
+      'SELECT bus_id, stop_order, stop_name, planned_arrival FROM bus_route_stops ORDER BY bus_id ASC, stop_order ASC'
+    )
+    const map = {}
+    for (const r of res.rows) {
+      if (!map[r.bus_id]) map[r.bus_id] = []
+      map[r.bus_id].push({
+        stop_order: r.stop_order,
+        stop_name: r.stop_name,
+        planned_arrival: r.planned_arrival,
+      })
+    }
+    return map
+  }
+
+  return new Promise((resolve) => {
+    sqliteDb.all(
+      'SELECT bus_id, stop_order, stop_name, planned_arrival FROM bus_route_stops ORDER BY bus_id ASC, stop_order ASC',
+      (err, rows) => {
+        if (err || !rows) return resolve({})
+        const map = {}
+        for (const r of rows) {
+          if (!map[r.bus_id]) map[r.bus_id] = []
+          map[r.bus_id].push({
+            stop_order: r.stop_order,
+            stop_name: r.stop_name,
+            planned_arrival: r.planned_arrival,
+          })
+        }
+        resolve(map)
+      }
+    )
+  })
+}
+
+// Helper to batch-load active conductors mapped by assigned_bus_id
+async function getActiveConductorsMap() {
+  if (isPostgres()) {
+    const res = await pgPool.query(
+      "SELECT conductor_id, name, phone, status, assigned_bus_id FROM conductors WHERE assigned_bus_id IS NOT NULL AND (status = 'Active' OR status IS NULL)"
+    )
+    const map = {}
+    for (const r of res.rows) {
+      map[r.assigned_bus_id] = r
+    }
+    return map
+  }
+
+  return new Promise((resolve) => {
+    sqliteDb.all(
+      "SELECT conductor_id, name, phone, status, assigned_bus_id FROM conductors WHERE assigned_bus_id IS NOT NULL AND (status = 'Active' OR status IS NULL)",
+      (err, rows) => {
+        if (err || !rows) return resolve({})
+        const map = {}
+        for (const r of rows) {
+          map[r.assigned_bus_id] = r
+        }
+        resolve(map)
+      }
+    )
+  })
+}
+
 // 20. Search Buses By Journey (Intermediate Stop Order Matching)
 // CRITICAL: Absolutely NO ticket fare, ticket price, fees or payment fields anywhere
 export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {}) {
@@ -1947,7 +2013,12 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
     return []
   }
 
-  const buses = await getBuses()
+  // High Efficiency Parallel Batch Load: Eliminates N+1 database queries
+  const [buses, conductorsMap, routeStopsMap] = await Promise.all([
+    getBuses(),
+    getActiveConductorsMap(),
+    getAllBusRouteStopsGrouped(),
+  ])
   const matched = []
 
   for (const bus of buses) {
@@ -1962,22 +2033,7 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
     }
 
     // 5. Must have an active assigned conductor in conductors table or active duty shift
-    let conductor = null
-    if (isPostgres()) {
-      const cRes = await pgPool.query(
-        "SELECT conductor_id, name, phone, status FROM conductors WHERE assigned_bus_id = $1 AND (status = 'Active' OR status IS NULL) LIMIT 1",
-        [bus.bus_id]
-      )
-      conductor = cRes.rows[0] || null
-    } else {
-      conductor = await new Promise((resolve) => {
-        sqliteDb.get(
-          "SELECT conductor_id, name, phone, status FROM conductors WHERE assigned_bus_id = ? AND (status = 'Active' OR status IS NULL) LIMIT 1",
-          [bus.bus_id],
-          (err, row) => resolve(err ? null : row || null)
-        )
-      })
-    }
+    let conductor = conductorsMap[bus.bus_id] || null
 
     if (!conductor) {
       if (activeData && (activeData.is_on_shift || activeData.conductor_name)) {
@@ -1992,9 +2048,12 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
       }
     }
 
-    let stops = await getBusRouteStops(bus.bus_id)
+    let stops = routeStopsMap[bus.bus_id] || []
     if (!stops || stops.length < 2) {
-      continue
+      stops = await getBusRouteStops(bus.bus_id)
+      if (!stops || stops.length < 2) {
+        continue
+      }
     }
 
     const fromIdx = stops.findIndex((s) => {
