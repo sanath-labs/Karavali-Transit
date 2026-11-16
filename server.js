@@ -60,6 +60,21 @@ const activeOtps = {}
 const ownerSessions = createOwnerSessionManager()
 const conductorSessions = createConductorSessionManager()
 
+// High-efficiency in-memory bus stop cache (60s TTL)
+let cachedBusStops = null
+let busStopsCacheTs = 0
+const BUS_STOPS_CACHE_TTL = 60000
+
+async function getCachedAllBusStops() {
+  const now = Date.now()
+  if (cachedBusStops && now - busStopsCacheTs < BUS_STOPS_CACHE_TTL) {
+    return cachedBusStops
+  }
+  cachedBusStops = await getAllBusStops()
+  busStopsCacheTs = now
+  return cachedBusStops
+}
+
 export { conductorSessions }
 
 function publicBusSnapshot(buses) {
@@ -1060,6 +1075,7 @@ app.post('/api/conductor/end-shift', handleEndDutyShift)
 
 // 17. CONDUCTOR ROUTE STOPS: Get Timetable Stops for Active Bus
 app.get('/api/conductor/buses/:busId/stops', async (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120')
   const busId = Number(req.params.busId)
   const stops = await getBusRouteStops(busId)
   res.json({ success: true, stops: stops || [] })
@@ -1132,7 +1148,8 @@ app.get('/api/public/stops/nearby', async (req, res) => {
 // 3. Get all verified coastal stops
 app.get(['/api/public/stops', '/api/public/stops/all'], async (req, res) => {
   try {
-    const stops = await getAllBusStops()
+    res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300')
+    const stops = await getCachedAllBusStops()
     res.json({ success: true, count: stops.length, stops })
   } catch (err) {
     console.error('Error in /api/public/stops:', err)
