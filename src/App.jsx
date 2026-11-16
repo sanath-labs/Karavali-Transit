@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import io from 'socket.io-client'
 import { apiUrl, socketUrl } from './api.js'
 import OfficialNavigation from './OfficialNavigation.jsx'
 import PassengerPortal from './PassengerPortal.jsx'
-import ConductorPortal from './ConductorPortal.jsx'
-import OwnerPortal from './OwnerPortal.jsx'
 import './App.css'
+
+const ConductorPortal = lazy(() => import('./ConductorPortal.jsx'))
+const OwnerPortal = lazy(() => import('./OwnerPortal.jsx'))
 
 const socket = io(socketUrl)
 
@@ -211,37 +212,55 @@ function App() {
         )}
 
         {role === 'conductor' && (
-          <ConductorPortal
-            socket={socket}
-            liveBuses={liveBuses}
-            initialVehicleNumber={conductorVehicleInput}
-            onExitToPassenger={() => {
-              setRole('passenger')
-              setPassengerScreen(1)
-            }}
-          />
+          <Suspense
+            fallback={
+              <div className="py-24 text-center space-y-3">
+                <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs font-bold text-slate-600">Loading Conductor Console...</p>
+              </div>
+            }
+          >
+            <ConductorPortal
+              socket={socket}
+              liveBuses={liveBuses}
+              initialVehicleNumber={conductorVehicleInput}
+              onExitToPassenger={() => {
+                setRole('passenger')
+                setPassengerScreen(1)
+              }}
+            />
+          </Suspense>
         )}
 
         {role === 'owner' && (
-          <OwnerPortal
-            ownerEmail={ownerEmail}
-            setOwnerEmail={setOwnerEmail}
-            ownerAgencyName={ownerAgencyName}
-            setOwnerAgencyName={setOwnerAgencyName}
-            isOwnerAuthenticated={isOwnerAuthenticated}
-            setIsOwnerAuthenticated={setIsOwnerAuthenticated}
-            ownerToken={ownerToken}
-            setOwnerToken={setOwnerToken}
-            onExitToPassenger={() => {
-              setRole('passenger')
-              setPassengerScreen(1)
-            }}
-            onSwitchToConductor={(vehicleNumber, pin) => {
-              setConductorVehicleInput(vehicleNumber)
-              setConductorPinInput(pin)
-              setRole('conductor')
-            }}
-          />
+          <Suspense
+            fallback={
+              <div className="py-24 text-center space-y-3">
+                <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs font-bold text-slate-600">Loading Agency Fleet Console...</p>
+              </div>
+            }
+          >
+            <OwnerPortal
+              ownerEmail={ownerEmail}
+              setOwnerEmail={setOwnerEmail}
+              ownerAgencyName={ownerAgencyName}
+              setOwnerAgencyName={setOwnerAgencyName}
+              isOwnerAuthenticated={isOwnerAuthenticated}
+              setIsOwnerAuthenticated={setIsOwnerAuthenticated}
+              ownerToken={ownerToken}
+              setOwnerToken={setOwnerToken}
+              onExitToPassenger={() => {
+                setRole('passenger')
+                setPassengerScreen(1)
+              }}
+              onSwitchToConductor={(vehicleNumber, pin) => {
+                setConductorVehicleInput(vehicleNumber)
+                setConductorPinInput(pin)
+                setRole('conductor')
+              }}
+            />
+          </Suspense>
         )}
       </section>
 
