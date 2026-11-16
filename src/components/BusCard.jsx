@@ -1,6 +1,7 @@
+import { memo } from 'react'
 import { Bus, MapPin, Clock, ArrowRight } from 'lucide-react'
 
-export default function BusCard({
+function BusCard({
   bus,
   currentStop,
   destination,
@@ -144,3 +145,5 @@ export default function BusCard({
     </div>
   )
 }
+
+export default memo(BusCard)
