@@ -1991,23 +1991,27 @@ async function getAllBusRouteStopsGrouped() {
 async function getActiveConductorsMap() {
   if (isPostgres()) {
     const res = await pgPool.query(
-      "SELECT conductor_id, name, phone, status, assigned_bus_id FROM conductors WHERE assigned_bus_id IS NOT NULL AND (status = 'Active' OR status IS NULL)"
+      "SELECT conductor_id, name, phone, status, assigned_bus_id FROM conductors WHERE assigned_bus_id IS NOT NULL AND (status = 'Active' OR status IS NULL) ORDER BY conductor_id DESC"
     )
     const map = {}
     for (const r of res.rows) {
-      map[r.assigned_bus_id] = r
+      if (!map[r.assigned_bus_id]) {
+        map[r.assigned_bus_id] = r
+      }
     }
     return map
   }
 
   return new Promise((resolve) => {
     sqliteDb.all(
-      "SELECT conductor_id, name, phone, status, assigned_bus_id FROM conductors WHERE assigned_bus_id IS NOT NULL AND (status = 'Active' OR status IS NULL)",
+      "SELECT conductor_id, name, phone, status, assigned_bus_id FROM conductors WHERE assigned_bus_id IS NOT NULL AND (status = 'Active' OR status IS NULL) ORDER BY conductor_id DESC",
       (err, rows) => {
         if (err || !rows) return resolve({})
         const map = {}
         for (const r of rows) {
-          map[r.assigned_bus_id] = r
+          if (!map[r.assigned_bus_id]) {
+            map[r.assigned_bus_id] = r
+          }
         }
         resolve(map)
       }
@@ -2076,7 +2080,24 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
           status: 'Active',
         }
       } else {
-        continue
+        if (isPostgres()) {
+          const cRes = await pgPool.query(
+            "SELECT conductor_id, name, phone, status FROM conductors WHERE assigned_bus_id = $1 AND (status = 'Active' OR status IS NULL) LIMIT 1",
+            [bus.bus_id]
+          )
+          conductor = cRes.rows[0] || null
+        } else {
+          conductor = await new Promise((resolve) => {
+            sqliteDb.get(
+              "SELECT conductor_id, name, phone, status FROM conductors WHERE assigned_bus_id = ? AND (status = 'Active' OR status IS NULL) LIMIT 1",
+              [bus.bus_id],
+              (err, row) => resolve(err ? null : row || null)
+            )
+          })
+        }
+        if (!conductor) {
+          continue
+        }
       }
     }
 
