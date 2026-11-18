@@ -878,8 +878,16 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
   const hdg = Number(heading) || 0
   const ts = Number(timestamp) || Date.now()
 
-  // Validate Latitude & Longitude bounds (Coastal Karnataka NH-66 Corridor)
-  if (isNaN(lat) || isNaN(lng) || lat < 12.0 || lat > 15.0 || lng < 73.5 || lng > 76.0) {
+  // Validate Latitude & Longitude bounds (Coastal Karnataka NH-66 Corridor by default, or Local Laptop Testing)
+  const isLocalAllowed = Boolean(req.body.allow_local || req.headers['x-allow-local-gps'] === 'true')
+  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid coordinates: Latitude and longitude are malformed.',
+    })
+  }
+
+  if (!isLocalAllowed && (lat < 12.0 || lat > 15.0 || lng < 73.5 || lng > 76.0)) {
     return res.status(400).json({
       success: false,
       error: 'Invalid coordinates: GPS location is outside the coastal Karnataka corridor.',
@@ -1447,9 +1455,12 @@ io.on('connection', (socket) => {
     const lat = Number(data.lat || data.latitude)
     const lng = Number(data.lng || data.longitude)
     if (!isNaN(lat) && !isNaN(lng)) {
-      if (lat < 12.0 || lat > 15.0 || lng < 73.5 || lng > 76.0) {
-        console.warn(`[GPS Out of Range Rejected] Bus #${data.bus_id} coords (${lat}, ${lng}) outside coastal corridor`)
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        console.warn(`[GPS Out of Range Rejected] Bus #${data.bus_id} invalid coords (${lat}, ${lng})`)
         return
+      }
+      if (!data.allow_local && (lat < 12.0 || lat > 15.0 || lng < 73.5 || lng > 76.0)) {
+        console.info(`[GPS Notice] Bus #${data.bus_id} local testing coords (${lat.toFixed(4)}, ${lng.toFixed(4)})`)
       }
     }
 

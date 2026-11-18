@@ -35,6 +35,7 @@ export default function ConductorPortal({
   socket,
   liveBuses = {},
   onExitToPassenger,
+  onViewOnRadar,
   initialVehicleNumber = '',
 }) {
   // Step navigation: 1 = Email, 2 = Email OTP, 3 = Mobile Entry, 4 = Status Check / Register, 5 = Conductor Dashboard
@@ -441,7 +442,7 @@ export default function ConductorPortal({
   const handleStartLiveTracking = () => {
     setGpsErrorMessage('')
 
-    if (!('geolocation' in navigator)) {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setGpsPermissionState('unsupported')
       setGpsStatus('ERROR')
       setGpsErrorMessage('HTML5 Geolocation is not supported by your browser.')
@@ -457,94 +458,116 @@ export default function ConductorPortal({
     setGpsPermissionState('requesting')
     playDutyChime(750, 0.15)
 
+    const transmitLocation = async (position) => {
+      const lat = position.coords.latitude
+      const lng = position.coords.longitude
+      const accuracy = Math.round(position.coords.accuracy || 0)
+      const speedKmH =
+        position.coords.speed !== null && position.coords.speed >= 0
+          ? Math.round(position.coords.speed * 3.6)
+          : 0
+      const headingDeg =
+        position.coords.heading !== null && !isNaN(position.coords.heading)
+          ? Math.round(position.coords.heading)
+          : 0
+
+      setCurrentLat(lat)
+      setCurrentLng(lng)
+      setCurrentSpeed(speedKmH)
+      setCurrentHeading(headingDeg)
+      setGpsAccuracy(accuracy)
+      setLastGpsTimestamp(Date.now())
+      setGpsPermissionState('granted')
+      setGpsStatus('LIVE')
+      setIsLiveTracking(true)
+      setGpsErrorMessage('')
+
+      const token =
+        conductorToken || localStorage.getItem('karavali_conductor_token') || ''
+      const telemetryPayload = {
+        bus_id: activeBus.bus_id,
+        vehicle_number: activeBus.vehicle_number,
+        latitude: lat,
+        longitude: lng,
+        accuracy,
+        speed: speedKmH,
+        heading: headingDeg,
+        crowd_status: crowdStatus,
+        passenger_count: passengerCount,
+        timestamp: Date.now(),
+        allow_local: true,
+      }
+
+      // Secure REST transmission with Conductor Token & Local GPS bypass
+      try {
+        await fetch(apiUrl('/api/conductor/gps-location'), {
+          method: 'POST',
+          headers: conductorHeaders(token, {
+            'Content-Type': 'application/json',
+            'x-allow-local-gps': 'true',
+          }),
+          body: JSON.stringify(telemetryPayload),
+        })
+      } catch (postErr) {
+        console.warn('REST telemetry post error:', postErr.message)
+      }
+
+      // Low-latency WebSocket transmission with Conductor Token
+      if (socket && socket.connected) {
+        socket.emit('update_location', {
+          ...telemetryPayload,
+          lat,
+          lng,
+          token,
+          allow_local: true,
+        })
+      }
+    }
+
+    const handleGeoError = (err) => {
+      console.warn('Conductor GPS Geolocation Error:', err)
+      let userMsg = 'Unable to acquire GPS signal from your device.'
+      if (err.code === 1) {
+        setGpsPermissionState('denied')
+        setIsLiveTracking(false)
+        setGpsStatus('ERROR')
+        userMsg =
+          'Location permission was denied. Please allow location access in your browser settings to stream GPS.'
+      } else if (err.code === 2) {
+        setGpsPermissionState('prompt')
+        userMsg =
+          'GPS position unavailable. Please ensure location services are enabled on your laptop/device.'
+      } else if (err.code === 3) {
+        setGpsPermissionState('prompt')
+        userMsg = 'GPS satellite/network fix timed out. Waiting for signal in open sky...'
+      }
+      setGpsErrorMessage(userMsg)
+      playDutyChime(320, 0.3)
+    }
+
     try {
-      const watchId = navigator.geolocation.watchPosition(
-        async (position) => {
-          const lat = position.coords.latitude
-          const lng = position.coords.longitude
-          const accuracy = Math.round(position.coords.accuracy || 0)
-          const speedKmH =
-            position.coords.speed !== null && position.coords.speed >= 0
-              ? Math.round(position.coords.speed * 3.6)
-              : 0
-          const headingDeg =
-            position.coords.heading !== null && !isNaN(position.coords.heading)
-              ? Math.round(position.coords.heading)
-              : 0
+      const geoOptions = {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 15000,
+      }
 
-          setCurrentLat(lat)
-          setCurrentLng(lng)
-          setCurrentSpeed(speedKmH)
-          setCurrentHeading(headingDeg)
-          setGpsAccuracy(accuracy)
-          setLastGpsTimestamp(Date.now())
-          setGpsPermissionState('granted')
-          setGpsStatus('LIVE')
-          setIsLiveTracking(true)
-          setGpsErrorMessage('')
-
-          const token =
-            conductorToken || localStorage.getItem('karavali_conductor_token') || ''
-          const telemetryPayload = {
-            bus_id: activeBus.bus_id,
-            vehicle_number: activeBus.vehicle_number,
-            latitude: lat,
-            longitude: lng,
-            accuracy,
-            speed: speedKmH,
-            heading: headingDeg,
-            crowd_status: crowdStatus,
-            passenger_count: passengerCount,
-            timestamp: Date.now(),
-          }
-
-          // Secure REST transmission with Conductor Token
-          try {
-            await fetch(apiUrl('/api/conductor/gps-location'), {
-              method: 'POST',
-              headers: conductorHeaders(token, { 'Content-Type': 'application/json' }),
-              body: JSON.stringify(telemetryPayload),
-            })
-          } catch (postErr) {
-            console.warn('REST telemetry post error:', postErr.message)
-          }
-
-          // Low-latency WebSocket transmission with Conductor Token
-          if (socket && socket.connected) {
-            socket.emit('update_location', {
-              ...telemetryPayload,
-              lat,
-              lng,
-              token,
-            })
-          }
+      // 1. Immediate single-shot fix for instantaneous laptop location detection
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          transmitLocation(pos)
         },
         (err) => {
-          console.warn('Conductor GPS Geolocation Error:', err)
-          setIsLiveTracking(false)
-          setGpsStatus('ERROR')
-
-          let userMsg = 'Unable to acquire GPS signal from your device.'
-          if (err.code === 1) {
-            setGpsPermissionState('denied')
-            userMsg =
-              'Location permission was denied. Please allow location access in your mobile browser settings to stream GPS.'
-          } else if (err.code === 2) {
-            setGpsPermissionState('prompt')
-            userMsg =
-              'GPS position unavailable. Please ensure GPS/Location is enabled on your Android phone.'
-          } else if (err.code === 3) {
-            setGpsPermissionState('prompt')
-            userMsg = 'GPS satellite fix timed out. Waiting for signal in open sky...'
-          }
-          setGpsErrorMessage(userMsg)
-          playDutyChime(320, 0.3)
+          console.warn('Initial getCurrentPosition notice:', err.message)
         },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 15000,
-        }
+        geoOptions
+      )
+
+      // 2. Continuous real-time position watcher
+      const watchId = navigator.geolocation.watchPosition(
+        transmitLocation,
+        handleGeoError,
+        geoOptions
       )
 
       setGeoWatchId(watchId)
@@ -1321,6 +1344,35 @@ export default function ConductorPortal({
             </button>
           ) : (
             <div className="space-y-3">
+              {/* Local Laptop / Phone GPS Coordinates Active Banner */}
+              {isLiveTracking && currentLat && currentLng && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-950 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Navigation size={20} className="animate-spin" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-emerald-950 m-0">
+                        📍 Live GPS Transmitting from this Device: {currentLat.toFixed(5)}, {currentLng.toFixed(5)}
+                      </p>
+                      <p className="text-[11px] text-emerald-700 m-0 font-bold">
+                        Accuracy: ±{gpsAccuracy || 10}m • Speed: {currentSpeed} km/h • Bus: {activeBus?.vehicle_number}
+                      </p>
+                    </div>
+                  </div>
+                  {onViewOnRadar && (
+                    <button
+                      type="button"
+                      onClick={() => onViewOnRadar(activeBus?.bus_id)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
+                    >
+                      <Compass size={14} />
+                      <span>View Live on Passenger Radar Map ➔</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {!isLiveTracking ? (
                   <button

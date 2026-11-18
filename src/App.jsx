@@ -13,6 +13,7 @@ const socket = io(socketUrl)
 function App() {
   const [role, setRole] = useState('passenger') // 'passenger' | 'conductor' | 'owner'
   const [passengerScreen, setPassengerScreen] = useState(1) // 1: Home, 2: Radar/Results, 3: Details, 4: Tracking
+  const [trackedBusId, setTrackedBusId] = useState(null)
   const [preselectedStop, setPreselectedStop] = useState(null)
   const [activeModal, setActiveModal] = useState(null)
 
@@ -204,6 +205,7 @@ function App() {
           <PassengerPortal
             preselectedStop={preselectedStop}
             initialScreen={passengerScreen}
+            initialSelectedBusId={trackedBusId}
             lang={lang}
             onOpenFindStop={() => setActiveModal('findStop')}
             liveBuses={liveBuses}
@@ -227,6 +229,11 @@ function App() {
               onExitToPassenger={() => {
                 setRole('passenger')
                 setPassengerScreen(1)
+              }}
+              onViewOnRadar={(busId) => {
+                if (busId) setTrackedBusId(busId)
+                setPassengerScreen(4)
+                setRole('passenger')
               }}
             />
           </Suspense>

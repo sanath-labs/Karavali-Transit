@@ -26,6 +26,7 @@ export default function PassengerPortal({
   preselectedStop,
   onOpenFindStop,
   initialScreen = 1,
+  initialSelectedBusId = null,
   lang = 'en',
   liveBuses = {},
   socket: propSocket = null,
@@ -87,6 +88,28 @@ export default function PassengerPortal({
       setLiveTelemetry((prev) => ({ ...prev, ...liveBuses }))
     }
   }, [liveBuses])
+
+  // Synchronize initial selected bus from navigation or conductor view
+  useEffect(() => {
+    if (initialSelectedBusId && buses.length > 0) {
+      const match = buses.find((b) => String(b.bus_id) === String(initialSelectedBusId))
+      if (match) setSelectedBus(match)
+    }
+  }, [initialSelectedBusId, buses])
+
+  // When viewing Live Tracking (Screen 4), ensure a bus broadcasting live GPS is prioritized
+  useEffect(() => {
+    if (screen === 4) {
+      const curLive = selectedBus && liveTelemetry[selectedBus.bus_id]
+      const hasCoords = curLive?.latitude && curLive?.longitude
+      if (!hasCoords) {
+        const liveCandidate = enrichedBuses.find((b) => b.is_live && b.latitude && b.longitude)
+        if (liveCandidate) {
+          setSelectedBus(liveCandidate)
+        }
+      }
+    }
+  }, [screen, enrichedBuses, liveTelemetry, selectedBus])
 
   // Popular Routes
   const POPULAR_ROUTES = [
@@ -270,7 +293,11 @@ export default function PassengerPortal({
       if (data.success && Array.isArray(data.buses)) {
         setBuses(data.buses)
         if (data.buses.length > 0) {
-          setSelectedBus(data.buses[0])
+          const matchInitial = initialSelectedBusId
+            ? data.buses.find((b) => String(b.bus_id) === String(initialSelectedBusId))
+            : null
+          const liveCandidate = data.buses.find((b) => b.is_live && b.latitude && b.longitude)
+          setSelectedBus(matchInitial || liveCandidate || data.buses[0])
         } else {
           setSelectedBus(null)
         }
@@ -390,10 +417,14 @@ export default function PassengerPortal({
       const hasCoords = Boolean(
         typeof live.latitude === 'number' &&
           typeof live.longitude === 'number' &&
-          live.latitude >= 12.0 &&
-          live.latitude <= 15.0 &&
-          live.longitude >= 73.5 &&
-          live.longitude <= 76.0
+          !isNaN(live.latitude) &&
+          !isNaN(live.longitude) &&
+          live.latitude !== 0 &&
+          live.longitude !== 0 &&
+          live.latitude >= -90 &&
+          live.latitude <= 90 &&
+          live.longitude >= -180 &&
+          live.longitude <= 180
       )
 
       // Explicit offline check: Conductor ended shift, stopped tracking, or marked OFFLINE
@@ -472,7 +503,10 @@ export default function PassengerPortal({
       const match = enrichedBuses.find((b) => b.bus_id === selectedBus.bus_id)
       return match || selectedBus
     }
-    return enrichedBuses[0] || null
+    const liveCandidate = enrichedBuses.find(
+      (b) => b.is_live && typeof b.latitude === 'number' && typeof b.longitude === 'number'
+    )
+    return liveCandidate || enrichedBuses.find((b) => b.is_on_shift) || enrichedBuses[0] || null
   }, [selectedBus, enrichedBuses])
 
   const trackedTelemetry = useMemo(() => {
@@ -500,10 +534,14 @@ export default function PassengerPortal({
     return Boolean(
       typeof lat === 'number' &&
         typeof lng === 'number' &&
-        lat >= 12.0 &&
-        lat <= 15.0 &&
-        lng >= 73.5 &&
-        lng <= 76.0
+        !isNaN(lat) &&
+        !isNaN(lng) &&
+        lat !== 0 &&
+        lng !== 0 &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180
     )
   }, [trackedTelemetry])
 
@@ -1063,7 +1101,7 @@ export default function PassengerPortal({
             </Marker>
           )}
 
-          <MapViewportController bounds={mapBounds} center={busCoords} />
+          <MapViewportController bounds={mapBounds} center={busCoords} hasLiveCoordinates={hasLiveCoordinates} />
         </MapContainer>
 
         {/* Informational overlay when conductor has not yet started GPS telemetry */}
