@@ -8,18 +8,21 @@ import {
   RotateCw,
   Compass,
   ArrowRight,
+  Crosshair,
+  Layers,
+  Navigation,
 } from 'lucide-react'
 import io from 'socket.io-client'
-import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, Polyline, Marker, Popup, Circle } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { apiUrl, socketUrl } from './api.js'
-import { OFFICIAL_9_CORRIDOR_STOPS } from './transitUtils.js'
+import { OFFICIAL_9_CORRIDOR_STOPS, calculateHaversineDistance } from './transitUtils.js'
 import JourneySearchCard from './components/JourneySearchCard.jsx'
 import PopularJourneys from './components/PopularJourneys.jsx'
 import BusCard from './components/BusCard.jsx'
 import RouteTimeline from './components/RouteTimeline.jsx'
 import LiveTrackingHud from './components/LiveTrackingHud.jsx'
-import { busLiveIcon, stopPinIcon } from './mapIcons.js'
+import { busLiveIcon, stopPinIcon, userLocationIcon } from './mapIcons.js'
 import { MapViewportController } from './components/MapMarkers.jsx'
 
 export default function PassengerPortal({
@@ -81,6 +84,12 @@ export default function PassengerPortal({
   const [secondsAgo, setSecondsAgo] = useState(15)
   const [liveTelemetry, setLiveTelemetry] = useState(liveBuses || {})
   const socketRef = useRef(null)
+
+  // Google Maps Style Controls & User Geolocation (Screen 4)
+  const [mapLayer, setMapLayer] = useState('street') // 'street' | 'satellite'
+  const [passengerLocation, setPassengerLocation] = useState(null) // { lat, lng, accuracy }
+  const [isLocatingPassenger, setIsLocatingPassenger] = useState(false)
+  const [flyTarget, setFlyTarget] = useState(null)
 
   // Sync liveTelemetry when liveBuses prop updates from App
   useEffect(() => {
@@ -565,6 +574,55 @@ export default function PassengerPortal({
     return [13.2208, 74.7431]
   }, [hasLiveCoordinates, trackedTelemetry])
 
+  // Real-time distance calculation between passenger device and bus (Haversine)
+  const distanceToBusKm = useMemo(() => {
+    if (!passengerLocation || !hasLiveCoordinates) return null
+    return calculateHaversineDistance(
+      passengerLocation.lat,
+      passengerLocation.lng,
+      busCoords[0],
+      busCoords[1]
+    )
+  }, [passengerLocation, hasLiveCoordinates, busCoords])
+
+  // Locate Passenger Device (Google Maps-like "My Location" crosshair)
+  const handleLocatePassenger = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      alert('Location services are not supported by your browser.')
+      return
+    }
+    setIsLocatingPassenger(true)
+
+    const onPos = (pos) => {
+      const coords = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: Math.round(pos.coords.accuracy || 20),
+      }
+      setPassengerLocation(coords)
+      setFlyTarget([coords.lat, coords.lng, 16])
+      setIsLocatingPassenger(false)
+    }
+
+    const onErr = (err) => {
+      console.warn('High-accuracy geolocation failed, falling back to standard:', err.message)
+      navigator.geolocation.getCurrentPosition(
+        onPos,
+        (standardErr) => {
+          setIsLocatingPassenger(false)
+          alert('Could not detect your exact position. Please allow location permissions in your browser.')
+        },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+      )
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      onPos,
+      onErr,
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  }
+
   // Full corridor 9-stop timeline list for Screen 3
   const corridorTimelineStops = useMemo(() => {
     if (routeDetails?.stops?.length === 9) {
@@ -1035,25 +1093,108 @@ export default function PassengerPortal({
         </button>
       </div>
 
-      {/* Large Responsive Map Container */}
+      {/* Large Responsive Map Container (Google Maps Experience) */}
       <div className="relative w-full h-[560px] sm:h-[640px] md:h-[700px] rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
+        {/* Google Maps Style Layer Switcher (Street vs Satellite) */}
+        <div className="absolute top-4 right-4 z-20 flex items-center bg-white/95 backdrop-blur-md rounded-2xl p-1 shadow-md border border-slate-200 text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setMapLayer('street')}
+            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+              mapLayer === 'street'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            <Layers size={13} />
+            <span>Map</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMapLayer('satellite')}
+            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+              mapLayer === 'satellite'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            <span>🛰️ Satellite</span>
+          </button>
+        </div>
+
+        {/* Google Maps Style Floating Navigation Action Tools */}
+        <div className="absolute top-18 right-4 z-20 flex flex-col gap-2">
+          {/* 🎯 Locate Me Button (Pulsing Blue Dot) */}
+          <button
+            type="button"
+            onClick={handleLocatePassenger}
+            className={`w-11 h-11 rounded-2xl bg-white/95 backdrop-blur-md border shadow-md flex items-center justify-center transition cursor-pointer active:scale-95 ${
+              passengerLocation
+                ? 'text-blue-600 border-blue-400 bg-blue-50/50'
+                : 'text-slate-700 border-slate-200 hover:text-blue-600'
+            }`}
+            title="Locate My Exact Position (Google Maps GPS)"
+            aria-label="Locate My Position"
+          >
+            {isLocatingPassenger ? (
+              <RotateCw size={19} className="animate-spin text-blue-600" />
+            ) : (
+              <Crosshair size={20} strokeWidth={2.4} />
+            )}
+          </button>
+
+          {/* 🚍 Focus Live Bus */}
+          {hasLiveCoordinates && (
+            <button
+              type="button"
+              onClick={() => setFlyTarget([busCoords[0], busCoords[1], 16])}
+              className="w-11 h-11 rounded-2xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-md flex items-center justify-center text-slate-700 hover:text-emerald-600 transition cursor-pointer active:scale-95"
+              title="Focus Live Bus on Map"
+              aria-label="Focus Live Bus"
+            >
+              <Bus size={20} strokeWidth={2.4} className="text-emerald-600" />
+            </button>
+          )}
+
+          {/* 🛣️ Reset Corridor Route Overview */}
+          <button
+            type="button"
+            onClick={() => setFlyTarget(null)}
+            className="w-11 h-11 rounded-2xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-md flex items-center justify-center text-slate-700 hover:text-blue-600 transition cursor-pointer active:scale-95"
+            title="Reset to Full NH-66 Corridor Route"
+            aria-label="Corridor Overview"
+          >
+            <Navigation size={18} strokeWidth={2.4} />
+          </button>
+        </div>
+
         <MapContainer
           center={busCoords}
-          zoom={11}
+          zoom={12}
           zoomControl={true}
           className="w-full h-full z-0"
         >
+          {/* Dynamic Google Maps Style Tiles (CartoDB Voyager or Esri Satellite) */}
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            key={mapLayer}
+            attribution={
+              mapLayer === 'satellite'
+                ? '&copy; Esri &mdash; Earthstar Geographics'
+                : '&copy; OpenStreetMap contributors &copy; CARTO'
+            }
+            url={
+              mapLayer === 'satellite'
+                ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+            }
           />
 
           {/* NH-66 Coastal Corridor Polyline */}
           <Polyline
             positions={polylineCoordinates}
-            color="#2563eb"
+            color={mapLayer === 'satellite' ? '#38bdf8' : '#2563eb'}
             weight={6}
-            opacity={0.88}
+            opacity={0.92}
           />
 
           {/* Labeled Pins for All 9 Official Corridor Stops */}
@@ -1084,6 +1225,36 @@ export default function PassengerPortal({
             )
           })}
 
+          {/* Passenger Device Location (🔵 Google Maps Blue Dot with Accuracy Halo) */}
+          {passengerLocation && (
+            <>
+              <Circle
+                center={[passengerLocation.lat, passengerLocation.lng]}
+                radius={passengerLocation.accuracy || 35}
+                pathOptions={{
+                  color: '#2563eb',
+                  fillColor: '#3b82f6',
+                  fillOpacity: 0.18,
+                  weight: 1.5,
+                }}
+              />
+              <Marker
+                position={[passengerLocation.lat, passengerLocation.lng]}
+                icon={userLocationIcon}
+              >
+                <Popup>
+                  <div className="text-xs font-bold">
+                    📍 Your Current Location (Device GPS)
+                    <br />
+                    <span className="text-slate-500 font-normal">
+                      Accuracy: ±{passengerLocation.accuracy || 20}m
+                    </span>
+                  </div>
+                </Popup>
+              </Marker>
+            </>
+          )}
+
           {/* Live Bus Marker (Strictly when actual GPS coordinates exist) */}
           {activeSelectedBus && hasLiveCoordinates && (
             <Marker position={[trackedTelemetry.latitude, trackedTelemetry.longitude]} icon={busLiveIcon}>
@@ -1101,7 +1272,12 @@ export default function PassengerPortal({
             </Marker>
           )}
 
-          <MapViewportController bounds={mapBounds} center={busCoords} hasLiveCoordinates={hasLiveCoordinates} />
+          <MapViewportController
+            bounds={mapBounds}
+            center={busCoords}
+            hasLiveCoordinates={hasLiveCoordinates}
+            flyTarget={flyTarget}
+          />
         </MapContainer>
 
         {/* Informational overlay when conductor has not yet started GPS telemetry */}
@@ -1112,13 +1288,14 @@ export default function PassengerPortal({
           </div>
         )}
 
-        {/* Floating Bottom HUD Card */}
+        {/* Floating Bottom HUD Card with Real-time Distance */}
         <LiveTrackingHud
           bus={activeSelectedBus}
           telemetry={trackedTelemetry}
           status={currentTrackingStatus}
           secondsAgo={secondsAgo}
           journeyInfo={{ from: currentStop, to: destination }}
+          userDistanceKm={distanceToBusKm}
         />
       </div>
     </div>

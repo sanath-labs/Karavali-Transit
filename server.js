@@ -894,8 +894,8 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
     })
   }
 
-  // Validate Accuracy: reject if accuracy is worse than 1000m
-  if (acc > 1000) {
+  // Validate Accuracy: reject if accuracy is worse than 1000m (corridor production strictness, bypassed for local testing)
+  if (!isLocalAllowed && acc > 1000) {
     return res.status(400).json({
       success: false,
       error: 'GPS accuracy too low (> 1000m). Waiting for better satellite fix.',

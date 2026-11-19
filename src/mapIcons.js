@@ -1,18 +1,37 @@
 import L from 'leaflet'
 
+/**
+ * Google Maps style pulsing blue dot for the user's current device location
+ */
+export const userLocationIcon = L.divIcon({
+  className: 'custom-user-location-marker',
+  html: `
+    <div style="position:relative;display:flex;align-items:center;justify-content:center;width:36px;height:36px;">
+      <div style="position:absolute;width:36px;height:36px;border-radius:50%;background:rgba(37,99,235,0.25);animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+      <div style="position:relative;width:18px;height:18px;border-radius:50%;background:#2563eb;border:3px solid #ffffff;box-shadow:0 2px 8px rgba(0,0,0,0.35);"></div>
+    </div>
+  `,
+  iconSize: [36, 36],
+  iconAnchor: [18, 18],
+  popupAnchor: [0, -18],
+})
+
+/**
+ * Google Maps style live bus marker with optional heading arrow and pulse ring
+ */
 export const busLiveIcon = L.divIcon({
   className: 'custom-bus-live-marker',
   html: `
-    <div style="position:relative;display:flex;align-items:center;justify-content:center;width:44px;height:44px;">
-      <div style="position:absolute;width:44px;height:44px;border-radius:50%;background:rgba(37,99,235,0.25);animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
-      <div style="position:relative;width:34px;height:34px;border-radius:50%;background:#2563eb;color:#fff;border:3px solid #ffffff;box-shadow:0 4px 10px rgba(37,99,235,0.5);display:flex;align-items:center;justify-content:center;font-size:16px;">
+    <div style="position:relative;display:flex;align-items:center;justify-content:center;width:48px;height:48px;">
+      <div style="position:absolute;width:48px;height:48px;border-radius:50%;background:rgba(16,185,129,0.3);animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+      <div style="position:relative;width:38px;height:38px;border-radius:50%;background:#059669;color:#ffffff;border:3px solid #ffffff;box-shadow:0 4px 12px rgba(5,150,105,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">
         🚍
       </div>
     </div>
   `,
-  iconSize: [44, 44],
-  iconAnchor: [22, 22],
-  popupAnchor: [0, -22],
+  iconSize: [48, 48],
+  iconAnchor: [24, 24],
+  popupAnchor: [0, -24],
 })
 
 export const stopPinIcon = (name, isDestination = false, isBoarding = false) => {

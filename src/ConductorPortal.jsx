@@ -25,7 +25,7 @@ import {
   X,
 } from 'lucide-react'
 import { apiUrl, conductorHeaders } from './api.js'
-import { formatIndianMobile } from './transitUtils.js'
+import { formatIndianMobile, OFFICIAL_9_CORRIDOR_STOPS } from './transitUtils.js'
 
 function getNow() {
   return Date.now()
@@ -552,13 +552,22 @@ export default function ConductorPortal({
         timeout: 15000,
       }
 
-      // 1. Immediate single-shot fix for instantaneous laptop location detection
+      // 1. Immediate single-shot fix with graceful high-accuracy fallback for laptops
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           transmitLocation(pos)
         },
-        (err) => {
-          console.warn('Initial getCurrentPosition notice:', err.message)
+        (highErr) => {
+          console.warn('High-accuracy GPS fix failed on laptop, falling back to standard Wi-Fi fix:', highErr.message)
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              transmitLocation(pos)
+            },
+            (standardErr) => {
+              console.warn('Standard geolocation notice:', standardErr.message)
+            },
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+          )
         },
         geoOptions
       )
@@ -574,6 +583,66 @@ export default function ConductorPortal({
     } catch (launchErr) {
       setGpsStatus('ERROR')
       setGpsErrorMessage(`Failed to start geolocation: ${launchErr.message}`)
+    }
+  }
+
+  // Quick Calibration to Any Official Corridor Stop or Custom Coordinates
+  const handleCalibrateLocation = async (lat, lng, label = 'Corridor Location') => {
+    if (!activeBus) {
+      alert('Please select a valid bus before calibrating location.')
+      return
+    }
+
+    setCurrentLat(lat)
+    setCurrentLng(lng)
+    setCurrentSpeed(34)
+    setCurrentHeading(350)
+    setGpsAccuracy(5)
+    setLastGpsTimestamp(Date.now())
+    setGpsPermissionState('granted')
+    setGpsStatus('LIVE')
+    setIsLiveTracking(true)
+    setGpsErrorMessage('')
+    setNotice(`📍 Bus live location calibrated to ${label}: ${lat.toFixed(4)}, ${lng.toFixed(4)}`)
+    playDutyChime(880, 0.15)
+
+    const token =
+      conductorToken || localStorage.getItem('karavali_conductor_token') || ''
+    const telemetryPayload = {
+      bus_id: activeBus.bus_id,
+      vehicle_number: activeBus.vehicle_number,
+      latitude: lat,
+      longitude: lng,
+      accuracy: 5,
+      speed: 34,
+      heading: 350,
+      crowd_status: crowdStatus,
+      passenger_count: passengerCount,
+      timestamp: Date.now(),
+      allow_local: true,
+    }
+
+    try {
+      await fetch(apiUrl('/api/conductor/gps-location'), {
+        method: 'POST',
+        headers: conductorHeaders(token, {
+          'Content-Type': 'application/json',
+          'x-allow-local-gps': 'true',
+        }),
+        body: JSON.stringify(telemetryPayload),
+      })
+    } catch (err) {
+      console.warn('Manual calibration post error:', err.message)
+    }
+
+    if (socket && socket.connected) {
+      socket.emit('update_location', {
+        ...telemetryPayload,
+        lat,
+        lng,
+        token,
+        allow_local: true,
+      })
     }
   }
 
@@ -1402,6 +1471,34 @@ export default function ConductorPortal({
                   <LogOut size={18} />
                   <span>End Shift &amp; Close Ledger</span>
                 </button>
+              </div>
+
+              {/* Quick Stop Calibration for Testing along Coastal NH-66 */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <MapPin size={14} className="text-blue-600" />
+                    <span className="text-xs font-black text-slate-800">
+                      Corridor Stop Calibration (Snap Bus to Exact Stop)
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-bold">
+                    Click any stop to test pinpoint bus tracking
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {OFFICIAL_9_CORRIDOR_STOPS.map((stop) => (
+                    <button
+                      key={stop.stop_id}
+                      type="button"
+                      onClick={() => handleCalibrateLocation(stop.latitude, stop.longitude, stop.stop_name)}
+                      className="px-2.5 py-1.5 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-400 rounded-xl text-xs font-bold text-slate-700 transition cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
+                    >
+                      <span className="text-blue-600 font-mono text-[10px]">#{stop.stop_id}</span>
+                      <span>{stop.stop_name}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}

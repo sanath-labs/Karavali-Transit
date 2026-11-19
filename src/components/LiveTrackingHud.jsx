@@ -7,6 +7,7 @@ export default function LiveTrackingHud({
   secondsAgo = 0,
   nextStop = '',
   journeyInfo = null,
+  userDistanceKm = null,
 }) {
   if (!bus) return null
 
@@ -111,6 +112,19 @@ export default function LiveTrackingHud({
             )}
           </div>
         </div>
+
+        {/* Real-time Distance between Passenger Device & Bus */}
+        {userDistanceKm !== null && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl px-3 py-2 text-xs flex items-center justify-between font-bold shadow-2xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
+              <span className="text-slate-700 font-semibold">Distance to Bus:</span>
+            </div>
+            <strong className="text-blue-950 font-black">
+              {userDistanceKm < 1 ? `${Math.round(userDistanceKm * 1000)} meters` : `${userDistanceKm} km away`}
+            </strong>
+          </div>
+        )}
 
         {/* Conductor & Planned Departure Info */}
         {bus.conductor_name && (
