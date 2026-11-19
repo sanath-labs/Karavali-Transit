@@ -3,6 +3,7 @@ import io from 'socket.io-client'
 import { apiUrl, socketUrl } from './api.js'
 import OfficialNavigation from './OfficialNavigation.jsx'
 import PassengerPortal from './PassengerPortal.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import './App.css'
 
 const ConductorPortal = lazy(() => import('./ConductorPortal.jsx'))
@@ -201,74 +202,76 @@ function App() {
 
       {/* 2. MAIN PORTAL CONTENT */}
       <section className="app-content flex-1 flex flex-col bg-slate-50">
-        {role === 'passenger' && (
-          <PassengerPortal
-            preselectedStop={preselectedStop}
-            initialScreen={passengerScreen}
-            initialSelectedBusId={trackedBusId}
-            lang={lang}
-            onOpenFindStop={() => setActiveModal('findStop')}
-            liveBuses={liveBuses}
-            socket={socket}
-          />
-        )}
-
-        {role === 'conductor' && (
-          <Suspense
-            fallback={
-              <div className="py-24 text-center space-y-3">
-                <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-xs font-bold text-slate-600">Loading Conductor Console...</p>
-              </div>
-            }
-          >
-            <ConductorPortal
-              socket={socket}
+        <ErrorBoundary>
+          {role === 'passenger' && (
+            <PassengerPortal
+              preselectedStop={preselectedStop}
+              initialScreen={passengerScreen}
+              initialSelectedBusId={trackedBusId}
+              lang={lang}
+              onOpenFindStop={() => setActiveModal('findStop')}
               liveBuses={liveBuses}
-              initialVehicleNumber={conductorVehicleInput}
-              onExitToPassenger={() => {
-                setRole('passenger')
-                setPassengerScreen(1)
-              }}
-              onViewOnRadar={(busId) => {
-                if (busId) setTrackedBusId(busId)
-                setPassengerScreen(4)
-                setRole('passenger')
-              }}
+              socket={socket}
             />
-          </Suspense>
-        )}
+          )}
 
-        {role === 'owner' && (
-          <Suspense
-            fallback={
-              <div className="py-24 text-center space-y-3">
-                <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-xs font-bold text-slate-600">Loading Agency Fleet Console...</p>
-              </div>
-            }
-          >
-            <OwnerPortal
-              ownerEmail={ownerEmail}
-              setOwnerEmail={setOwnerEmail}
-              ownerAgencyName={ownerAgencyName}
-              setOwnerAgencyName={setOwnerAgencyName}
-              isOwnerAuthenticated={isOwnerAuthenticated}
-              setIsOwnerAuthenticated={setIsOwnerAuthenticated}
-              ownerToken={ownerToken}
-              setOwnerToken={setOwnerToken}
-              onExitToPassenger={() => {
-                setRole('passenger')
-                setPassengerScreen(1)
-              }}
-              onSwitchToConductor={(vehicleNumber, pin) => {
-                setConductorVehicleInput(vehicleNumber)
-                setConductorPinInput(pin)
-                setRole('conductor')
-              }}
-            />
-          </Suspense>
-        )}
+          {role === 'conductor' && (
+            <Suspense
+              fallback={
+                <div className="py-24 text-center space-y-3">
+                  <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-xs font-bold text-slate-600">Loading Conductor Console...</p>
+                </div>
+              }
+            >
+              <ConductorPortal
+                socket={socket}
+                liveBuses={liveBuses}
+                initialVehicleNumber={conductorVehicleInput}
+                onExitToPassenger={() => {
+                  setRole('passenger')
+                  setPassengerScreen(1)
+                }}
+                onViewOnRadar={(busId) => {
+                  if (busId) setTrackedBusId(busId)
+                  setPassengerScreen(4)
+                  setRole('passenger')
+                }}
+              />
+            </Suspense>
+          )}
+
+          {role === 'owner' && (
+            <Suspense
+              fallback={
+                <div className="py-24 text-center space-y-3">
+                  <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-xs font-bold text-slate-600">Loading Agency Fleet Console...</p>
+                </div>
+              }
+            >
+              <OwnerPortal
+                ownerEmail={ownerEmail}
+                setOwnerEmail={setOwnerEmail}
+                ownerAgencyName={ownerAgencyName}
+                setOwnerAgencyName={setOwnerAgencyName}
+                isOwnerAuthenticated={isOwnerAuthenticated}
+                setIsOwnerAuthenticated={setIsOwnerAuthenticated}
+                ownerToken={ownerToken}
+                setOwnerToken={setOwnerToken}
+                onExitToPassenger={() => {
+                  setRole('passenger')
+                  setPassengerScreen(1)
+                }}
+                onSwitchToConductor={(vehicleNumber, pin) => {
+                  setConductorVehicleInput(vehicleNumber)
+                  setConductorPinInput(pin)
+                  setRole('conductor')
+                }}
+              />
+            </Suspense>
+          )}
+        </ErrorBoundary>
       </section>
 
       {/* 3. OFFICIAL WEBSITE FOOTER */}

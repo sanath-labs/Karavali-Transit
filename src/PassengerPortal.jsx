@@ -89,28 +89,6 @@ export default function PassengerPortal({
     }
   }, [liveBuses])
 
-  // Synchronize initial selected bus from navigation or conductor view
-  useEffect(() => {
-    if (initialSelectedBusId && buses.length > 0) {
-      const match = buses.find((b) => String(b.bus_id) === String(initialSelectedBusId))
-      if (match) setSelectedBus(match)
-    }
-  }, [initialSelectedBusId, buses])
-
-  // When viewing Live Tracking (Screen 4), ensure a bus broadcasting live GPS is prioritized
-  useEffect(() => {
-    if (screen === 4) {
-      const curLive = selectedBus && liveTelemetry[selectedBus.bus_id]
-      const hasCoords = curLive?.latitude && curLive?.longitude
-      if (!hasCoords) {
-        const liveCandidate = enrichedBuses.find((b) => b.is_live && b.latitude && b.longitude)
-        if (liveCandidate) {
-          setSelectedBus(liveCandidate)
-        }
-      }
-    }
-  }, [screen, enrichedBuses, liveTelemetry, selectedBus])
-
   // Popular Routes
   const POPULAR_ROUTES = [
     { from: 'Mangaluru', to: 'Udupi' },
@@ -496,6 +474,28 @@ export default function PassengerPortal({
     }
     return enrichedBuses
   }, [enrichedBuses, activeFilter])
+
+  // Synchronize initial selected bus from navigation or conductor view
+  useEffect(() => {
+    if (initialSelectedBusId && buses.length > 0) {
+      const match = buses.find((b) => String(b.bus_id) === String(initialSelectedBusId))
+      if (match) setSelectedBus(match)
+    }
+  }, [initialSelectedBusId, buses])
+
+  // When viewing Live Tracking (Screen 4), ensure a bus broadcasting live GPS is prioritized
+  useEffect(() => {
+    if (screen === 4) {
+      const curLive = selectedBus && liveTelemetry[selectedBus.bus_id]
+      const hasCoords = curLive?.latitude && curLive?.longitude
+      if (!hasCoords) {
+        const liveCandidate = enrichedBuses.find((b) => b.is_live && b.latitude && b.longitude)
+        if (liveCandidate) {
+          setSelectedBus(liveCandidate)
+        }
+      }
+    }
+  }, [screen, enrichedBuses, liveTelemetry, selectedBus])
 
   // Real-time telemetry for the selected bus
   const activeSelectedBus = useMemo(() => {
