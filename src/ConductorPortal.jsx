@@ -26,7 +26,7 @@ import {
   X,
 } from 'lucide-react'
 import { apiUrl, conductorHeaders } from './api.js'
-import { formatIndianMobile, OFFICIAL_9_CORRIDOR_STOPS } from './transitUtils.js'
+import { formatIndianMobile, OFFICIAL_9_CORRIDOR_STOPS, isWithinCoastalCorridor } from './transitUtils.js'
 
 function getNow() {
   return Date.now()
@@ -650,6 +650,20 @@ export default function ConductorPortal({
         }),
         body: JSON.stringify(telemetryPayload),
       })
+
+      // Also notify calibrate endpoint
+      await fetch(apiUrl('/api/conductor/calibrate-stop'), {
+        method: 'POST',
+        headers: conductorHeaders(token, {
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({
+          bus_id: activeBus.bus_id,
+          stop_name: label,
+          latitude: lat,
+          longitude: lng,
+        }),
+      }).catch(() => {})
     } catch (err) {
       console.warn('Manual calibration post error:', err.message)
     }
@@ -1458,6 +1472,37 @@ export default function ConductorPortal({
                       <span>View Live on Passenger Radar Map ➔</span>
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* Notice when Conductor Device GPS reports an ISP Gateway outside Coastal Highway (e.g. Madikeri) */}
+              {isLiveTracking && currentLat && currentLng && !isWithinCoastalCorridor(currentLat, currentLng) && (
+                <div className="p-4 bg-amber-50 border-2 border-amber-300 text-amber-950 rounded-2xl space-y-2.5 shadow-2xs">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-black text-amber-950 m-0">
+                        ⚠️ Broadband Wi-Fi Hub Detected: Madikeri / Coorg ({currentLat.toFixed(4)}, {currentLng.toFixed(4)})
+                      </h4>
+                      <p className="text-xs text-amber-900 m-0 mt-0.5 leading-relaxed">
+                        Because laptops lack hardware GPS antennas, your broadband ISP placed you in Madikeri (~95 km inland from the NH-66 corridor).
+                        <br />
+                        <strong>Tap your actual starting coastal stop below to snap your bus to its real position on Google Maps:</strong>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {OFFICIAL_9_CORRIDOR_STOPS.map((stop) => (
+                      <button
+                        key={`warn-stop-${stop.stop_id}`}
+                        type="button"
+                        onClick={() => handleCalibrateLocation(stop.latitude, stop.longitude, stop.stop_name)}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black transition cursor-pointer active:scale-95 shadow-xs"
+                      >
+                        📍 Snap to {stop.stop_name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 

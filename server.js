@@ -30,6 +30,7 @@ import {
   initDB,
   insertOwnerActivity,
   isDbConnected,
+  OFFICIAL_9_CORRIDOR_STOPS,
   pruneOldTelemetry,
   recordShift,
   recordTelemetry,
@@ -975,6 +976,81 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
       heading: hdg,
       timestamp: ts,
     },
+  })
+})
+
+// 17b. CONDUCTOR STOP CALIBRATION (Snap bus to official coastal stop or custom coordinates)
+app.post('/api/conductor/calibrate-stop', requireConductorSession, async (req, res) => {
+  const { bus_id, stop_name, latitude, longitude } = req.body
+  const busIdNum = Number(bus_id || req.conductor.bus_id)
+
+  if (!busIdNum) {
+    return res.status(400).json({ success: false, error: 'Bus ID is required.' })
+  }
+
+  const bus = await getBusById(busIdNum)
+  if (!bus) {
+    return res.status(404).json({ success: false, error: 'Bus record not found.' })
+  }
+
+  let lat = Number(latitude)
+  let lng = Number(longitude)
+  let label = stop_name || 'Corridor Stop'
+
+  if (stop_name && (isNaN(lat) || isNaN(lng))) {
+    const matched = OFFICIAL_9_CORRIDOR_STOPS.find(
+      (s) => s.stop_name.toLowerCase() === String(stop_name).trim().toLowerCase()
+    )
+    if (matched) {
+      lat = matched.latitude
+      lng = matched.longitude
+      label = matched.stop_name
+    }
+  }
+
+  if (isNaN(lat) || isNaN(lng)) {
+    return res.status(400).json({ success: false, error: 'Valid stop name or coordinates are required.' })
+  }
+
+  const now = Date.now()
+  const payload = {
+    ...(activeBuses[busIdNum] || {}),
+    ...bus,
+    bus_id: busIdNum,
+    latitude: lat,
+    longitude: lng,
+    accuracy: 5,
+    speed: 34,
+    heading: 350,
+    crowd_status: activeBuses[busIdNum]?.crowd_status || 'Seats Available',
+    passenger_count: activeBuses[busIdNum]?.passenger_count || 18,
+    is_live: true,
+    is_on_shift: true,
+    tracking_status: 'LIVE',
+    last_telemetry_at: now,
+    timestamp: now,
+    current_stop_name: label,
+  }
+
+  activeBuses[busIdNum] = payload
+  io.emit('live_location_broadcast', toPublicBus(payload))
+  io.emit('bus_location_update', toPublicBus(payload))
+  io.emit('sync_buses', publicBusSnapshot(activeBuses))
+
+  try {
+    await recordTelemetry({
+      bus_id: busIdNum,
+      bus_name: bus.bus_name,
+      latitude: lat,
+      longitude: lng,
+      speed: 34,
+    })
+  } catch {}
+
+  res.json({
+    success: true,
+    message: `Bus location calibrated to ${label}.`,
+    bus: toPublicBus(payload),
   })
 })
 

@@ -11,12 +11,18 @@ import {
   Crosshair,
   Layers,
   Navigation,
+  AlertTriangle,
+  X,
 } from 'lucide-react'
 import io from 'socket.io-client'
 import { MapContainer, TileLayer, Polyline, Marker, Popup, Circle } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { apiUrl, socketUrl } from './api.js'
-import { OFFICIAL_9_CORRIDOR_STOPS, calculateHaversineDistance } from './transitUtils.js'
+import {
+  OFFICIAL_9_CORRIDOR_STOPS,
+  calculateHaversineDistance,
+  isWithinCoastalCorridor,
+} from './transitUtils.js'
 import JourneySearchCard from './components/JourneySearchCard.jsx'
 import PopularJourneys from './components/PopularJourneys.jsx'
 import BusCard from './components/BusCard.jsx'
@@ -89,6 +95,8 @@ export default function PassengerPortal({
   const [mapLayer, setMapLayer] = useState('street') // 'street' | 'satellite'
   const [passengerLocation, setPassengerLocation] = useState(null) // { lat, lng, accuracy }
   const [isLocatingPassenger, setIsLocatingPassenger] = useState(false)
+  const [passengerLocationError, setPassengerLocationError] = useState('')
+  const [hasDismissedLocationPrompt, setHasDismissedLocationPrompt] = useState(false)
   const [flyTarget, setFlyTarget] = useState(null)
 
   // Sync liveTelemetry when liveBuses prop updates from App
@@ -566,13 +574,18 @@ export default function PassengerPortal({
     return 'OFFLINE'
   }, [activeSelectedBus, trackedTelemetry, hasLiveCoordinates])
 
+  const isBusOutOfCorridor = useMemo(() => {
+    if (!hasLiveCoordinates || !trackedTelemetry) return false
+    return !isWithinCoastalCorridor(trackedTelemetry.latitude, trackedTelemetry.longitude)
+  }, [hasLiveCoordinates, trackedTelemetry])
+
   const busCoords = useMemo(() => {
-    if (hasLiveCoordinates) {
+    if (hasLiveCoordinates && !isBusOutOfCorridor) {
       return [trackedTelemetry.latitude, trackedTelemetry.longitude]
     }
-    // Default corridor center (Kaup / Padubidri) for map centering when bus has not yet transmitted GPS
+    // Default corridor center (Kaup / Padubidri) for map centering when bus is offline or outside corridor
     return [13.2208, 74.7431]
-  }, [hasLiveCoordinates, trackedTelemetry])
+  }, [hasLiveCoordinates, isBusOutOfCorridor, trackedTelemetry])
 
   // Real-time distance calculation between passenger device and bus (Haversine)
   const distanceToBusKm = useMemo(() => {
@@ -580,18 +593,19 @@ export default function PassengerPortal({
     return calculateHaversineDistance(
       passengerLocation.lat,
       passengerLocation.lng,
-      busCoords[0],
-      busCoords[1]
+      trackedTelemetry?.latitude || busCoords[0],
+      trackedTelemetry?.longitude || busCoords[1]
     )
-  }, [passengerLocation, hasLiveCoordinates, busCoords])
+  }, [passengerLocation, hasLiveCoordinates, trackedTelemetry, busCoords])
 
   // Locate Passenger Device (Google Maps-like "My Location" crosshair)
   const handleLocatePassenger = () => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      alert('Location services are not supported by your browser.')
+      setPassengerLocationError('Location services are not supported by your browser.')
       return
     }
     setIsLocatingPassenger(true)
+    setPassengerLocationError('')
 
     const onPos = (pos) => {
       const coords = {
@@ -600,8 +614,9 @@ export default function PassengerPortal({
         accuracy: Math.round(pos.coords.accuracy || 20),
       }
       setPassengerLocation(coords)
-      setFlyTarget([coords.lat, coords.lng, 16])
+      setFlyTarget([coords.lat, coords.lng, 15])
       setIsLocatingPassenger(false)
+      setHasDismissedLocationPrompt(true)
     }
 
     const onErr = (err) => {
@@ -610,7 +625,13 @@ export default function PassengerPortal({
         onPos,
         (standardErr) => {
           setIsLocatingPassenger(false)
-          alert('Could not detect your exact position. Please allow location permissions in your browser.')
+          let msg = 'Could not detect your exact position.'
+          if (standardErr.code === 1) {
+            msg = 'Location permission was denied. Please allow location access in your browser.'
+          } else if (standardErr.code === 2) {
+            msg = 'Device location is turned off. Please turn ON "Location services" in Windows Settings.'
+          }
+          setPassengerLocationError(msg)
         },
         { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
       )
@@ -619,8 +640,22 @@ export default function PassengerPortal({
     navigator.geolocation.getCurrentPosition(
       onPos,
       onErr,
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     )
+  }
+
+  // Quick set passenger location to a known coastal corridor stop (e.g. for laptops on broadband IP)
+  const handleSetPassengerStop = (stopObj) => {
+    const coords = {
+      lat: stopObj.latitude,
+      lng: stopObj.longitude,
+      accuracy: 10,
+      stopName: stopObj.stop_name,
+    }
+    setPassengerLocation(coords)
+    setFlyTarget([stopObj.latitude, stopObj.longitude, 15])
+    setHasDismissedLocationPrompt(true)
+    setPassengerLocationError('')
   }
 
   // Full corridor 9-stop timeline list for Screen 3
@@ -1093,6 +1128,108 @@ export default function PassengerPortal({
         </button>
       </div>
 
+      {/* Location Access & Onboarding Prompt (Asks user to turn on location for exact GPS tracking) */}
+      {!passengerLocation && !hasDismissedLocationPrompt && (
+        <div className="p-4 bg-gradient-to-r from-blue-50 via-sky-50 to-indigo-50 border border-blue-200 rounded-2xl shadow-xs space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Crosshair size={22} className={isLocatingPassenger ? 'animate-spin' : ''} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 m-0">
+                  Turn ON Device Location to View Your Exact Position
+                </h3>
+                <p className="text-xs text-slate-600 m-0 mt-0.5 leading-relaxed">
+                  To view your location on Google Maps and calculate real-time distance to the bus, allow location access on your laptop or phone.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setHasDismissedLocationPrompt(true)}
+              className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition cursor-pointer"
+              title="Dismiss"
+              aria-label="Dismiss"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            <button
+              type="button"
+              onClick={handleLocatePassenger}
+              disabled={isLocatingPassenger}
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Navigation size={14} />
+              <span>{isLocatingPassenger ? 'Acquiring GPS Signal...' : '📍 Turn On & Allow Location Access'}</span>
+            </button>
+
+            <span className="text-[11px] text-slate-500 font-bold px-1">or snap to your stop:</span>
+
+            <div className="flex flex-wrap gap-1.5">
+              {OFFICIAL_9_CORRIDOR_STOPS.map((s) => (
+                <button
+                  key={s.stop_id}
+                  type="button"
+                  onClick={() => handleSetPassengerStop(s)}
+                  className="px-2.5 py-1 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-400 text-slate-700 hover:text-blue-700 rounded-lg text-[11px] font-bold transition cursor-pointer active:scale-95 shadow-2xs"
+                >
+                  📍 {s.stop_name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {passengerLocationError && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-medium space-y-1">
+              <div className="flex items-center gap-1.5 font-black text-amber-800">
+                <AlertTriangle size={15} />
+                <span>{passengerLocationError}</span>
+              </div>
+              <p className="text-[11px] text-amber-800 m-0 leading-relaxed">
+                <strong>How to enable:</strong> In Windows, open <strong>Settings &gt; Privacy &amp; security &gt; Location</strong> and turn ON &quot;Location services&quot;. Then click the lock icon 🔒 next to <strong>localhost:5173</strong> in your browser URL bar and set Location to &quot;Allow&quot;.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Notice when Bus Telemetry is out of corridor (e.g. Madikeri Broadband Gateway) */}
+      {isBusOutOfCorridor && (
+        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="block font-black text-amber-950">
+                ⚠️ Broadband ISP Gateway Detected in Madikeri / Coorg (~95 km from route)
+              </strong>
+              <p className="text-[11px] text-amber-800 m-0 mt-0.5">
+                The conductor&apos;s laptop Wi-Fi mapped their device to an ISP hub in Madikeri ({trackedTelemetry?.latitude?.toFixed(4)}, {trackedTelemetry?.longitude?.toFixed(4)}). Map view is prioritized along the coastal highway ({currentStop} ➔ {destination}).
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setFlyTarget(null)}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
+            >
+              🛣️ Focus Coastal Route
+            </button>
+            <button
+              type="button"
+              onClick={() => setFlyTarget([trackedTelemetry.latitude, trackedTelemetry.longitude, 13])}
+              className="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95"
+            >
+              📍 View Bus in Madikeri
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Large Responsive Map Container (Google Maps Experience) */}
       <div className="relative w-full h-[560px] sm:h-[640px] md:h-[700px] rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
         {/* Google Maps Style Layer Switcher (Street vs Satellite) */}
@@ -1274,6 +1411,7 @@ export default function PassengerPortal({
             bounds={mapBounds}
             center={busCoords}
             hasLiveCoordinates={hasLiveCoordinates}
+            isOutOfCorridor={isBusOutOfCorridor}
             flyTarget={flyTarget}
           />
         </MapContainer>

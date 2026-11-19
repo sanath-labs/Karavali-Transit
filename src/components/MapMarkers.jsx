@@ -16,6 +16,7 @@ export function MapViewportController({
   bounds,
   center,
   hasLiveCoordinates = false,
+  isOutOfCorridor = false,
   flyTarget = null,
 }) {
   const map = useMap()
@@ -49,11 +50,11 @@ export function MapViewportController({
     }
   }, [flyTarget, map])
 
-  // 3. Automatic centering and corridor fit
+  // 3. Automatic centering and corridor fit (Prioritize corridor when bus GPS is out of bounds/ISP IP)
   useEffect(() => {
     if (flyTarget) return // User manually triggered camera move
 
-    if (hasLiveCoordinates && center && typeof center[0] === 'number' && typeof center[1] === 'number') {
+    if (hasLiveCoordinates && !isOutOfCorridor && center && typeof center[0] === 'number' && typeof center[1] === 'number') {
       map.setView(center, 15, { animate: true })
     } else if (bounds && bounds.length >= 2) {
       try {
@@ -66,7 +67,7 @@ export function MapViewportController({
     } else if (center && center[0] && center[1]) {
       map.setView(center, 12, { animate: true })
     }
-  }, [bounds, center, hasLiveCoordinates, flyTarget, map])
+  }, [bounds, center, hasLiveCoordinates, isOutOfCorridor, flyTarget, map])
 
   return null
 }

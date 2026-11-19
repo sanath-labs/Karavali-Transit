@@ -145,3 +145,14 @@ export function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
   const d = R * c
   return Math.round(d * 10) / 10
 }
+
+/**
+ * Checks if coordinates are within the official Mangaluru - Kundapura coastal corridor
+ * (Latitude 12.75 to 13.75, Longitude 74.55 to 75.05)
+ */
+export function isWithinCoastalCorridor(lat, lng) {
+  if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+    return false
+  }
+  return lat >= 12.75 && lat <= 13.75 && lng >= 74.55 && lng <= 75.05
+}
