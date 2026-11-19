@@ -18,6 +18,7 @@ import {
   Play,
   Plus,
   Printer,
+  RotateCw,
   ShieldCheck,
   Square,
   Volume2,
@@ -141,6 +142,21 @@ export default function ConductorPortal({
     }
     return () => clearInterval(interval)
   }, [isOnShift, shiftStartTime])
+
+  // Proactively monitor browser geolocation permission state
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.permissions && navigator.permissions.query) {
+      navigator.permissions
+        .query({ name: 'geolocation' })
+        .then((result) => {
+          setGpsPermissionState(result.state)
+          result.onchange = () => {
+            setGpsPermissionState(result.state)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [])
 
   // =========================================================================
   // STEP 1: SEND OTP TO TRAVEL AGENCY EMAIL
@@ -355,8 +371,11 @@ export default function ConductorPortal({
           } catch {}
         }
         playDutyChime(880, 0.2)
-        setNotice(`Duty shift initialized for ${bus.vehicle_number}. Click "Start Live Tracking" to stream GPS.`)
+        setNotice(`Duty shift initialized for ${bus.vehicle_number}. Requesting location permission to stream live GPS...`)
         setStep(5)
+        setTimeout(() => {
+          handleStartLiveTracking()
+        }, 400)
       } else {
         alert(data.error || 'Failed to start shift.')
       }
@@ -1439,6 +1458,48 @@ export default function ConductorPortal({
                       <span>View Live on Passenger Radar Map ➔</span>
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* Location Onboarding Prompt when on shift but not yet tracking */}
+              {isOnShift && !isLiveTracking && (
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <MapPin size={18} className="animate-bounce" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 m-0">
+                        Turn ON Location to Stream Real Conductor GPS
+                      </h4>
+                      <p className="text-xs text-slate-600 m-0 mt-0.5">
+                        1. Turn on <strong>Location</strong> in your laptop/phone settings.
+                        <br />
+                        2. Click below and select <strong>&quot;Allow&quot;</strong> when prompted by your browser.
+                      </p>
+                    </div>
+                  </div>
+
+                  {gpsPermissionState === 'denied' && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 font-semibold space-y-1">
+                      <div className="flex items-center gap-1.5 text-rose-800 font-black">
+                        <AlertTriangle size={15} />
+                        <span>Location is blocked in your browser</span>
+                      </div>
+                      <p className="m-0 text-[11px] text-rose-700">
+                        Click the lock/settings icon 🔒 next to <strong>localhost:5173</strong> in your browser URL bar ➔ change Location to <strong>Allow</strong> ➔ refresh.
+                      </p>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleStartLiveTracking}
+                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Navigation size={16} />
+                    <span>Turn On &amp; Share Actual Device Location ➔</span>
+                  </button>
                 </div>
               )}
 
