@@ -807,9 +807,11 @@ app.post('/api/conductor/start-duty', async (req, res) => {
   activeBuses[bus.bus_id].is_on_shift = true
   activeBuses[bus.bus_id].active_shift = shift
   activeBuses[bus.bus_id].conductor_name = conductor_name || 'Conductor'
-  if (!activeBuses[bus.bus_id].tracking_status || activeBuses[bus.bus_id].tracking_status === 'OFFLINE') {
-    activeBuses[bus.bus_id].tracking_status = 'NOT TRACKING'
-  }
+  activeBuses[bus.bus_id].tracking_status = 'NOT TRACKING'
+  activeBuses[bus.bus_id].latitude = null
+  activeBuses[bus.bus_id].longitude = null
+  activeBuses[bus.bus_id].speed = 0
+  activeBuses[bus.bus_id].timestamp = null
 
   const broadcastPayload = {
     ...shiftData,

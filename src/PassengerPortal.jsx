@@ -1172,21 +1172,19 @@ export default function PassengerPortal({
           center={busCoords}
           zoom={12}
           zoomControl={true}
+          style={{ width: '100%', height: '100%' }}
           className="w-full h-full z-0"
         >
-          {/* Dynamic Google Maps Style Tiles (CartoDB Voyager or Esri Satellite) */}
+          {/* Dynamic Google Maps Style Tiles (Google Roadmap vs Google Satellite Hybrid) */}
           <TileLayer
             key={mapLayer}
-            attribution={
-              mapLayer === 'satellite'
-                ? '&copy; Esri &mdash; Earthstar Geographics'
-                : '&copy; OpenStreetMap contributors &copy; CARTO'
-            }
+            attribution='&copy; Google Maps'
             url={
               mapLayer === 'satellite'
-                ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+                ? 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'
+                : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
             }
+            maxZoom={20}
           />
 
           {/* NH-66 Coastal Corridor Polyline */}
