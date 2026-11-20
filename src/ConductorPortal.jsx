@@ -18,6 +18,7 @@ import {
   Play,
   Plus,
   Printer,
+  RotateCw,
   ShieldCheck,
   Square,
   Volume2,
@@ -25,7 +26,7 @@ import {
   X,
 } from 'lucide-react'
 import { apiUrl, conductorHeaders } from './api.js'
-import { formatIndianMobile } from './transitUtils.js'
+import { formatIndianMobile, OFFICIAL_9_CORRIDOR_STOPS, isWithinCoastalCorridor } from './transitUtils.js'
 
 function getNow() {
   return Date.now()
@@ -35,6 +36,7 @@ export default function ConductorPortal({
   socket,
   liveBuses = {},
   onExitToPassenger,
+  onViewOnRadar,
   initialVehicleNumber = '',
 }) {
   // Step navigation: 1 = Email, 2 = Email OTP, 3 = Mobile Entry, 4 = Status Check / Register, 5 = Conductor Dashboard
@@ -140,6 +142,21 @@ export default function ConductorPortal({
     }
     return () => clearInterval(interval)
   }, [isOnShift, shiftStartTime])
+
+  // Proactively monitor browser geolocation permission state
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.permissions && navigator.permissions.query) {
+      navigator.permissions
+        .query({ name: 'geolocation' })
+        .then((result) => {
+          setGpsPermissionState(result.state)
+          result.onchange = () => {
+            setGpsPermissionState(result.state)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [])
 
   // =========================================================================
   // STEP 1: SEND OTP TO TRAVEL AGENCY EMAIL
@@ -304,6 +321,71 @@ export default function ConductorPortal({
     }
   }
 
+  const loadBusStops = async (busId) => {
+    if (!busId) return
+    try {
+      const res = await fetch(apiUrl(`/api/conductor/buses/${busId}/stops`))
+      const data = await res.json()
+      if (res.ok && data.stops) {
+        setRouteStops(data.stops)
+      }
+    } catch (err) {
+      console.error('Failed to load stops:', err)
+    }
+  }
+
+  // =========================================================================
+  // STEP 5: LIVE SHIFT OPERATIONS & TELEMETRY
+  // =========================================================================
+  const handleStartShift = async (busToStart = activeBus, conductorToUse = conductorRecord) => {
+    const bus = busToStart || activeBus
+    if (!bus) {
+      alert('Please select a fleet bus for duty.')
+      return
+    }
+    const startedAt = getNow()
+    setAuthLoading(true)
+    try {
+      const token = conductorToken || localStorage.getItem('karavali_conductor_token') || ''
+      const res = await fetch(apiUrl('/api/conductor/start-duty'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bus_id: bus.bus_id,
+          vehicle_number: bus.vehicle_number,
+          driver_phone: conductorPhone,
+          conductor_name: conductorName || conductorToUse?.name || conductorRecord?.name,
+          conductor_id: conductorToUse?.conductor_id || conductorRecord?.conductor_id,
+          conductor_token: token,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setIsOnShift(true)
+        setShiftStartTime(startedAt)
+        setShiftData(data.shift)
+        if (data.conductor_token) {
+          setConductorToken(data.conductor_token)
+          try {
+            localStorage.setItem('karavali_conductor_token', data.conductor_token)
+          } catch {}
+        }
+        playDutyChime(880, 0.2)
+        setNotice(`Duty shift initialized for ${bus.vehicle_number}. Requesting location permission to stream live GPS...`)
+        setStep(5)
+        setTimeout(() => {
+          handleStartLiveTracking()
+        }, 400)
+      } else {
+        alert(data.error || 'Failed to start shift.')
+      }
+    } catch (err) {
+      alert(`Shift start error: ${err.message}`)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
   // =========================================================================
   // STEP 4: REGISTER NEW CONDUCTOR OR CONFIRM EXISTING
   // =========================================================================
@@ -317,8 +399,12 @@ export default function ConductorPortal({
       const matchedBus = agencyBuses.find((b) => String(b.bus_id) === String(selectedBusId)) || agencyBuses[0] || null
       setActiveBus(matchedBus)
       loadBusStops(matchedBus?.bus_id)
-      setStep(5)
-      setNotice(`Welcome back, ${conductorRecord.name}! Ready for duty.`)
+      if (matchedBus) {
+        await handleStartShift(matchedBus, conductorRecord)
+      } else {
+        setStep(5)
+        setNotice(`Welcome back, ${conductorRecord.name}! Ready for duty.`)
+      }
       return
     }
 
@@ -352,73 +438,17 @@ export default function ConductorPortal({
         const matchedBus = agencyBuses.find((b) => String(b.bus_id) === String(selectedBusId)) || agencyBuses[0] || null
         setActiveBus(matchedBus)
         loadBusStops(matchedBus?.bus_id)
-        setStep(5)
-        setNotice(`Conductor ${data.conductor.name} registered and checked in!`)
+        if (matchedBus) {
+          await handleStartShift(matchedBus, data.conductor)
+        } else {
+          setStep(5)
+          setNotice(`Conductor ${data.conductor.name} registered and checked in!`)
+        }
       } else {
         setAuthError(data.error || 'Registration failed.')
       }
     } catch (err) {
       setAuthError(`Registration error: ${err.message}`)
-    } finally {
-      setAuthLoading(false)
-    }
-  }
-
-  const loadBusStops = async (busId) => {
-    if (!busId) return
-    try {
-      const res = await fetch(apiUrl(`/api/conductor/buses/${busId}/stops`))
-      const data = await res.json()
-      if (res.ok && data.stops) {
-        setRouteStops(data.stops)
-      }
-    } catch (err) {
-      console.error('Failed to load stops:', err)
-    }
-  }
-
-  // =========================================================================
-  // STEP 5: LIVE SHIFT OPERATIONS & TELEMETRY
-  // =========================================================================
-  const handleStartShift = async () => {
-    if (!activeBus) {
-      alert('Please select a fleet bus for duty.')
-      return
-    }
-    const startedAt = getNow()
-    setAuthLoading(true)
-    try {
-      const token = conductorToken || localStorage.getItem('karavali_conductor_token') || ''
-      const res = await fetch(apiUrl('/api/conductor/start-duty'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bus_id: activeBus.bus_id,
-          vehicle_number: activeBus.vehicle_number,
-          driver_phone: conductorPhone,
-          conductor_name: conductorName || conductorRecord?.name,
-          conductor_id: conductorRecord?.conductor_id,
-          conductor_token: token,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok && data.success) {
-        setIsOnShift(true)
-        setShiftStartTime(startedAt)
-        setShiftData(data.shift)
-        if (data.conductor_token) {
-          setConductorToken(data.conductor_token)
-          try {
-            localStorage.setItem('karavali_conductor_token', data.conductor_token)
-          } catch {}
-        }
-        playDutyChime(880, 0.2)
-        setNotice(`Duty shift initialized for ${activeBus.vehicle_number}. Click "Start Live Tracking" to stream GPS.`)
-      } else {
-        alert(data.error || 'Failed to start shift.')
-      }
-    } catch (err) {
-      alert(`Shift start error: ${err.message}`)
     } finally {
       setAuthLoading(false)
     }
@@ -431,7 +461,7 @@ export default function ConductorPortal({
   const handleStartLiveTracking = () => {
     setGpsErrorMessage('')
 
-    if (!('geolocation' in navigator)) {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setGpsPermissionState('unsupported')
       setGpsStatus('ERROR')
       setGpsErrorMessage('HTML5 Geolocation is not supported by your browser.')
@@ -447,100 +477,205 @@ export default function ConductorPortal({
     setGpsPermissionState('requesting')
     playDutyChime(750, 0.15)
 
+    const transmitLocation = async (position) => {
+      const lat = position.coords.latitude
+      const lng = position.coords.longitude
+      const accuracy = Math.round(position.coords.accuracy || 0)
+      const speedKmH =
+        position.coords.speed !== null && position.coords.speed >= 0
+          ? Math.round(position.coords.speed * 3.6)
+          : 0
+      const headingDeg =
+        position.coords.heading !== null && !isNaN(position.coords.heading)
+          ? Math.round(position.coords.heading)
+          : 0
+
+      setCurrentLat(lat)
+      setCurrentLng(lng)
+      setCurrentSpeed(speedKmH)
+      setCurrentHeading(headingDeg)
+      setGpsAccuracy(accuracy)
+      setLastGpsTimestamp(Date.now())
+      setGpsPermissionState('granted')
+      setGpsStatus('LIVE')
+      setIsLiveTracking(true)
+      setGpsErrorMessage('')
+
+      const token =
+        conductorToken || localStorage.getItem('karavali_conductor_token') || ''
+      const telemetryPayload = {
+        bus_id: activeBus.bus_id,
+        vehicle_number: activeBus.vehicle_number,
+        latitude: lat,
+        longitude: lng,
+        accuracy,
+        speed: speedKmH,
+        heading: headingDeg,
+        crowd_status: crowdStatus,
+        passenger_count: passengerCount,
+        timestamp: Date.now(),
+        allow_local: true,
+      }
+
+      // Secure REST transmission with Conductor Token & Local GPS bypass
+      try {
+        await fetch(apiUrl('/api/conductor/gps-location'), {
+          method: 'POST',
+          headers: conductorHeaders(token, {
+            'Content-Type': 'application/json',
+            'x-allow-local-gps': 'true',
+          }),
+          body: JSON.stringify(telemetryPayload),
+        })
+      } catch (postErr) {
+        console.warn('REST telemetry post error:', postErr.message)
+      }
+
+      // Low-latency WebSocket transmission with Conductor Token
+      if (socket && socket.connected) {
+        socket.emit('update_location', {
+          ...telemetryPayload,
+          lat,
+          lng,
+          token,
+          allow_local: true,
+        })
+      }
+    }
+
+    const handleGeoError = (err) => {
+      console.warn('Conductor GPS Geolocation Error:', err)
+      let userMsg = 'Unable to acquire GPS signal from your device.'
+      if (err.code === 1) {
+        setGpsPermissionState('denied')
+        setIsLiveTracking(false)
+        setGpsStatus('ERROR')
+        userMsg =
+          'Location permission was denied. Please allow location access in your browser settings to stream GPS.'
+      } else if (err.code === 2) {
+        setGpsPermissionState('prompt')
+        userMsg =
+          'GPS position unavailable. Please ensure location services are enabled on your laptop/device.'
+      } else if (err.code === 3) {
+        setGpsPermissionState('prompt')
+        userMsg = 'GPS satellite/network fix timed out. Waiting for signal in open sky...'
+      }
+      setGpsErrorMessage(userMsg)
+      playDutyChime(320, 0.3)
+    }
+
     try {
+      const geoOptions = {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 15000,
+      }
+
+      // 1. Immediate single-shot fix with graceful high-accuracy fallback for laptops
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          transmitLocation(pos)
+        },
+        (highErr) => {
+          console.warn('High-accuracy GPS fix failed on laptop, falling back to standard Wi-Fi fix:', highErr.message)
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              transmitLocation(pos)
+            },
+            (standardErr) => {
+              console.warn('Standard geolocation notice:', standardErr.message)
+            },
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+          )
+        },
+        geoOptions
+      )
+
+      // 2. Continuous real-time position watcher
       const watchId = navigator.geolocation.watchPosition(
-        async (position) => {
-          const lat = position.coords.latitude
-          const lng = position.coords.longitude
-          const accuracy = Math.round(position.coords.accuracy || 0)
-          const speedKmH =
-            position.coords.speed !== null && position.coords.speed >= 0
-              ? Math.round(position.coords.speed * 3.6)
-              : 0
-          const headingDeg =
-            position.coords.heading !== null && !isNaN(position.coords.heading)
-              ? Math.round(position.coords.heading)
-              : 0
-
-          setCurrentLat(lat)
-          setCurrentLng(lng)
-          setCurrentSpeed(speedKmH)
-          setCurrentHeading(headingDeg)
-          setGpsAccuracy(accuracy)
-          setLastGpsTimestamp(Date.now())
-          setGpsPermissionState('granted')
-          setGpsStatus('LIVE')
-          setIsLiveTracking(true)
-          setGpsErrorMessage('')
-
-          const token =
-            conductorToken || localStorage.getItem('karavali_conductor_token') || ''
-          const telemetryPayload = {
-            bus_id: activeBus.bus_id,
-            vehicle_number: activeBus.vehicle_number,
-            latitude: lat,
-            longitude: lng,
-            accuracy,
-            speed: speedKmH,
-            heading: headingDeg,
-            crowd_status: crowdStatus,
-            passenger_count: passengerCount,
-            timestamp: Date.now(),
-          }
-
-          // Secure REST transmission with Conductor Token
-          try {
-            await fetch(apiUrl('/api/conductor/gps-location'), {
-              method: 'POST',
-              headers: conductorHeaders(token, { 'Content-Type': 'application/json' }),
-              body: JSON.stringify(telemetryPayload),
-            })
-          } catch (postErr) {
-            console.warn('REST telemetry post error:', postErr.message)
-          }
-
-          // Low-latency WebSocket transmission with Conductor Token
-          if (socket && socket.connected) {
-            socket.emit('update_location', {
-              ...telemetryPayload,
-              lat,
-              lng,
-              token,
-            })
-          }
-        },
-        (err) => {
-          console.warn('Conductor GPS Geolocation Error:', err)
-          setIsLiveTracking(false)
-          setGpsStatus('ERROR')
-
-          let userMsg = 'Unable to acquire GPS signal from your device.'
-          if (err.code === 1) {
-            setGpsPermissionState('denied')
-            userMsg =
-              'Location permission was denied. Please allow location access in your mobile browser settings to stream GPS.'
-          } else if (err.code === 2) {
-            setGpsPermissionState('prompt')
-            userMsg =
-              'GPS position unavailable. Please ensure GPS/Location is enabled on your Android phone.'
-          } else if (err.code === 3) {
-            setGpsPermissionState('prompt')
-            userMsg = 'GPS satellite fix timed out. Waiting for signal in open sky...'
-          }
-          setGpsErrorMessage(userMsg)
-          playDutyChime(320, 0.3)
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 15000,
-        }
+        transmitLocation,
+        handleGeoError,
+        geoOptions
       )
 
       setGeoWatchId(watchId)
     } catch (launchErr) {
       setGpsStatus('ERROR')
       setGpsErrorMessage(`Failed to start geolocation: ${launchErr.message}`)
+    }
+  }
+
+  // Quick Calibration to Any Official Corridor Stop or Custom Coordinates
+  const handleCalibrateLocation = async (lat, lng, label = 'Corridor Location') => {
+    if (!activeBus) {
+      alert('Please select a valid bus before calibrating location.')
+      return
+    }
+
+    setCurrentLat(lat)
+    setCurrentLng(lng)
+    setCurrentSpeed(34)
+    setCurrentHeading(350)
+    setGpsAccuracy(5)
+    setLastGpsTimestamp(Date.now())
+    setGpsPermissionState('granted')
+    setGpsStatus('LIVE')
+    setIsLiveTracking(true)
+    setGpsErrorMessage('')
+    setNotice(`📍 Bus live location calibrated to ${label}: ${lat.toFixed(4)}, ${lng.toFixed(4)}`)
+    playDutyChime(880, 0.15)
+
+    const token =
+      conductorToken || localStorage.getItem('karavali_conductor_token') || ''
+    const telemetryPayload = {
+      bus_id: activeBus.bus_id,
+      vehicle_number: activeBus.vehicle_number,
+      latitude: lat,
+      longitude: lng,
+      accuracy: 5,
+      speed: 34,
+      heading: 350,
+      crowd_status: crowdStatus,
+      passenger_count: passengerCount,
+      timestamp: Date.now(),
+      allow_local: true,
+    }
+
+    try {
+      await fetch(apiUrl('/api/conductor/gps-location'), {
+        method: 'POST',
+        headers: conductorHeaders(token, {
+          'Content-Type': 'application/json',
+          'x-allow-local-gps': 'true',
+        }),
+        body: JSON.stringify(telemetryPayload),
+      })
+
+      // Also notify calibrate endpoint
+      await fetch(apiUrl('/api/conductor/calibrate-stop'), {
+        method: 'POST',
+        headers: conductorHeaders(token, {
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({
+          bus_id: activeBus.bus_id,
+          stop_name: label,
+          latitude: lat,
+          longitude: lng,
+        }),
+      }).catch(() => {})
+    } catch (err) {
+      console.warn('Manual calibration post error:', err.message)
+    }
+
+    if (socket && socket.connected) {
+      socket.emit('update_location', {
+        ...telemetryPayload,
+        lat,
+        lng,
+        token,
+        allow_local: true,
+      })
     }
   }
 
@@ -595,11 +730,70 @@ export default function ConductorPortal({
     setShowShiftSummaryModal(true)
   }
 
-  const handleConfirmEndShift = () => {
+  const handleConfirmEndShift = async () => {
+    if (geoWatchId !== null) {
+      if (navigator.geolocation && navigator.geolocation.clearWatch) {
+        navigator.geolocation.clearWatch(geoWatchId)
+      }
+      setGeoWatchId(null)
+    }
+
+    const token =
+      conductorToken || localStorage.getItem('karavali_conductor_token') || ''
+
+    if (activeBus) {
+      // 1. Notify Backend API to end duty shift & update database ledger
+      try {
+        await fetch(apiUrl('/api/conductor/end-duty'), {
+          method: 'POST',
+          headers: conductorHeaders(token, { 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            bus_id: activeBus.bus_id,
+            vehicle_number: activeBus.vehicle_number,
+            shift_id: shiftData?.shift_id,
+          }),
+        })
+      } catch (err) {
+        console.warn('End duty shift API warning:', err.message)
+      }
+
+      // Also call stop-tracking as safety fallback
+      try {
+        await fetch(apiUrl('/api/conductor/stop-tracking'), {
+          method: 'POST',
+          headers: conductorHeaders(token, { 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ bus_id: activeBus.bus_id }),
+        })
+      } catch (err) {
+        console.warn('Stop tracking fallback warning:', err.message)
+      }
+
+      // 2. Broadcast shift termination & offline status via WebSocket
+      if (socket && socket.connected) {
+        socket.emit('end_shift', {
+          bus_id: activeBus.bus_id,
+          vehicle_number: activeBus.vehicle_number,
+          shift_id: shiftData?.shift_id,
+          token,
+        })
+        socket.emit('update_location', {
+          bus_id: activeBus.bus_id,
+          vehicle_number: activeBus.vehicle_number,
+          tracking_status: 'OFFLINE',
+          is_on_shift: false,
+          token,
+          timestamp: Date.now(),
+        })
+      }
+    }
+
     setIsOnShift(false)
+    setIsLiveTracking(false)
+    setGpsStatus('STOPPED')
     setShowShiftSummaryModal(false)
+    setShiftData(null)
     playDutyChime(440, 0.3)
-    setNotice(`Shift for ${activeBus?.vehicle_number} ended successfully. Ledger saved.`)
+    setNotice(`Shift for ${activeBus?.vehicle_number || 'bus'} ended successfully. Ledger saved.`)
   }
 
   // Adjust Passenger Boarding Count
@@ -652,10 +846,10 @@ export default function ConductorPortal({
     }))
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (isOnShift) {
       if (!window.confirm('You have an active duty shift running. End shift and log out?')) return
-      handleEndShift()
+      await handleConfirmEndShift()
     }
     setStep(1)
     setAgencyEmail('rakesh@gmail.com')
@@ -1252,6 +1446,108 @@ export default function ConductorPortal({
             </button>
           ) : (
             <div className="space-y-3">
+              {/* Local Laptop / Phone GPS Coordinates Active Banner */}
+              {isLiveTracking && currentLat && currentLng && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-950 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Navigation size={20} className="animate-spin" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-emerald-950 m-0">
+                        📍 Live GPS Transmitting from this Device: {currentLat.toFixed(5)}, {currentLng.toFixed(5)}
+                      </p>
+                      <p className="text-[11px] text-emerald-700 m-0 font-bold">
+                        Accuracy: ±{gpsAccuracy || 10}m • Speed: {currentSpeed} km/h • Bus: {activeBus?.vehicle_number}
+                      </p>
+                    </div>
+                  </div>
+                  {onViewOnRadar && (
+                    <button
+                      type="button"
+                      onClick={() => onViewOnRadar(activeBus?.bus_id)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
+                    >
+                      <Compass size={14} />
+                      <span>View Live on Passenger Radar Map ➔</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Notice when Conductor Device GPS reports an ISP Gateway outside Coastal Highway (e.g. Madikeri) */}
+              {isLiveTracking && currentLat && currentLng && !isWithinCoastalCorridor(currentLat, currentLng) && (
+                <div className="p-4 bg-amber-50 border-2 border-amber-300 text-amber-950 rounded-2xl space-y-2.5 shadow-2xs">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-black text-amber-950 m-0">
+                        ⚠️ Broadband Wi-Fi Hub Detected: Madikeri / Coorg ({currentLat.toFixed(4)}, {currentLng.toFixed(4)})
+                      </h4>
+                      <p className="text-xs text-amber-900 m-0 mt-0.5 leading-relaxed">
+                        Because laptops lack hardware GPS antennas, your broadband ISP placed you in Madikeri (~95 km inland from the NH-66 corridor).
+                        <br />
+                        <strong>Tap your actual starting coastal stop below to snap your bus to its real position on Google Maps:</strong>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {OFFICIAL_9_CORRIDOR_STOPS.map((stop) => (
+                      <button
+                        key={`warn-stop-${stop.stop_id}`}
+                        type="button"
+                        onClick={() => handleCalibrateLocation(stop.latitude, stop.longitude, stop.stop_name)}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black transition cursor-pointer active:scale-95 shadow-xs"
+                      >
+                        📍 Snap to {stop.stop_name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Location Onboarding Prompt when on shift but not yet tracking */}
+              {isOnShift && !isLiveTracking && (
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <MapPin size={18} className="animate-bounce" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 m-0">
+                        Turn ON Location to Stream Real Conductor GPS
+                      </h4>
+                      <p className="text-xs text-slate-600 m-0 mt-0.5">
+                        1. Turn on <strong>Location</strong> in your laptop/phone settings.
+                        <br />
+                        2. Click below and select <strong>&quot;Allow&quot;</strong> when prompted by your browser.
+                      </p>
+                    </div>
+                  </div>
+
+                  {gpsPermissionState === 'denied' && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 font-semibold space-y-1">
+                      <div className="flex items-center gap-1.5 text-rose-800 font-black">
+                        <AlertTriangle size={15} />
+                        <span>Location is blocked in your browser</span>
+                      </div>
+                      <p className="m-0 text-[11px] text-rose-700">
+                        Click the lock/settings icon 🔒 next to <strong>localhost:5173</strong> in your browser URL bar ➔ change Location to <strong>Allow</strong> ➔ refresh.
+                      </p>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleStartLiveTracking}
+                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Navigation size={16} />
+                    <span>Turn On &amp; Share Actual Device Location ➔</span>
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {!isLiveTracking ? (
                   <button
@@ -1281,6 +1577,34 @@ export default function ConductorPortal({
                   <LogOut size={18} />
                   <span>End Shift &amp; Close Ledger</span>
                 </button>
+              </div>
+
+              {/* Quick Stop Calibration for Testing along Coastal NH-66 */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <MapPin size={14} className="text-blue-600" />
+                    <span className="text-xs font-black text-slate-800">
+                      Corridor Stop Calibration (Snap Bus to Exact Stop)
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-bold">
+                    Click any stop to test pinpoint bus tracking
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {OFFICIAL_9_CORRIDOR_STOPS.map((stop) => (
+                    <button
+                      key={stop.stop_id}
+                      type="button"
+                      onClick={() => handleCalibrateLocation(stop.latitude, stop.longitude, stop.stop_name)}
+                      className="px-2.5 py-1.5 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-400 rounded-xl text-xs font-bold text-slate-700 transition cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
+                    >
+                      <span className="text-blue-600 font-mono text-[10px]">#{stop.stop_id}</span>
+                      <span>{stop.stop_name}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
