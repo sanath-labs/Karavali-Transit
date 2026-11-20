@@ -50,7 +50,7 @@ export default function JourneySearchCard({
     boardingLabel: lang === 'kn' ? 'ಹತ್ತುವ ನಿಲ್ದಾಣ (Boarding)' : 'Boarding Stop',
     destinationLabel: lang === 'kn' ? 'ಇಳಿಯುವ ನಿಲ್ದಾಣ (Destination)' : 'Destination Stop',
     filterPlaceholder: lang === 'kn' ? 'ನಿಲ್ದಾಣದ ಹೆಸರನ್ನು ಟೈಪ್ ಮಾಡಿ...' : 'Type stop name to filter...',
-    searchBtn: lang === 'kn' ? 'ಲಭ್ಯವಿರುವ ಬಸ್‌ಗಳನ್ನು ಹುಡುಕಿ' : 'Find Available Buses',
+    searchBtn: lang === 'kn' ? 'ಲಭ್ಯವಿರುವ ಬಸ್‌ಗಳನ್ನು ಹುಡುಕಿ' : 'Search buses',
     searchingBtn: lang === 'kn' ? 'ಬಸ್‌ಗಳನ್ನು ಹುಡುಕಲಾಗುತ್ತಿದೆ...' : 'Finding Buses...',
     swapTitle: lang === 'kn' ? 'ನಿಲ್ದಾಣಗಳನ್ನು ಅದಲು ಬದಲು ಮಾಡಿ' : 'Swap Boarding and Destination stops',
     noStopsMatch: lang === 'kn' ? 'ಯಾವುದೇ ನಿಲ್ದಾಣ ಸಿಗಲಿಲ್ಲ' : 'No matching corridor stop found',

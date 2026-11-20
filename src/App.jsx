@@ -99,6 +99,20 @@ function App() {
       .catch(() => setDbStatus(false))
   }, [])
 
+  const handleSelectRole = (newRole) => {
+    if (newRole === 'owner') {
+      setOwnerToken('')
+      setIsOwnerAuthenticated(false)
+    }
+    if (newRole === 'conductor') {
+      try {
+        localStorage.removeItem('karavali_conductor_token')
+      } catch {}
+    }
+    setRole(newRole)
+    if (newRole === 'passenger') setPassengerScreen(1)
+  }
+
   // Listen for real-time WebSocket GPS coordinates
   useEffect(() => {
     const handleLocationBroadcast = (data) => {
@@ -174,12 +188,7 @@ function App() {
       {/* 1. UNIFIED OFFICIAL WEBSITE HEADER, ROUTE STRIP & HAMBURGER DRAWER */}
       <OfficialNavigation
         role={role}
-        onSelectRole={(newRole) => {
-          setRole(newRole)
-          if (newRole === 'passenger') {
-            setPassengerScreen(1)
-          }
-        }}
+        onSelectRole={handleSelectRole}
         lang={lang}
         toggleLanguage={toggleLanguage}
         dbStatus={dbStatus}
@@ -296,14 +305,14 @@ function App() {
             </button>
             <button
               type="button"
-              onClick={() => setRole('owner')}
+              onClick={() => handleSelectRole('owner')}
               className="hover:text-blue-600 cursor-pointer transition"
             >
               Fleet Owner
             </button>
             <button
               type="button"
-              onClick={() => setRole('conductor')}
+              onClick={() => handleSelectRole('conductor')}
               className="hover:text-blue-600 cursor-pointer transition"
             >
               Conductor

@@ -52,7 +52,7 @@ export default function OfficialNavigation({
         toggleLanguage={toggleLanguage}
       />
 
-      {/* 4. Shared Modals */}
+      {/* 3. Shared Modals */}
       <FindBusStopModal
         isOpen={activeModal === 'findStop'}
         onClose={() => setActiveModal(null)}

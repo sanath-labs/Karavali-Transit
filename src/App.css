@@ -3845,6 +3845,11 @@
   margin-top: 24px;
 }
 
+.owner-bus-details-grid {
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 0;
+}
+
 .view-bus-panel {
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -4599,5 +4604,130 @@
   }
 }
 
+/* Karavali-Transit shared design tokens and compact layouts */
+:root {
+  --kt-blue: #2563eb;
+  --kt-blue-dark: #1d4ed8;
+  --kt-green: #059669;
+  --kt-charcoal: #1e293b;
+  --kt-muted: #64748b;
+  --kt-border: #e2e8f0;
+  --kt-surface: #ffffff;
+  --kt-canvas: #f6f8fb;
+}
 
+.transit-app {
+  background: var(--kt-canvas);
+  color: var(--kt-charcoal);
+  font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+.app-header {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.owner-stats-grid-compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.owner-stats-grid-compact .owner-kpi-card {
+  border-radius: 16px;
+  padding: 15px 18px;
+  gap: 13px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
+}
+
+.owner-stats-grid-compact .owner-kpi-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+}
+
+.owner-overview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 4px 0 16px;
+}
+
+.owner-overview-heading h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.owner-overview-heading p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.owner-overview-heading button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 11px;
+  padding: 0 15px;
+  background: var(--kt-blue);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.owner-overview-heading button:hover {
+  background: var(--kt-blue-dark);
+}
+
+.owner-buses-table-wrapper,
+.view-bus-panel,
+.options-panel {
+  border-radius: 16px;
+}
+
+.owner-sidebar {
+  width: 232px;
+  background: var(--kt-charcoal);
+}
+
+.owner-nav-item.active {
+  background: var(--kt-blue);
+  box-shadow: none;
+}
+
+.passenger-results-page .grid > .bg-white {
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.045);
+}
+
+.journey-search-card {
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.055);
+}
+
+.journey-search-card input,
+.journey-search-card [role="combobox"] {
+  border-radius: 12px;
+}
+
+@media (max-width: 767px) {
+  .owner-stats-grid-compact {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .owner-stats-grid-compact .owner-kpi-card {
+    padding: 13px 15px;
+  }
+
+  .owner-overview-heading {
+    align-items: flex-start;
+  }
+}
 

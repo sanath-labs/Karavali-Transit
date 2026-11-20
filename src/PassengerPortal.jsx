@@ -729,7 +729,7 @@ export default function PassengerPortal({
   // PAGE 2: MATCHING BUS RESULTS (RESPONSIVE FULL-WIDTH GRID)
   // ==========================================================================
   const renderBusesPage = () => (
-    <div className="w-full flex flex-col space-y-6 select-none">
+    <div className="passenger-results-page w-full flex flex-col space-y-5 select-none">
       {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div className="flex items-center gap-3">
@@ -1321,8 +1321,6 @@ export default function PassengerPortal({
                   <br />
                   {activeSelectedBus.vehicle_number}
                   <br />
-                  Speed: {trackedTelemetry.speed || 0} km/h
-                  <br />
                   Status: {currentTrackingStatus}
                 </div>
               </Popup>
@@ -1342,7 +1340,7 @@ export default function PassengerPortal({
         {!hasLiveCoordinates && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-slate-900/90 text-white backdrop-blur-xs px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 pointer-events-none text-center">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-            <span>Waiting for onboard conductor to start live GPS telemetry • Showing timetable schedule</span>
+            <span>Bus location is not available yet. Showing timetable information.</span>
           </div>
         )}
 
