@@ -340,3 +340,63 @@ Upon shift activation, conductors access the operational terminal equipped with 
   - `Overcrowded` (> 100% capacity)
 - **Incident Broadcaster**: Conductors can broadcast highway conditions (Heavy Rain, Waterlogging, NH-66 Diversion, Bridge Maintenance) directly to passenger radar maps.
 - **Shift Summary Ledger**: At duty conclusion, conductors review total passengers boarded, estimated distance traveled, shift duration, and operational revenue ledger before closing duty.
+
+---
+
+## 📡 Real-Time Conductor Duty & Passenger Radar Synchronization
+
+The platform guarantees sub-second synchronization between conductor shift actions and passenger radar discovery:
+
+```
+Conductor Starts Shift (POST /api/conductor/start-duty)
+    │
+    ├──> In-memory active registry sets: is_on_shift: true, tracking_status: 'NOT TRACKING'
+    ├──> PostgreSQL records duty entry in `driver_shifts`
+    └──> Server emits Socket.IO broadcast: `shift_broadcast` & `live_location_broadcast`
+            │
+            ▼
+Passenger Radar & Journey Search (GET /api/public/buses/search)
+    │
+    ├──> Database matches active buses along the corridor (From ➔ To stop sequence)
+    ├──> Active buses populate under "Active" filter tab with `NOT TRACKING` badge
+    └──> Real-time telemetry merges dynamically into displayed bus cards
+            │
+            ▼
+Conductor Taps "Start Live Tracking" (POST /api/conductor/gps-location)
+    │
+    ├──> Smartphone GPS coordinates validate within coastal corridor
+    ├──> Telemetry streams to WebSocket relay at 3s intervals
+    └──> Bus marker appears live on Leaflet radar map with speed and direction
+```
+
+### Key Synchronization Guarantees:
+1. **Zero Waiting for Satellites**: When a conductor starts a shift, the bus immediately becomes visible in Passenger Radar under `Active` as `NOT TRACKING` until GPS lock is obtained.
+2. **Instant Live Transition**: Once the conductor starts streaming coordinates, the badge flips to `LIVE`, telemetry speed is displayed, and the live bus pin appears on the Leaflet radar map.
+3. **Clean Teardown**: When tracking is stopped, coordinates and active shift flags are cleanly flushed to `OFFLINE` standby, avoiding lingering ghost markers.
+4. **Adaptive Commuter Discovery**: The passenger results grid automatically defaults to displaying active buses when available, and seamlessly shows scheduled corridor departures without showing empty screens when no live shifts are active.
+
+---
+
+## 🧪 Comprehensive Regression & End-to-End Test Suite
+
+Run all verification tests across database, GPS security, passenger radar, and conductor flows:
+
+```bash
+# Run conductor shift to passenger radar synchronization suite
+node --test tests/conductor-shift-passenger-radar.test.js
+
+# Run passenger portal journey discovery & landmark tests
+node --test tests/passenger-portal-flow.test.js
+
+# Run conductor hardware GPS telemetry & corridor boundary tests
+node --test tests/conductor-gps-tracking.test.js
+
+# Run conductor authentication & OTP contract tests
+node --test tests/conductor-portal-flow.test.js
+
+# Run zero-warning code quality linter
+npx oxlint
+
+# Run client production build
+npm run build
+```
