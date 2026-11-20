@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import OfficialHeader from './components/OfficialHeader.jsx'
-import RouteStrip from './components/RouteStrip.jsx'
 import NavigationDrawer from './components/NavigationDrawer.jsx'
 import FindBusStopModal from './components/FindBusStopModal.jsx'
 import HelpdeskModal from './components/HelpdeskModal.jsx'
@@ -40,12 +39,7 @@ export default function OfficialNavigation({
         dbStatus={dbStatus}
       />
 
-      {/* 2. Official 9-Stop Corridor Route Strip */}
-      {role === 'passenger' && (
-        <RouteStrip onSelectStop={onSelectCorridorStop} />
-      )}
-
-      {/* 3. Universal Slide-out Navigation Drawer */}
+      {/* 2. Universal Slide-out Navigation Drawer */}
       <NavigationDrawer
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}

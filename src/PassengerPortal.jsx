@@ -24,7 +24,6 @@ import {
   isWithinCoastalCorridor,
 } from './transitUtils.js'
 import JourneySearchCard from './components/JourneySearchCard.jsx'
-import PopularJourneys from './components/PopularJourneys.jsx'
 import BusCard from './components/BusCard.jsx'
 import RouteTimeline from './components/RouteTimeline.jsx'
 import LiveTrackingHud from './components/LiveTrackingHud.jsx'
@@ -702,7 +701,7 @@ export default function PassengerPortal({
   // ==========================================================================
   const renderHomepage = () => (
     <div className="w-full flex flex-col space-y-7 select-none">
-      {/* 1. Main Journey Search Panel */}
+      {/* Main Journey Search Panel */}
       <JourneySearchCard
         currentStop={currentStop}
         destination={destination}
@@ -723,83 +722,6 @@ export default function PassengerPortal({
         loadingBuses={loadingBuses}
         lang={lang}
       />
-
-      {/* 2. Popular Journeys Shortcuts */}
-      <PopularJourneys
-        routes={POPULAR_ROUTES}
-        onSelectJourney={(from, to) => handleSearchBuses(from, to)}
-        lang={lang}
-      />
-
-      {/* 3. Compact "Find a Bus Stop" Helper Card */}
-      <div
-        onClick={() => onOpenFindStop && onOpenFindStop()}
-        className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover:border-blue-400 hover:shadow-xs flex items-center justify-between gap-4 cursor-pointer transition"
-        role="button"
-        tabIndex={0}
-        aria-label="Find nearest bus stop helper"
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            if (onOpenFindStop) onOpenFindStop()
-          }
-        }}
-      >
-        <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Compass size={22} strokeWidth={2.2} />
-          </div>
-          <div>
-            <h2 className="text-sm font-black text-slate-900 m-0">
-              {lang === 'kn' ? 'ನಿಮ್ಮ ಸಮೀಪದ ಬಸ್ ನಿಲ್ದಾಣ ಹುಡುಕಿ' : 'Need help identifying your nearest bus stop?'}
-            </h2>
-            <p className="text-xs text-slate-600 font-medium m-0 mt-0.5">
-              {lang === 'kn'
-                ? 'ಎನ್ಐಟಿಕೆ, ಆಸ್ಪತ್ರೆಗಳು, ದೇವಸ್ಥಾನಗಳಂತಹ ಸ್ಥಳಗಳಿಂದ ಹುಡುಕಿ ಅಥವಾ ಜಿಪಿಎಸ್ ದೂರವನ್ನು ಬಳಸಿ.'
-                : 'Search by familiar landmarks such as NITK, hospitals, temples, or use on-demand distance lookup.'}
-            </p>
-          </div>
-        </div>
-        <span className="text-xs font-black text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3.5 py-2 rounded-xl shrink-0 transition flex items-center gap-1">
-          <span>{lang === 'kn' ? 'ನಿಲ್ದಾಣ ಹುಡುಕಿ' : 'Find a Stop'}</span>
-          <ArrowRight size={13} strokeWidth={2.4} />
-        </span>
-      </div>
-
-      {/* 4. Official Corridor Overview */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider m-0">
-            {lang === 'kn' ? 'ಅಧಿಕೃತ 9 ಹೆದ್ದಾರಿ ನಿಲ್ದಾಣಗಳು' : 'Official 9-Station Corridor Alignment'}
-          </h3>
-          <span className="text-[11px] font-semibold text-slate-500">
-            NH-66 Coastal Highway
-          </span>
-        </div>
-        <p className="text-xs text-slate-600 m-0 leading-relaxed">
-          {lang === 'kn'
-            ? 'ಎಲ್ಲಾ ಖಾಸಗಿ ಎಕ್ಸ್‌ಪ್ರೆಸ್ ಬಸ್‌ಗಳು ಈ 9 ಗೊತ್ತುಪಡಿಸಿದ ನಿಲ್ದಾಣಗಳ ಮೂಲಕ ನಿಯಮಿತವಾಗಿ ಸಂಚರಿಸುತ್ತವೆ:'
-            : 'All private express and ordinary corridor services operate sequentially through these 9 designated stops:'}
-        </p>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-9 gap-2 pt-1 text-center">
-          {OFFICIAL_9_CORRIDOR_STOPS.map((s) => (
-            <button
-              key={s.stop_id}
-              type="button"
-              onClick={() => {
-                handleSelectFromStop(s.stop_name)
-                handleSearchBuses(s.stop_name, destination)
-              }}
-              className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-400 cursor-pointer transition text-left sm:text-center active:scale-95 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <span className="block text-[10px] font-bold text-slate-500">Stop #{s.stop_id}</span>
-              <strong className="block text-xs font-black text-slate-900 mt-0.5">{s.stop_name}</strong>
-              <span className="block text-[10px] text-slate-500 font-semibold">{s.stop_name_kn}</span>
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   )
 
