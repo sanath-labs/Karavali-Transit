@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bus, MapPin, ChevronDown, ArrowUpDown, Search, CheckCircle2 } from 'lucide-react'
+import { Bus, MapPin, ChevronDown, ArrowUpDown, Search } from 'lucide-react'
 
 export default function JourneySearchCard({
   currentStop,
@@ -47,14 +47,6 @@ export default function JourneySearchCard({
   // Bilingual strings
   const text = {
     heading: lang === 'kn' ? 'ನೀವು ಎಲ್ಲಿಗೆ ಹೋಗಬೇಕಾಗಿದೆ?' : 'Where do you want to go?',
-    subheading:
-      lang === 'kn'
-        ? 'ಕರಾವಳಿ ಹೆದ್ದಾರಿಯ (NH-66) ಖಾಸಗಿ ಎಕ್ಸ್‌ಪ್ರೆಸ್ ಬಸ್‌ಗಳ ವೇಳಾಪಟ್ಟಿ ಮತ್ತು ಲೈವ್ ಜಿಪಿಎಸ್ ಟ್ರ್ಯಾಕಿಂಗ್ ಹುಡುಕಿ.'
-        : 'Search private express buses along the NH-66 coastal highway corridor and track your bus in real time.',
-    noLoginBadge:
-      lang === 'kn'
-        ? 'ಪ್ರಯಾಣಿಕರ ಲಾಗಿನ್ ಅಗತ್ಯವಿಲ್ಲ • ಉಚಿತ ಸಾರ್ವಜನಿಕ ಸೇವೆ'
-        : 'No passenger login required • Free public transit search',
     boardingLabel: lang === 'kn' ? 'ಹತ್ತುವ ನಿಲ್ದಾಣ (Boarding)' : 'Boarding Stop',
     destinationLabel: lang === 'kn' ? 'ಇಳಿಯುವ ನಿಲ್ದಾಣ (Destination)' : 'Destination Stop',
     filterPlaceholder: lang === 'kn' ? 'ನಿಲ್ದಾಣದ ಹೆಸರನ್ನು ಟೈಪ್ ಮಾಡಿ...' : 'Type stop name to filter...',
@@ -66,27 +58,14 @@ export default function JourneySearchCard({
 
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-7 border border-slate-200 shadow-xs space-y-5 select-none">
-      {/* Header: Simple Heading, Explanation & Login-Free Badge */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-4 border-b border-slate-100">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Bus size={20} strokeWidth={2.4} />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 m-0 tracking-tight">
-              {text.heading}
-            </h1>
-          </div>
-          <p className="text-xs sm:text-sm font-medium text-slate-600 m-0 pt-1 leading-relaxed max-w-2xl">
-            {text.subheading}
-          </p>
+      {/* Header: Clean Heading */}
+      <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+        <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+          <Bus size={20} strokeWidth={2.4} />
         </div>
-
-        {/* Prominent "No passenger login required" Badge */}
-        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold self-start shrink-0 shadow-2xs">
-          <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-          <span>{text.noLoginBadge}</span>
-        </div>
+        <h1 className="text-xl sm:text-2xl font-black text-slate-900 m-0 tracking-tight">
+          {text.heading}
+        </h1>
       </div>
 
       {/* Responsive Search Form: Desktop Horizontal Grid / Mobile Vertical Stack */}
