@@ -195,15 +195,6 @@ async function initPostgresSchema() {
       message TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
-
-    -- Relational Query Optimization Indexes
-    CREATE INDEX IF NOT EXISTS idx_bus_route_stops_bus ON bus_route_stops(bus_id, stop_order);
-    CREATE INDEX IF NOT EXISTS idx_conductors_assigned_bus ON conductors(assigned_bus_id);
-    CREATE INDEX IF NOT EXISTS idx_conductors_owner_email ON conductors(owner_email);
-    CREATE INDEX IF NOT EXISTS idx_buses_owner_email ON buses(owner_email);
-    CREATE INDEX IF NOT EXISTS idx_driver_shifts_status ON driver_shifts(vehicle_number, status);
-    CREATE INDEX IF NOT EXISTS idx_gps_telemetry_bus_time ON gps_telemetry(bus_id, recorded_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_owner_activities_owner ON owner_activities(owner_email, created_at DESC);
   `)
 
   // Check seed buses
@@ -536,15 +527,6 @@ function initSqliteSchema() {
         )
       `)
 
-      // Relational Query Optimization Indexes (SQLite)
-      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_bus_route_stops_bus ON bus_route_stops(bus_id, stop_order)')
-      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_conductors_assigned_bus ON conductors(assigned_bus_id)')
-      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_conductors_owner_email ON conductors(owner_email)')
-      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_buses_owner_email ON buses(owner_email)')
-      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_driver_shifts_status ON driver_shifts(vehicle_number, status)')
-      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_gps_telemetry_bus_time ON gps_telemetry(bus_id, recorded_at DESC)')
-      sqliteDb.run('CREATE INDEX IF NOT EXISTS idx_owner_activities_owner ON owner_activities(owner_email, created_at DESC)')
-
       sqliteDb.get('SELECT COUNT(*) AS count FROM buses', (err, row) => {
         if (err) {
           console.error('Error checking buses table:', err.message)
@@ -784,53 +766,6 @@ export async function recordShift(data) {
   })
 }
 
-// 1b. Shift Closing / End Duty
-export async function endShift(data = {}) {
-  const shiftId = data.shift_id ? Number(data.shift_id) : null
-  const vehicleNumber = data.vehicle_number ? String(data.vehicle_number).trim() : null
-
-  if (isPostgres()) {
-    if (shiftId) {
-      const res = await pgPool.query(
-        "UPDATE driver_shifts SET status = 'COMPLETED', end_time = CURRENT_TIMESTAMP WHERE shift_id = $1 RETURNING *",
-        [shiftId]
-      )
-      return res.rows[0] || null
-    } else if (vehicleNumber) {
-      const res = await pgPool.query(
-        "UPDATE driver_shifts SET status = 'COMPLETED', end_time = CURRENT_TIMESTAMP WHERE vehicle_number = $1 AND status = 'ACTIVE' RETURNING *",
-        [vehicleNumber]
-      )
-      return res.rows[0] || null
-    }
-    return null
-  }
-
-  return new Promise((resolve) => {
-    if (shiftId) {
-      sqliteDb.run(
-        "UPDATE driver_shifts SET status = 'COMPLETED', end_time = CURRENT_TIMESTAMP WHERE shift_id = ?",
-        [shiftId],
-        function (err) {
-          if (err) resolve(null)
-          else resolve({ shift_id: shiftId, status: 'COMPLETED' })
-        }
-      )
-    } else if (vehicleNumber) {
-      sqliteDb.run(
-        "UPDATE driver_shifts SET status = 'COMPLETED', end_time = CURRENT_TIMESTAMP WHERE vehicle_number = ? AND status = 'ACTIVE'",
-        [vehicleNumber],
-        function (err) {
-          if (err) resolve(null)
-          else resolve({ vehicle_number: vehicleNumber, status: 'COMPLETED' })
-        }
-      )
-    } else {
-      resolve(null)
-    }
-  })
-}
-
 // 2. GPS Telemetry Recording
 export async function recordTelemetry(data) {
   if (isPostgres()) {
@@ -849,38 +784,6 @@ export async function recordTelemetry(data) {
       function (err) {
         if (err) resolve(null)
         else resolve(this.lastID)
-      }
-    )
-  })
-}
-
-// 2b. Automated GPS Telemetry Log Retention Pruning
-export async function pruneOldTelemetry(retentionDays = 7) {
-  const days = Math.max(1, Number(retentionDays) || 7)
-  if (isPostgres()) {
-    try {
-      const res = await pgPool.query(
-        "DELETE FROM gps_telemetry WHERE recorded_at < NOW() - ($1 || ' days')::INTERVAL RETURNING log_id",
-        [days]
-      )
-      return res.rowCount || 0
-    } catch (err) {
-      console.warn('[Telemetry Prune Warning]', err.message)
-      return 0
-    }
-  }
-
-  return new Promise((resolve) => {
-    sqliteDb.run(
-      "DELETE FROM gps_telemetry WHERE recorded_at < datetime('now', '-' || ? || ' days')",
-      [days],
-      function (err) {
-        if (err) {
-          console.warn('[Telemetry Prune SQLite Warning]', err.message)
-          resolve(0)
-        } else {
-          resolve(this.changes || 0)
-        }
       }
     )
   })
@@ -1949,76 +1852,6 @@ export async function getAllBusStops() {
   })
 }
 
-// Helper to batch-load all route stops grouped by bus_id to eliminate N+1 queries
-async function getAllBusRouteStopsGrouped() {
-  if (isPostgres()) {
-    const res = await pgPool.query(
-      'SELECT bus_id, stop_order, stop_name, planned_arrival FROM bus_route_stops ORDER BY bus_id ASC, stop_order ASC'
-    )
-    const map = {}
-    for (const r of res.rows) {
-      if (!map[r.bus_id]) map[r.bus_id] = []
-      map[r.bus_id].push({
-        stop_order: r.stop_order,
-        stop_name: r.stop_name,
-        planned_arrival: r.planned_arrival,
-      })
-    }
-    return map
-  }
-
-  return new Promise((resolve) => {
-    sqliteDb.all(
-      'SELECT bus_id, stop_order, stop_name, planned_arrival FROM bus_route_stops ORDER BY bus_id ASC, stop_order ASC',
-      (err, rows) => {
-        if (err || !rows) return resolve({})
-        const map = {}
-        for (const r of rows) {
-          if (!map[r.bus_id]) map[r.bus_id] = []
-          map[r.bus_id].push({
-            stop_order: r.stop_order,
-            stop_name: r.stop_name,
-            planned_arrival: r.planned_arrival,
-          })
-        }
-        resolve(map)
-      }
-    )
-  })
-}
-
-// Helper to batch-load active conductors mapped by assigned_bus_id
-async function getActiveConductorsMap() {
-  if (isPostgres()) {
-    const res = await pgPool.query(
-      "SELECT conductor_id, name, phone, status, assigned_bus_id FROM conductors WHERE assigned_bus_id IS NOT NULL AND (status = 'Active' OR status IS NULL) ORDER BY conductor_id DESC"
-    )
-    const map = {}
-    for (const r of res.rows) {
-      if (!map[r.assigned_bus_id]) {
-        map[r.assigned_bus_id] = r
-      }
-    }
-    return map
-  }
-
-  return new Promise((resolve) => {
-    sqliteDb.all(
-      "SELECT conductor_id, name, phone, status, assigned_bus_id FROM conductors WHERE assigned_bus_id IS NOT NULL AND (status = 'Active' OR status IS NULL) ORDER BY conductor_id DESC",
-      (err, rows) => {
-        if (err || !rows) return resolve({})
-        const map = {}
-        for (const r of rows) {
-          if (!map[r.assigned_bus_id]) {
-            map[r.assigned_bus_id] = r
-          }
-        }
-        resolve(map)
-      }
-    )
-  })
-}
-
 // 20. Search Buses By Journey (Intermediate Stop Order Matching)
 // CRITICAL: Absolutely NO ticket fare, ticket price, fees or payment fields anywhere
 export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {}) {
@@ -2049,64 +1882,39 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
     return []
   }
 
-  // High Efficiency Parallel Batch Load: Eliminates N+1 database queries
-  const [buses, conductorsMap, routeStopsMap] = await Promise.all([
-    getBuses(),
-    getActiveConductorsMap(),
-    getAllBusRouteStopsGrouped(),
-  ])
+  const buses = await getBuses()
   const matched = []
 
   for (const bus of buses) {
     // Strict Project Requirement: Must belong to the fixed corridor Mangaluru -> Kundapura
-    const activeData = activeBuses[bus.bus_id] || {}
-    const isCorridorBus =
-      (bus.origin === 'Mangaluru' && bus.destination === 'Kundapura') ||
-      Boolean(activeData.is_on_shift || activeData.active_shift)
+    if (bus.origin !== 'Mangaluru' || bus.destination !== 'Kundapura') {
+      continue
+    }
+    // 5. Must have an active assigned conductor in conductors table
+    let conductor = null
+    if (isPostgres()) {
+      const cRes = await pgPool.query(
+        "SELECT conductor_id, name, phone, status FROM conductors WHERE assigned_bus_id = $1 AND (status = 'Active' OR status IS NULL) LIMIT 1",
+        [bus.bus_id]
+      )
+      conductor = cRes.rows[0] || null
+    } else {
+      conductor = await new Promise((resolve) => {
+        sqliteDb.get(
+          "SELECT conductor_id, name, phone, status FROM conductors WHERE assigned_bus_id = ? AND (status = 'Active' OR status IS NULL) LIMIT 1",
+          [bus.bus_id],
+          (err, row) => resolve(err ? null : row || null)
+        )
+      })
+    }
 
-    if (!isCorridorBus) {
+    if (!conductor) {
       continue
     }
 
-    // 5. Must have an active assigned conductor in conductors table or active duty shift
-    let conductor = conductorsMap[bus.bus_id] || null
-
-    if (!conductor) {
-      if (activeData && (activeData.is_on_shift || activeData.conductor_name)) {
-        conductor = {
-          conductor_id: activeData.conductor_id || 999,
-          name: activeData.conductor_name || 'Conductor on Duty',
-          phone: activeData.driver_phone || '98451 00000',
-          status: 'Active',
-        }
-      } else {
-        if (isPostgres()) {
-          const cRes = await pgPool.query(
-            "SELECT conductor_id, name, phone, status FROM conductors WHERE assigned_bus_id = $1 AND (status = 'Active' OR status IS NULL) LIMIT 1",
-            [bus.bus_id]
-          )
-          conductor = cRes.rows[0] || null
-        } else {
-          conductor = await new Promise((resolve) => {
-            sqliteDb.get(
-              "SELECT conductor_id, name, phone, status FROM conductors WHERE assigned_bus_id = ? AND (status = 'Active' OR status IS NULL) LIMIT 1",
-              [bus.bus_id],
-              (err, row) => resolve(err ? null : row || null)
-            )
-          })
-        }
-        if (!conductor) {
-          continue
-        }
-      }
-    }
-
-    let stops = routeStopsMap[bus.bus_id] || []
+    let stops = await getBusRouteStops(bus.bus_id)
     if (!stops || stops.length < 2) {
-      stops = await getBusRouteStops(bus.bus_id)
-      if (!stops || stops.length < 2) {
-        continue
-      }
+      continue
     }
 
     const fromIdx = stops.findIndex((s) => {
@@ -2124,24 +1932,19 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
       const boardingStop = stops[fromIdx]
       const destinationStop = stops[toIdx]
 
+      const activeData = activeBuses[bus.bus_id] || {}
       const now = Date.now()
       const lastTs = activeData.timestamp ? new Date(activeData.timestamp).getTime() : 0
-      const isShiftActive = Boolean(
-        (activeData.is_on_shift || activeData.active_shift) &&
-        activeData.tracking_status !== 'OFFLINE'
-      )
-      // Active coastal shifts stay fresh with a 2-minute heartbeat window for live GPS
-      const isStale = isShiftActive && lastTs > 0 && now - lastTs >= 120000
+      const isShiftActive = Boolean(activeData.is_on_shift || activeData.active_shift)
+      // Active coastal shifts stay fresh with a 1-hour heartbeat window
+      const hasRecentGps = isShiftActive && (now - lastTs < 3600000 || !lastTs)
+      const isStale = isShiftActive && lastTs > 0 && now - lastTs >= 3600000
 
       let trackingStatus = 'SCHEDULED'
-      if (isShiftActive && activeData.latitude && activeData.longitude) {
-        if (isStale) {
-          trackingStatus = 'LOCATION STALE'
-        } else {
-          trackingStatus = 'LIVE'
-        }
-      } else if (isShiftActive) {
-        trackingStatus = activeData.tracking_status || 'NOT TRACKING'
+      if (hasRecentGps && activeData.latitude && activeData.longitude) {
+        trackingStatus = 'LIVE'
+      } else if (isStale) {
+        trackingStatus = 'LOCATION STALE'
       } else if (bus.departure_time) {
         trackingStatus = 'SCHEDULED'
       }
@@ -2175,7 +1978,6 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
         journey_duration: bus.journey_duration || '1 hour 35 minutes',
         tracking_status: trackingStatus,
         is_live: trackingStatus === 'LIVE',
-        is_on_shift: isShiftActive,
         live_eta_minutes: liveEtaMinutes,
         last_update: activeData.timestamp ? new Date(activeData.timestamp).toLocaleTimeString() : null,
         latitude: activeData.latitude || null,
@@ -2192,8 +1994,6 @@ export async function searchBusesByJourney(fromQuery, toQuery, activeBuses = {})
   matched.sort((a, b) => {
     if (a.is_live && !b.is_live) return -1
     if (!a.is_live && b.is_live) return 1
-    if (a.is_on_shift && !b.is_on_shift) return -1
-    if (!a.is_on_shift && b.is_on_shift) return 1
     return (a.boarding_planned_time || '').localeCompare(b.boarding_planned_time || '')
   })
 

@@ -1,4 +1,4 @@
-import { Bus, Clock, Gauge, RotateCw, AlertCircle, Compass } from 'lucide-react'
+import { Bus, Clock, AlertCircle, Compass } from 'lucide-react'
 
 export default function LiveTrackingHud({
   bus,
@@ -7,7 +7,6 @@ export default function LiveTrackingHud({
   secondsAgo = 0,
   nextStop = '',
   journeyInfo = null,
-  userDistanceKm = null,
 }) {
   if (!bus) return null
 
@@ -21,15 +20,6 @@ export default function LiveTrackingHud({
   const isLive = normalizedStatus === 'LIVE'
   const isStale = normalizedStatus === 'LOCATION STALE'
   const isNotTracking = normalizedStatus === 'NOT TRACKING'
-
-  // Formatted last update time
-  const lastUpdateFormatted = telemetry?.timestamp
-    ? new Date(telemetry.timestamp).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
-    : null
 
   return (
     <div className="absolute bottom-4 left-4 right-4 sm:left-6 sm:right-auto sm:w-[420px] z-10 select-none">
@@ -54,12 +44,12 @@ export default function LiveTrackingHud({
           {isLive ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              LIVE GPS
+              LIVE
             </span>
           ) : isStale ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-50 text-amber-800 border border-amber-300">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              SIGNAL STALE
+              LOCATION DELAYED
             </span>
           ) : isNotTracking ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
@@ -74,7 +64,7 @@ export default function LiveTrackingHud({
           )}
         </div>
 
-        {/* Real Journey Details & Speed vs Scheduled Arrival */}
+        {/* Passenger-focused route and arrival details */}
         <div className="grid grid-cols-2 gap-2.5 text-xs">
           {/* Destination / Next Stop */}
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
@@ -87,44 +77,17 @@ export default function LiveTrackingHud({
             </strong>
           </div>
 
-          {/* Distinguish Scheduled Arrival from Live Telemetry Speed */}
+          {/* Timetable arrival estimate */}
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
-            {isLive ? (
-              <>
-                <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  <Gauge size={11} className="text-emerald-600" />
-                  <span>Telemetry Speed</span>
-                </div>
-                <strong className="text-sm font-black text-emerald-800 mt-1 block">
-                  {telemetry?.speed || 0} km/h
-                </strong>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  <Clock size={11} className="text-slate-500" />
-                  <span>Scheduled Arrival</span>
-                </div>
-                <strong className="text-sm font-black text-slate-900 mt-1 block">
-                  {bus.destination_planned_time || 'On Timetable'}
-                </strong>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Real-time Distance between Passenger Device & Bus */}
-        {userDistanceKm !== null && (
-          <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl px-3 py-2 text-xs flex items-center justify-between font-bold shadow-2xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
-              <span className="text-slate-700 font-semibold">Distance to Bus:</span>
+            <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              <Clock size={11} className="text-slate-500" />
+              <span>Estimated Arrival</span>
             </div>
-            <strong className="text-blue-950 font-black">
-              {userDistanceKm < 1 ? `${Math.round(userDistanceKm * 1000)} meters` : `${userDistanceKm} km away`}
+            <strong className="text-sm font-black text-slate-900 mt-1 block">
+              {bus.destination_planned_time || 'On timetable'}
             </strong>
           </div>
-        )}
+        </div>
 
         {/* Conductor & Planned Departure Info */}
         {bus.conductor_name && (
@@ -140,34 +103,32 @@ export default function LiveTrackingHud({
           </div>
         )}
 
-        {/* GPS Freshness and Availability Status Message */}
+        {/* Location availability */}
         <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-slate-600">
           {isLive ? (
             <div className="flex items-center gap-1.5 text-emerald-700">
-              <RotateCw size={13} className="animate-spin text-emerald-600 shrink-0" />
-              <span className="truncate">
-                Last updated: {lastUpdateFormatted || 'Just now'} ({secondsAgo}s ago)
-              </span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span className="truncate">Live location available</span>
             </div>
           ) : isStale ? (
             <div className="flex items-center gap-1.5 text-amber-700">
               <Clock size={13} className="text-amber-600 shrink-0" />
               <span className="truncate">
-                Location stale: Last signal received {secondsAgo}s ago
+                The latest bus location may be delayed
               </span>
             </div>
           ) : isNotTracking ? (
             <div className="flex items-center gap-1.5 text-blue-700">
               <Clock size={13} className="text-blue-500 shrink-0" />
               <span className="truncate">
-                Conductor GPS not started • Bus operating on timetable
+                Live location is unavailable. Showing timetable information.
               </span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 text-slate-500">
               <AlertCircle size={13} className="text-slate-400 shrink-0" />
               <span className="truncate">
-                Bus offline • Showing scheduled corridor timetable
+                Bus is offline. Showing timetable information.
               </span>
             </div>
           )}

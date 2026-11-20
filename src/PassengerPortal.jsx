@@ -8,45 +8,28 @@ import {
   RotateCw,
   Compass,
   ArrowRight,
-  Crosshair,
-  Layers,
-  Navigation,
-  AlertTriangle,
-  X,
 } from 'lucide-react'
 import io from 'socket.io-client'
-import { MapContainer, TileLayer, Polyline, Marker, Popup, Circle } from 'react-leaflet'
+import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { apiUrl, socketUrl } from './api.js'
-import {
-  OFFICIAL_9_CORRIDOR_STOPS,
-  calculateHaversineDistance,
-  isWithinCoastalCorridor,
-} from './transitUtils.js'
+import { OFFICIAL_9_CORRIDOR_STOPS } from './transitUtils.js'
 import JourneySearchCard from './components/JourneySearchCard.jsx'
+import PopularJourneys from './components/PopularJourneys.jsx'
 import BusCard from './components/BusCard.jsx'
 import RouteTimeline from './components/RouteTimeline.jsx'
 import LiveTrackingHud from './components/LiveTrackingHud.jsx'
-import { busLiveIcon, stopPinIcon, userLocationIcon } from './mapIcons.js'
+import { busLiveIcon, stopPinIcon } from './mapIcons.js'
 import { MapViewportController } from './components/MapMarkers.jsx'
 
 export default function PassengerPortal({
   preselectedStop,
   onOpenFindStop,
   initialScreen = 1,
-  initialSelectedBusId = null,
   lang = 'en',
-  liveBuses = {},
-  socket: propSocket = null,
 }) {
   // Page Navigation (1 = Search/Home, 2 = Results, 3 = Details, 4 = Live Tracking)
   const [screen, setScreen] = useState(initialScreen)
-
-  useEffect(() => {
-    if (initialScreen) {
-      setScreen(initialScreen)
-    }
-  }, [initialScreen])
 
   // Search Fields (Default: Surathkal -> Udupi along the 9 corridor stops)
   const [currentStop, setCurrentStop] = useState('Surathkal')
@@ -78,7 +61,7 @@ export default function PassengerPortal({
   const [buses, setBuses] = useState([])
   const [loadingBuses, setLoadingBuses] = useState(false)
   const [searchError, setSearchError] = useState('')
-  const [activeFilter, setActiveFilter] = useState('all') // 'all' | 'active' | 'scheduled'
+  const [activeFilter, setActiveFilter] = useState('active') // 'active' | 'all' | 'scheduled'
 
   // Selected Bus Details (Screen 3 & Screen 4)
   const [selectedBus, setSelectedBus] = useState(null)
@@ -87,23 +70,8 @@ export default function PassengerPortal({
 
   // Real-time Telemetry & Seconds Elapsed Timer (Screen 4)
   const [secondsAgo, setSecondsAgo] = useState(15)
-  const [liveTelemetry, setLiveTelemetry] = useState(liveBuses || {})
+  const [liveTelemetry, setLiveTelemetry] = useState({})
   const socketRef = useRef(null)
-
-  // Google Maps Style Controls & User Geolocation (Screen 4)
-  const [mapLayer, setMapLayer] = useState('street') // 'street' | 'satellite'
-  const [passengerLocation, setPassengerLocation] = useState(null) // { lat, lng, accuracy }
-  const [isLocatingPassenger, setIsLocatingPassenger] = useState(false)
-  const [passengerLocationError, setPassengerLocationError] = useState('')
-  const [hasDismissedLocationPrompt, setHasDismissedLocationPrompt] = useState(false)
-  const [flyTarget, setFlyTarget] = useState(null)
-
-  // Sync liveTelemetry when liveBuses prop updates from App
-  useEffect(() => {
-    if (liveBuses && Object.keys(liveBuses).length > 0) {
-      setLiveTelemetry((prev) => ({ ...prev, ...liveBuses }))
-    }
-  }, [liveBuses])
 
   // Popular Routes
   const POPULAR_ROUTES = [
@@ -113,16 +81,9 @@ export default function PassengerPortal({
     { from: 'Mulki', to: 'Udupi' },
   ]
 
-  const currentStopRef = useRef(currentStop)
-  const destinationRef = useRef(destination)
-  useEffect(() => {
-    currentStopRef.current = currentStop
-    destinationRef.current = destination
-  }, [currentStop, destination])
-
   // Setup WebSocket Telemetry Connection
   useEffect(() => {
-    const socket = propSocket || io(socketUrl)
+    const socket = io(socketUrl)
     socketRef.current = socket
 
     socket.on('sync_buses', (synced) => {
@@ -131,35 +92,14 @@ export default function PassengerPortal({
       }
     })
 
-    socket.on('shift_broadcast', (data) => {
-      if (!data || !data.bus_id) return
-      const isShiftOn = data.is_on_shift !== false && data.tracking_status !== 'OFFLINE'
-      setLiveTelemetry((prev) => ({
-        ...prev,
-        [data.bus_id]: {
-          ...(prev[data.bus_id] || {}),
-          ...data,
-          is_on_shift: isShiftOn,
-          tracking_status: data.tracking_status || (isShiftOn ? 'NOT TRACKING' : 'OFFLINE'),
-          conductor_name: data.conductor_name || prev[data.bus_id]?.conductor_name,
-          ...(isShiftOn ? {} : { latitude: null, longitude: null, speed: 0, is_live: false }),
-        },
-      }))
-    })
-
     socket.on('live_location_broadcast', (data) => {
       if (!data || !data.bus_id) return
-      const isExplicitOffline = data.tracking_status === 'OFFLINE' || data.is_on_shift === false
       setLiveTelemetry((prev) => ({
         ...prev,
         [data.bus_id]: {
           ...(prev[data.bus_id] || {}),
           ...data,
-          is_on_shift: !isExplicitOffline && (data.is_on_shift !== undefined ? data.is_on_shift : true),
-          tracking_status: isExplicitOffline
-            ? 'OFFLINE'
-            : (data.tracking_status || (data.latitude && data.longitude ? 'LIVE' : 'NOT TRACKING')),
-          timestamp: data.timestamp || Date.now(),
+          timestamp: Date.now(),
         },
       }))
       setSecondsAgo(0)
@@ -167,50 +107,32 @@ export default function PassengerPortal({
 
     socket.on('bus_location_update', (data) => {
       if (!data || !data.bus_id) return
-      const isExplicitOffline = data.tracking_status === 'OFFLINE' || data.is_on_shift === false
       setLiveTelemetry((prev) => ({
         ...prev,
         [data.bus_id]: {
           ...(prev[data.bus_id] || {}),
           ...data,
-          is_on_shift: !isExplicitOffline && (data.is_on_shift !== undefined ? data.is_on_shift : true),
-          tracking_status: isExplicitOffline
-            ? 'OFFLINE'
-            : (data.tracking_status || (data.latitude && data.longitude ? 'LIVE' : 'NOT TRACKING')),
           timestamp: data.timestamp || Date.now(),
         },
       }))
       setSecondsAgo(0)
     })
 
-    const handleStopOrEnd = ({ bus_id }) => {
+    socket.on('bus_tracking_stopped', ({ bus_id }) => {
       if (!bus_id) return
       setLiveTelemetry((prev) => ({
         ...prev,
         [bus_id]: {
           ...(prev[bus_id] || {}),
           tracking_status: 'OFFLINE',
-          is_on_shift: false,
-          is_live: false,
-          latitude: null,
-          longitude: null,
-          speed: 0,
         },
       }))
-    }
-
-    socket.on('bus_tracking_stopped', handleStopOrEnd)
-    socket.on('shift_ended', handleStopOrEnd)
+    })
 
     return () => {
-      if (!propSocket) {
-        socket.disconnect()
-      } else {
-        socket.off('bus_tracking_stopped', handleStopOrEnd)
-        socket.off('shift_ended', handleStopOrEnd)
-      }
+      socket.disconnect()
     }
-  }, [propSocket])
+  }, [])
 
   // Initial Bus Search on Mount
   useEffect(() => {
@@ -255,19 +177,14 @@ export default function PassengerPortal({
     const newFromObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === stopName)
     const currentToObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === destination)
 
-    let nextTo = destination
     if (newFromObj && currentToObj && currentToObj.stop_id <= newFromObj.stop_id) {
       const nextStop = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id > newFromObj.stop_id)
-      nextTo = nextStop ? nextStop.stop_name : 'Kundapura'
-      setDestination(nextTo)
+      if (nextStop) {
+        setDestination(nextStop.stop_name)
+      } else {
+        setDestination('Kundapura')
+      }
     }
-    handleSearchBuses(stopName, nextTo, false)
-  }
-
-  // Select Destination stop and refresh matching corridor buses
-  const handleSelectToStop = (stopName) => {
-    setDestination(stopName)
-    handleSearchBuses(currentStop, stopName, false)
   }
 
   // Real Search Buses API handler
@@ -287,28 +204,10 @@ export default function PassengerPortal({
       if (data.success && Array.isArray(data.buses)) {
         setBuses(data.buses)
         if (data.buses.length > 0) {
-          const matchInitial = initialSelectedBusId
-            ? data.buses.find((b) => String(b.bus_id) === String(initialSelectedBusId))
-            : null
-          const liveCandidate = data.buses.find((b) => b.is_live && b.latitude && b.longitude)
-          setSelectedBus(matchInitial || liveCandidate || data.buses[0])
+          setSelectedBus(data.buses[0])
         } else {
           setSelectedBus(null)
         }
-        const isEntryActive = (b) => {
-          if (b.tracking_status === 'OFFLINE' || b.tracking_status === 'SCHEDULED' || b.is_on_shift === false) {
-            return false
-          }
-          return Boolean(
-            b.is_live ||
-              b.is_on_shift ||
-              b.tracking_status === 'LIVE' ||
-              b.tracking_status === 'LOCATION STALE' ||
-              b.tracking_status === 'NOT TRACKING'
-          )
-        }
-        const hasActive = data.buses.some(isEntryActive)
-        setActiveFilter(hasActive ? 'active' : 'all')
       } else {
         setBuses([])
         setSelectedBus(null)
@@ -339,27 +238,20 @@ export default function PassengerPortal({
     const fromId = fromObj?.stop_id || 1
     const toId = toObj?.stop_id || 8
 
-    let nextFrom = currentStop
-    let nextTo = destination
-
     if (toId < 9) {
-      nextFrom = destination
+      setCurrentStop(destination)
       const next = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id > toId)
-      nextTo = next ? next.stop_name : 'Kundapura'
+      setDestination(next ? next.stop_name : 'Kundapura')
     } else {
       const prev = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id < fromId)
       if (prev) {
-        nextTo = currentStop
-        nextFrom = prev.stop_name
+        setDestination(currentStop)
+        setCurrentStop(prev.stop_name)
       } else {
-        nextFrom = 'Surathkal'
-        nextTo = 'Udupi'
+        setCurrentStop('Surathkal')
+        setDestination('Udupi')
       }
     }
-
-    setCurrentStop(nextFrom)
-    setDestination(nextTo)
-    handleSearchBuses(nextFrom, nextTo, false)
   }
 
   // Select Bus for Details (Screen 3)
@@ -402,128 +294,51 @@ export default function PassengerPortal({
     }
   }
 
-  // Combine static DB search results with live telemetry & active shifts
-  const enrichedBuses = useMemo(() => {
-    return buses.map((bus) => {
-      const live = liveTelemetry[bus.bus_id]
-      if (!live) return bus
-
-      const hasCoords = Boolean(
-        typeof live.latitude === 'number' &&
-          typeof live.longitude === 'number' &&
-          !isNaN(live.latitude) &&
-          !isNaN(live.longitude) &&
-          live.latitude !== 0 &&
-          live.longitude !== 0 &&
-          live.latitude >= -90 &&
-          live.latitude <= 90 &&
-          live.longitude >= -180 &&
-          live.longitude <= 180
-      )
-
-      // Explicit offline check: Conductor ended shift, stopped tracking, or marked OFFLINE
-      const isExplicitlyOffline = Boolean(
-        live.tracking_status === 'OFFLINE' ||
-        live.tracking_status === 'SCHEDULED' ||
-        live.is_on_shift === false
-      )
-
-      const isOnShift = !isExplicitlyOffline && Boolean(
-        live.is_on_shift !== undefined ? live.is_on_shift : bus.is_on_shift
-      )
-
-      const isLiveTracking = !isExplicitlyOffline && Boolean(
-        live.tracking_status === 'LIVE' ||
-        (hasCoords && isOnShift && live.tracking_status !== 'LOCATION STALE')
-      )
-
-      const trackingStatus = isExplicitlyOffline
-        ? (bus.departure_time ? 'SCHEDULED' : 'OFFLINE')
-        : (live.tracking_status || (isLiveTracking ? 'LIVE' : isOnShift ? 'NOT TRACKING' : bus.tracking_status || 'SCHEDULED'))
-
-      return {
-        ...bus,
-        ...live,
-        conductor_name: live.conductor_name || bus.conductor_name,
-        conductor_phone: live.conductor_phone || live.driver_phone || bus.conductor_phone,
-        tracking_status: trackingStatus,
-        is_live: isLiveTracking,
-        is_on_shift: isOnShift,
-        latitude: isExplicitlyOffline ? null : (hasCoords ? live.latitude : bus.latitude),
-        longitude: isExplicitlyOffline ? null : (hasCoords ? live.longitude : bus.longitude),
-        speed: isExplicitlyOffline ? 0 : (live.speed !== undefined ? live.speed : bus.speed),
-        timestamp: isExplicitlyOffline ? null : (live.timestamp || bus.timestamp),
-      }
-    })
-  }, [buses, liveTelemetry])
-
-  const isBusActive = (b) => {
-    if (b.tracking_status === 'OFFLINE' || b.tracking_status === 'SCHEDULED' || b.is_on_shift === false) {
-      return false
-    }
-    return Boolean(
-      b.is_live ||
-        b.is_on_shift ||
-        b.tracking_status === 'LIVE' ||
-        b.tracking_status === 'LOCATION STALE' ||
-        b.tracking_status === 'NOT TRACKING'
-    )
-  }
-
   // Filter counts for Screen 2
   const activeCount = useMemo(
-    () => enrichedBuses.filter(isBusActive).length,
-    [enrichedBuses]
+    () =>
+      buses.filter(
+        (b) =>
+          b.is_live ||
+          b.tracking_status === 'LIVE' ||
+          b.tracking_status === 'LOCATION STALE'
+      ).length,
+    [buses]
   )
 
   const scheduledCount = useMemo(
-    () => enrichedBuses.filter((b) => !isBusActive(b)).length,
-    [enrichedBuses]
+    () =>
+      buses.filter(
+        (b) =>
+          b.tracking_status === 'SCHEDULED' ||
+          (!b.is_live && b.tracking_status !== 'LIVE' && b.tracking_status !== 'LOCATION STALE')
+      ).length,
+    [buses]
   )
 
   const displayedBuses = useMemo(() => {
     if (activeFilter === 'active') {
-      return enrichedBuses.filter(isBusActive)
+      return buses.filter(
+        (b) =>
+          b.is_live ||
+          b.tracking_status === 'LIVE' ||
+          b.tracking_status === 'LOCATION STALE'
+      )
     }
     if (activeFilter === 'scheduled') {
-      return enrichedBuses.filter((b) => !isBusActive(b))
+      return buses.filter(
+        (b) =>
+          b.tracking_status === 'SCHEDULED' ||
+          (!b.is_live && b.tracking_status !== 'LIVE' && b.tracking_status !== 'LOCATION STALE')
+      )
     }
-    return enrichedBuses
-  }, [enrichedBuses, activeFilter])
-
-  // Synchronize initial selected bus from navigation or conductor view
-  useEffect(() => {
-    if (initialSelectedBusId && buses.length > 0) {
-      const match = buses.find((b) => String(b.bus_id) === String(initialSelectedBusId))
-      if (match) setSelectedBus(match)
-    }
-  }, [initialSelectedBusId, buses])
-
-  // When viewing Live Tracking (Screen 4), ensure a bus broadcasting live GPS is prioritized
-  useEffect(() => {
-    if (screen === 4) {
-      const curLive = selectedBus && liveTelemetry[selectedBus.bus_id]
-      const hasCoords = curLive?.latitude && curLive?.longitude
-      if (!hasCoords) {
-        const liveCandidate = enrichedBuses.find((b) => b.is_live && b.latitude && b.longitude)
-        if (liveCandidate) {
-          setSelectedBus(liveCandidate)
-        }
-      }
-    }
-  }, [screen, enrichedBuses, liveTelemetry, selectedBus])
+    return buses
+  }, [buses, activeFilter])
 
   // Real-time telemetry for the selected bus
   const activeSelectedBus = useMemo(() => {
-    if (selectedBus) {
-      const match = enrichedBuses.find((b) => b.bus_id === selectedBus.bus_id)
-      return match || selectedBus
-    }
-    const liveCandidate = enrichedBuses.find(
-      (b) => b.is_live && typeof b.latitude === 'number' && typeof b.longitude === 'number'
-    )
-    return liveCandidate || enrichedBuses.find((b) => b.is_on_shift) || enrichedBuses[0] || null
-  }, [selectedBus, enrichedBuses])
+    return selectedBus || buses[0] || null
+  }, [selectedBus, buses])
 
   const trackedTelemetry = useMemo(() => {
     if (!activeSelectedBus) return null
@@ -550,14 +365,10 @@ export default function PassengerPortal({
     return Boolean(
       typeof lat === 'number' &&
         typeof lng === 'number' &&
-        !isNaN(lat) &&
-        !isNaN(lng) &&
-        lat !== 0 &&
-        lng !== 0 &&
-        lat >= -90 &&
-        lat <= 90 &&
-        lng >= -180 &&
-        lng <= 180
+        lat >= 12.0 &&
+        lat <= 15.0 &&
+        lng >= 73.5 &&
+        lng <= 76.0
     )
   }, [trackedTelemetry])
 
@@ -573,89 +384,13 @@ export default function PassengerPortal({
     return 'OFFLINE'
   }, [activeSelectedBus, trackedTelemetry, hasLiveCoordinates])
 
-  const isBusOutOfCorridor = useMemo(() => {
-    if (!hasLiveCoordinates || !trackedTelemetry) return false
-    return !isWithinCoastalCorridor(trackedTelemetry.latitude, trackedTelemetry.longitude)
-  }, [hasLiveCoordinates, trackedTelemetry])
-
   const busCoords = useMemo(() => {
-    if (hasLiveCoordinates && !isBusOutOfCorridor) {
+    if (hasLiveCoordinates) {
       return [trackedTelemetry.latitude, trackedTelemetry.longitude]
     }
-    // Default corridor center (Kaup / Padubidri) for map centering when bus is offline or outside corridor
+    // Default corridor center (Kaup / Padubidri) for map centering when bus has not yet transmitted GPS
     return [13.2208, 74.7431]
-  }, [hasLiveCoordinates, isBusOutOfCorridor, trackedTelemetry])
-
-  // Real-time distance calculation between passenger device and bus (Haversine)
-  const distanceToBusKm = useMemo(() => {
-    if (!passengerLocation || !hasLiveCoordinates) return null
-    return calculateHaversineDistance(
-      passengerLocation.lat,
-      passengerLocation.lng,
-      trackedTelemetry?.latitude || busCoords[0],
-      trackedTelemetry?.longitude || busCoords[1]
-    )
-  }, [passengerLocation, hasLiveCoordinates, trackedTelemetry, busCoords])
-
-  // Locate Passenger Device (Google Maps-like "My Location" crosshair)
-  const handleLocatePassenger = () => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setPassengerLocationError('Location services are not supported by your browser.')
-      return
-    }
-    setIsLocatingPassenger(true)
-    setPassengerLocationError('')
-
-    const onPos = (pos) => {
-      const coords = {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        accuracy: Math.round(pos.coords.accuracy || 20),
-      }
-      setPassengerLocation(coords)
-      setFlyTarget([coords.lat, coords.lng, 15])
-      setIsLocatingPassenger(false)
-      setHasDismissedLocationPrompt(true)
-    }
-
-    const onErr = (err) => {
-      console.warn('High-accuracy geolocation failed, falling back to standard:', err.message)
-      navigator.geolocation.getCurrentPosition(
-        onPos,
-        (standardErr) => {
-          setIsLocatingPassenger(false)
-          let msg = 'Could not detect your exact position.'
-          if (standardErr.code === 1) {
-            msg = 'Location permission was denied. Please allow location access in your browser.'
-          } else if (standardErr.code === 2) {
-            msg = 'Device location is turned off. Please turn ON "Location services" in Windows Settings.'
-          }
-          setPassengerLocationError(msg)
-        },
-        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
-      )
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      onPos,
-      onErr,
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
-    )
-  }
-
-  // Quick set passenger location to a known coastal corridor stop (e.g. for laptops on broadband IP)
-  const handleSetPassengerStop = (stopObj) => {
-    const coords = {
-      lat: stopObj.latitude,
-      lng: stopObj.longitude,
-      accuracy: 10,
-      stopName: stopObj.stop_name,
-    }
-    setPassengerLocation(coords)
-    setFlyTarget([stopObj.latitude, stopObj.longitude, 15])
-    setHasDismissedLocationPrompt(true)
-    setPassengerLocationError('')
-  }
+  }, [hasLiveCoordinates, trackedTelemetry])
 
   // Full corridor 9-stop timeline list for Screen 3
   const corridorTimelineStops = useMemo(() => {
@@ -700,8 +435,8 @@ export default function PassengerPortal({
   // PAGE 1: PASSENGER HOMEPAGE (CLEAN, ACCESSIBLE, RESPONSIVE LAYOUT)
   // ==========================================================================
   const renderHomepage = () => (
-    <div className="w-full flex flex-col space-y-7 select-none">
-      {/* Main Journey Search Panel */}
+    <div className="w-full flex flex-col space-y-5 select-none">
+      {/* 1. Main Journey Search Panel */}
       <JourneySearchCard
         currentStop={currentStop}
         destination={destination}
@@ -716,12 +451,55 @@ export default function PassengerPortal({
         fromSuggestions={fromSuggestions}
         toSuggestions={toSuggestions}
         onSelectFromStop={handleSelectFromStop}
-        onSelectToStop={handleSelectToStop}
+        onSelectToStop={(stop) => setDestination(stop)}
         onSwapStops={handleSwapStops}
-        onSearchBuses={() => handleSearchBuses(currentStop, destination, true)}
+        onSearchBuses={() => handleSearchBuses()}
         loadingBuses={loadingBuses}
         lang={lang}
       />
+
+      {/* 2. Popular Journeys Shortcuts */}
+      <PopularJourneys
+        routes={POPULAR_ROUTES}
+        onSelectJourney={(from, to) => handleSearchBuses(from, to)}
+        lang={lang}
+      />
+
+      {/* 3. Compact "Find a Bus Stop" Helper Card */}
+      <div
+        onClick={() => onOpenFindStop && onOpenFindStop()}
+        className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover:border-blue-400 hover:shadow-xs flex items-center justify-between gap-4 cursor-pointer transition"
+        role="button"
+        tabIndex={0}
+        aria-label="Find nearest bus stop helper"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            if (onOpenFindStop) onOpenFindStop()
+          }
+        }}
+      >
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Compass size={22} strokeWidth={2.2} />
+          </div>
+          <div>
+            <h2 className="text-sm font-black text-slate-900 m-0">
+              {lang === 'kn' ? 'ನಿಮ್ಮ ಸಮೀಪದ ಬಸ್ ನಿಲ್ದಾಣ ಹುಡುಕಿ' : 'Need help identifying your nearest bus stop?'}
+            </h2>
+            <p className="text-xs text-slate-600 font-medium m-0 mt-0.5">
+              {lang === 'kn'
+                ? 'ಎನ್ಐಟಿಕೆ, ಆಸ್ಪತ್ರೆಗಳು, ದೇವಸ್ಥಾನಗಳಂತಹ ಸ್ಥಳಗಳಿಂದ ಹುಡುಕಿ ಅಥವಾ ಜಿಪಿಎಸ್ ದೂರವನ್ನು ಬಳಸಿ.'
+                : 'Search by familiar landmarks such as NITK, hospitals, temples, or use on-demand distance lookup.'}
+            </p>
+          </div>
+        </div>
+        <span className="text-xs font-black text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3.5 py-2 rounded-xl shrink-0 transition flex items-center gap-1">
+          <span>{lang === 'kn' ? 'ನಿಲ್ದಾಣ ಹುಡುಕಿ' : 'Find a Stop'}</span>
+          <ArrowRight size={13} strokeWidth={2.4} />
+        </span>
+      </div>
+
     </div>
   )
 
@@ -1050,208 +828,25 @@ export default function PassengerPortal({
         </button>
       </div>
 
-      {/* Location Access & Onboarding Prompt (Asks user to turn on location for exact GPS tracking) */}
-      {!passengerLocation && !hasDismissedLocationPrompt && (
-        <div className="p-4 bg-gradient-to-r from-blue-50 via-sky-50 to-indigo-50 border border-blue-200 rounded-2xl shadow-xs space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Crosshair size={22} className={isLocatingPassenger ? 'animate-spin' : ''} />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-900 m-0">
-                  Turn ON Device Location to View Your Exact Position
-                </h3>
-                <p className="text-xs text-slate-600 m-0 mt-0.5 leading-relaxed">
-                  To view your location on Google Maps and calculate real-time distance to the bus, allow location access on your laptop or phone.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setHasDismissedLocationPrompt(true)}
-              className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition cursor-pointer"
-              title="Dismiss"
-              aria-label="Dismiss"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 pt-0.5">
-            <button
-              type="button"
-              onClick={handleLocatePassenger}
-              disabled={isLocatingPassenger}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <Navigation size={14} />
-              <span>{isLocatingPassenger ? 'Acquiring GPS Signal...' : '📍 Turn On & Allow Location Access'}</span>
-            </button>
-
-            <span className="text-[11px] text-slate-500 font-bold px-1">or snap to your stop:</span>
-
-            <div className="flex flex-wrap gap-1.5">
-              {OFFICIAL_9_CORRIDOR_STOPS.map((s) => (
-                <button
-                  key={s.stop_id}
-                  type="button"
-                  onClick={() => handleSetPassengerStop(s)}
-                  className="px-2.5 py-1 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-400 text-slate-700 hover:text-blue-700 rounded-lg text-[11px] font-bold transition cursor-pointer active:scale-95 shadow-2xs"
-                >
-                  📍 {s.stop_name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {passengerLocationError && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-medium space-y-1">
-              <div className="flex items-center gap-1.5 font-black text-amber-800">
-                <AlertTriangle size={15} />
-                <span>{passengerLocationError}</span>
-              </div>
-              <p className="text-[11px] text-amber-800 m-0 leading-relaxed">
-                <strong>How to enable:</strong> In Windows, open <strong>Settings &gt; Privacy &amp; security &gt; Location</strong> and turn ON &quot;Location services&quot;. Then click the lock icon 🔒 next to <strong>localhost:5173</strong> in your browser URL bar and set Location to &quot;Allow&quot;.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Notice when Bus Telemetry is out of corridor (e.g. Madikeri Broadband Gateway) */}
-      {isBusOutOfCorridor && (
-        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
-          <div className="flex items-start gap-2.5">
-            <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <strong className="block font-black text-amber-950">
-                ⚠️ Broadband ISP Gateway Detected in Madikeri / Coorg (~95 km from route)
-              </strong>
-              <p className="text-[11px] text-amber-800 m-0 mt-0.5">
-                The conductor&apos;s laptop Wi-Fi mapped their device to an ISP hub in Madikeri ({trackedTelemetry?.latitude?.toFixed(4)}, {trackedTelemetry?.longitude?.toFixed(4)}). Map view is prioritized along the coastal highway ({currentStop} ➔ {destination}).
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setFlyTarget(null)}
-              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
-            >
-              🛣️ Focus Coastal Route
-            </button>
-            <button
-              type="button"
-              onClick={() => setFlyTarget([trackedTelemetry.latitude, trackedTelemetry.longitude, 13])}
-              className="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95"
-            >
-              📍 View Bus in Madikeri
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Large Responsive Map Container (Google Maps Experience) */}
+      {/* Large Responsive Map Container */}
       <div className="relative w-full h-[560px] sm:h-[640px] md:h-[700px] rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
-        {/* Google Maps Style Layer Switcher (Street vs Satellite) */}
-        <div className="absolute top-4 right-4 z-20 flex items-center bg-white/95 backdrop-blur-md rounded-2xl p-1 shadow-md border border-slate-200 text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => setMapLayer('street')}
-            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
-              mapLayer === 'street'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-700 hover:bg-slate-100'
-            }`}
-          >
-            <Layers size={13} />
-            <span>Map</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMapLayer('satellite')}
-            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
-              mapLayer === 'satellite'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-700 hover:bg-slate-100'
-            }`}
-          >
-            <span>🛰️ Satellite</span>
-          </button>
-        </div>
-
-        {/* Google Maps Style Floating Navigation Action Tools */}
-        <div className="absolute top-18 right-4 z-20 flex flex-col gap-2">
-          {/* 🎯 Locate Me Button (Pulsing Blue Dot) */}
-          <button
-            type="button"
-            onClick={handleLocatePassenger}
-            className={`w-11 h-11 rounded-2xl bg-white/95 backdrop-blur-md border shadow-md flex items-center justify-center transition cursor-pointer active:scale-95 ${
-              passengerLocation
-                ? 'text-blue-600 border-blue-400 bg-blue-50/50'
-                : 'text-slate-700 border-slate-200 hover:text-blue-600'
-            }`}
-            title="Locate My Exact Position (Google Maps GPS)"
-            aria-label="Locate My Position"
-          >
-            {isLocatingPassenger ? (
-              <RotateCw size={19} className="animate-spin text-blue-600" />
-            ) : (
-              <Crosshair size={20} strokeWidth={2.4} />
-            )}
-          </button>
-
-          {/* 🚍 Focus Live Bus */}
-          {hasLiveCoordinates && (
-            <button
-              type="button"
-              onClick={() => setFlyTarget([busCoords[0], busCoords[1], 16])}
-              className="w-11 h-11 rounded-2xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-md flex items-center justify-center text-slate-700 hover:text-emerald-600 transition cursor-pointer active:scale-95"
-              title="Focus Live Bus on Map"
-              aria-label="Focus Live Bus"
-            >
-              <Bus size={20} strokeWidth={2.4} className="text-emerald-600" />
-            </button>
-          )}
-
-          {/* 🛣️ Reset Corridor Route Overview */}
-          <button
-            type="button"
-            onClick={() => setFlyTarget(null)}
-            className="w-11 h-11 rounded-2xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-md flex items-center justify-center text-slate-700 hover:text-blue-600 transition cursor-pointer active:scale-95"
-            title="Reset to Full NH-66 Corridor Route"
-            aria-label="Corridor Overview"
-          >
-            <Navigation size={18} strokeWidth={2.4} />
-          </button>
-        </div>
-
         <MapContainer
           center={busCoords}
-          zoom={12}
+          zoom={11}
           zoomControl={true}
-          style={{ width: '100%', height: '100%' }}
           className="w-full h-full z-0"
         >
-          {/* Dynamic Google Maps Style Tiles (Google Roadmap vs Google Satellite Hybrid) */}
           <TileLayer
-            key={mapLayer}
-            attribution='&copy; Google Maps'
-            url={
-              mapLayer === 'satellite'
-                ? 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'
-                : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
-            }
-            maxZoom={20}
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
           {/* NH-66 Coastal Corridor Polyline */}
           <Polyline
             positions={polylineCoordinates}
-            color={mapLayer === 'satellite' ? '#38bdf8' : '#2563eb'}
+            color="#2563eb"
             weight={6}
-            opacity={0.92}
+            opacity={0.88}
           />
 
           {/* Labeled Pins for All 9 Official Corridor Stops */}
@@ -1282,36 +877,6 @@ export default function PassengerPortal({
             )
           })}
 
-          {/* Passenger Device Location (🔵 Google Maps Blue Dot with Accuracy Halo) */}
-          {passengerLocation && (
-            <>
-              <Circle
-                center={[passengerLocation.lat, passengerLocation.lng]}
-                radius={passengerLocation.accuracy || 35}
-                pathOptions={{
-                  color: '#2563eb',
-                  fillColor: '#3b82f6',
-                  fillOpacity: 0.18,
-                  weight: 1.5,
-                }}
-              />
-              <Marker
-                position={[passengerLocation.lat, passengerLocation.lng]}
-                icon={userLocationIcon}
-              >
-                <Popup>
-                  <div className="text-xs font-bold">
-                    📍 Your Current Location (Device GPS)
-                    <br />
-                    <span className="text-slate-500 font-normal">
-                      Accuracy: ±{passengerLocation.accuracy || 20}m
-                    </span>
-                  </div>
-                </Popup>
-              </Marker>
-            </>
-          )}
-
           {/* Live Bus Marker (Strictly when actual GPS coordinates exist) */}
           {activeSelectedBus && hasLiveCoordinates && (
             <Marker position={[trackedTelemetry.latitude, trackedTelemetry.longitude]} icon={busLiveIcon}>
@@ -1327,13 +892,7 @@ export default function PassengerPortal({
             </Marker>
           )}
 
-          <MapViewportController
-            bounds={mapBounds}
-            center={busCoords}
-            hasLiveCoordinates={hasLiveCoordinates}
-            isOutOfCorridor={isBusOutOfCorridor}
-            flyTarget={flyTarget}
-          />
+          <MapViewportController bounds={mapBounds} center={busCoords} />
         </MapContainer>
 
         {/* Informational overlay when conductor has not yet started GPS telemetry */}
@@ -1344,14 +903,13 @@ export default function PassengerPortal({
           </div>
         )}
 
-        {/* Floating Bottom HUD Card with Real-time Distance */}
+        {/* Floating Bottom HUD Card */}
         <LiveTrackingHud
           bus={activeSelectedBus}
           telemetry={trackedTelemetry}
           status={currentTrackingStatus}
           secondsAgo={secondsAgo}
           journeyInfo={{ from: currentStop, to: destination }}
-          userDistanceKm={distanceToBusKm}
         />
       </div>
     </div>

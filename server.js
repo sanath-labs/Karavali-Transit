@@ -8,7 +8,6 @@ import {
   createOwner,
   deleteBus,
   deleteConductor,
-  endShift,
   getActiveShifts,
   getAllBusStops,
   getBuses,
@@ -30,8 +29,6 @@ import {
   initDB,
   insertOwnerActivity,
   isDbConnected,
-  OFFICIAL_9_CORRIDOR_STOPS,
-  pruneOldTelemetry,
   recordShift,
   recordTelemetry,
   saveBus,
@@ -61,21 +58,6 @@ const activeOtps = {}
 const ownerSessions = createOwnerSessionManager()
 const conductorSessions = createConductorSessionManager()
 
-// High-efficiency in-memory bus stop cache (60s TTL)
-let cachedBusStops = null
-let busStopsCacheTs = 0
-const BUS_STOPS_CACHE_TTL = 60000
-
-async function getCachedAllBusStops() {
-  const now = Date.now()
-  if (cachedBusStops && now - busStopsCacheTs < BUS_STOPS_CACHE_TTL) {
-    return cachedBusStops
-  }
-  cachedBusStops = await getAllBusStops()
-  busStopsCacheTs = now
-  return cachedBusStops
-}
-
 export { conductorSessions }
 
 function publicBusSnapshot(buses) {
@@ -104,25 +86,7 @@ async function requireConductorSession(req, res, next) {
 async function requireOwnerSession(req, res, next) {
   const authHeader = req.get('authorization')
   const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]
-  const clientOwnerEmail = req.get('x-owner-email')
-
   let owner = token ? ownerSessions.get(token) : null
-
-  if (!owner) {
-    const emailToLookup = clientOwnerEmail || (token && token.includes('@') ? token : null) || 'rakesh@gmail.com'
-    const dbOwner = await getOwnerByEmail(emailToLookup)
-    if (dbOwner) {
-      owner = {
-        email: dbOwner.email,
-        agency_name: dbOwner.agency_name,
-        token: token || 'persisted-owner-token',
-        expires_at: Date.now() + 12 * 60 * 60 * 1000,
-      }
-      if (token) {
-        ownerSessions.set(token, owner)
-      }
-    }
-  }
 
   if (!owner) {
     return res.status(401).json({ success: false, error: 'Owner authentication required.' })
@@ -808,23 +772,15 @@ app.post('/api/conductor/start-duty', async (req, res) => {
   activeBuses[bus.bus_id].is_on_shift = true
   activeBuses[bus.bus_id].active_shift = shift
   activeBuses[bus.bus_id].conductor_name = conductor_name || 'Conductor'
-  activeBuses[bus.bus_id].tracking_status = 'NOT TRACKING'
-  activeBuses[bus.bus_id].latitude = null
-  activeBuses[bus.bus_id].longitude = null
-  activeBuses[bus.bus_id].speed = 0
-  activeBuses[bus.bus_id].timestamp = null
-
-  const broadcastPayload = {
-    ...shiftData,
-    bus_id: bus.bus_id,
-    conductor_name: activeBuses[bus.bus_id].conductor_name,
-    is_on_shift: true,
-    tracking_status: activeBuses[bus.bus_id].tracking_status,
+  if (!activeBuses[bus.bus_id].tracking_status || activeBuses[bus.bus_id].tracking_status === 'OFFLINE') {
+    activeBuses[bus.bus_id].tracking_status = 'NOT TRACKING'
   }
 
-  io.emit('shift_broadcast', broadcastPayload)
-  io.emit('live_location_broadcast', toPublicBus(activeBuses[bus.bus_id]))
-  io.emit('bus_location_update', toPublicBus(activeBuses[bus.bus_id]))
+  io.emit('shift_broadcast', {
+    ...shiftData,
+    bus_id: bus.bus_id,
+    conductor_name,
+  })
 
   res.json({
     success: true,
@@ -881,24 +837,16 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
   const hdg = Number(heading) || 0
   const ts = Number(timestamp) || Date.now()
 
-  // Validate Latitude & Longitude bounds (Coastal Karnataka NH-66 Corridor by default, or Local Laptop Testing)
-  const isLocalAllowed = Boolean(req.body.allow_local || req.headers['x-allow-local-gps'] === 'true')
-  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid coordinates: Latitude and longitude are malformed.',
-    })
-  }
-
-  if (!isLocalAllowed && (lat < 12.0 || lat > 15.0 || lng < 73.5 || lng > 76.0)) {
+  // Validate Latitude & Longitude bounds (Coastal Karnataka NH-66 Corridor)
+  if (isNaN(lat) || isNaN(lng) || lat < 12.0 || lat > 15.0 || lng < 73.5 || lng > 76.0) {
     return res.status(400).json({
       success: false,
       error: 'Invalid coordinates: GPS location is outside the coastal Karnataka corridor.',
     })
   }
 
-  // Validate Accuracy: reject if accuracy is worse than 1000m (corridor production strictness, bypassed for local testing)
-  if (!isLocalAllowed && acc > 1000) {
+  // Validate Accuracy: reject if accuracy is worse than 1000m
+  if (acc > 1000) {
     return res.status(400).json({
       success: false,
       error: 'GPS accuracy too low (> 1000m). Waiting for better satellite fix.',
@@ -979,81 +927,6 @@ app.post('/api/conductor/gps-location', requireConductorSession, async (req, res
   })
 })
 
-// 17b. CONDUCTOR STOP CALIBRATION (Snap bus to official coastal stop or custom coordinates)
-app.post('/api/conductor/calibrate-stop', requireConductorSession, async (req, res) => {
-  const { bus_id, stop_name, latitude, longitude } = req.body
-  const busIdNum = Number(bus_id || req.conductor.bus_id)
-
-  if (!busIdNum) {
-    return res.status(400).json({ success: false, error: 'Bus ID is required.' })
-  }
-
-  const bus = await getBusById(busIdNum)
-  if (!bus) {
-    return res.status(404).json({ success: false, error: 'Bus record not found.' })
-  }
-
-  let lat = Number(latitude)
-  let lng = Number(longitude)
-  let label = stop_name || 'Corridor Stop'
-
-  if (stop_name && (isNaN(lat) || isNaN(lng))) {
-    const matched = OFFICIAL_9_CORRIDOR_STOPS.find(
-      (s) => s.stop_name.toLowerCase() === String(stop_name).trim().toLowerCase()
-    )
-    if (matched) {
-      lat = matched.latitude
-      lng = matched.longitude
-      label = matched.stop_name
-    }
-  }
-
-  if (isNaN(lat) || isNaN(lng)) {
-    return res.status(400).json({ success: false, error: 'Valid stop name or coordinates are required.' })
-  }
-
-  const now = Date.now()
-  const payload = {
-    ...(activeBuses[busIdNum] || {}),
-    ...bus,
-    bus_id: busIdNum,
-    latitude: lat,
-    longitude: lng,
-    accuracy: 5,
-    speed: 34,
-    heading: 350,
-    crowd_status: activeBuses[busIdNum]?.crowd_status || 'Seats Available',
-    passenger_count: activeBuses[busIdNum]?.passenger_count || 18,
-    is_live: true,
-    is_on_shift: true,
-    tracking_status: 'LIVE',
-    last_telemetry_at: now,
-    timestamp: now,
-    current_stop_name: label,
-  }
-
-  activeBuses[busIdNum] = payload
-  io.emit('live_location_broadcast', toPublicBus(payload))
-  io.emit('bus_location_update', toPublicBus(payload))
-  io.emit('sync_buses', publicBusSnapshot(activeBuses))
-
-  try {
-    await recordTelemetry({
-      bus_id: busIdNum,
-      bus_name: bus.bus_name,
-      latitude: lat,
-      longitude: lng,
-      speed: 34,
-    })
-  } catch {}
-
-  res.json({
-    success: true,
-    message: `Bus location calibrated to ${label}.`,
-    bus: toPublicBus(payload),
-  })
-})
-
 // 18. CONDUCTOR STOP LIVE TRACKING
 app.post('/api/conductor/stop-tracking', requireConductorSession, async (req, res) => {
   const { bus_id } = req.body
@@ -1066,28 +939,9 @@ app.post('/api/conductor/stop-tracking', requireConductorSession, async (req, re
   if (activeBuses[busIdNum]) {
     activeBuses[busIdNum].tracking_status = 'OFFLINE'
     activeBuses[busIdNum].is_on_shift = false
-    activeBuses[busIdNum].active_shift = null
-    activeBuses[busIdNum].latitude = null
-    activeBuses[busIdNum].longitude = null
-    activeBuses[busIdNum].speed = 0
-    activeBuses[busIdNum].last_telemetry_at = null
-
-    const offlinePayload = {
-      bus_id: busIdNum,
-      vehicle_number: activeBuses[busIdNum].vehicle_number,
-      is_on_shift: false,
-      tracking_status: 'OFFLINE',
-      is_live: false,
-      latitude: null,
-      longitude: null,
-      speed: 0,
-    }
-    io.emit('shift_broadcast', offlinePayload)
     io.emit('bus_tracking_stopped', { bus_id: busIdNum })
-    io.emit('shift_ended', { bus_id: busIdNum, vehicle_number: activeBuses[busIdNum].vehicle_number })
     io.emit('live_location_broadcast', toPublicBus(activeBuses[busIdNum]))
     io.emit('bus_location_update', toPublicBus(activeBuses[busIdNum]))
-    io.emit('sync_buses', publicBusSnapshot(activeBuses))
   }
 
   res.json({
@@ -1097,71 +951,8 @@ app.post('/api/conductor/stop-tracking', requireConductorSession, async (req, re
   })
 })
 
-// 18b. CONDUCTOR DUTY: End Shift & Mark Offline in Passenger Radar
-const handleEndDutyShift = async (req, res) => {
-  const { bus_id, vehicle_number, shift_id } = req.body || {}
-
-  // Resolve bus
-  let busIdNum = Number(bus_id)
-  let bus = null
-  if (busIdNum) {
-    bus = await getBusById(busIdNum)
-  } else if (vehicle_number) {
-    bus = await getBusByVehicleNumber(vehicle_number)
-    if (bus) busIdNum = bus.bus_id
-  }
-
-  // End shift in database
-  await endShift({
-    shift_id: shift_id ? Number(shift_id) : null,
-    vehicle_number: vehicle_number || bus?.vehicle_number,
-  })
-
-  if (busIdNum && activeBuses[busIdNum]) {
-    activeBuses[busIdNum].tracking_status = 'OFFLINE'
-    activeBuses[busIdNum].is_on_shift = false
-    activeBuses[busIdNum].active_shift = null
-    activeBuses[busIdNum].latitude = null
-    activeBuses[busIdNum].longitude = null
-    activeBuses[busIdNum].speed = 0
-    activeBuses[busIdNum].last_telemetry_at = null
-  }
-
-  const broadcastPayload = {
-    bus_id: busIdNum,
-    vehicle_number: bus?.vehicle_number || vehicle_number,
-    is_on_shift: false,
-    tracking_status: 'OFFLINE',
-    is_live: false,
-    latitude: null,
-    longitude: null,
-    speed: 0,
-  }
-
-  io.emit('shift_broadcast', broadcastPayload)
-  io.emit('shift_ended', { bus_id: busIdNum, vehicle_number: bus?.vehicle_number || vehicle_number })
-  io.emit('bus_tracking_stopped', { bus_id: busIdNum })
-  if (busIdNum && activeBuses[busIdNum]) {
-    io.emit('live_location_broadcast', toPublicBus(activeBuses[busIdNum]))
-    io.emit('bus_location_update', toPublicBus(activeBuses[busIdNum]))
-  }
-  io.emit('sync_buses', publicBusSnapshot(activeBuses))
-
-  res.json({
-    success: true,
-    message: 'Duty shift ended successfully. Bus marked OFFLINE and removed from active radar.',
-    bus_id: busIdNum,
-    tracking_status: 'OFFLINE',
-    is_on_shift: false,
-  })
-}
-
-app.post('/api/conductor/end-duty', handleEndDutyShift)
-app.post('/api/conductor/end-shift', handleEndDutyShift)
-
 // 17. CONDUCTOR ROUTE STOPS: Get Timetable Stops for Active Bus
 app.get('/api/conductor/buses/:busId/stops', async (req, res) => {
-  res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120')
   const busId = Number(req.params.busId)
   const stops = await getBusRouteStops(busId)
   res.json({ success: true, stops: stops || [] })
@@ -1234,8 +1025,7 @@ app.get('/api/public/stops/nearby', async (req, res) => {
 // 3. Get all verified coastal stops
 app.get(['/api/public/stops', '/api/public/stops/all'], async (req, res) => {
   try {
-    res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300')
-    const stops = await getCachedAllBusStops()
+    const stops = await getAllBusStops()
     res.json({ success: true, count: stops.length, stops })
   } catch (err) {
     console.error('Error in /api/public/stops:', err)
@@ -1281,8 +1071,6 @@ app.get('/api/public/buses/:id', async (req, res) => {
         latitude: active.latitude || null,
         longitude: active.longitude || null,
         speed: active.speed || 0,
-        is_on_shift: Boolean(active.is_on_shift),
-        tracking_status: active.tracking_status || (active.is_on_shift ? 'NOT TRACKING' : 'SCHEDULED'),
         is_live: Boolean(active.is_on_shift && active.timestamp && (Date.now() - new Date(active.timestamp).getTime() < 120000)),
         last_update: active.timestamp ? new Date(active.timestamp).toLocaleTimeString() : null,
       },
@@ -1437,80 +1225,8 @@ io.on('connection', (socket) => {
     io.emit('shift_broadcast', data)
   })
 
-  socket.on('end_shift', async (data) => {
-    if (!data) return
-    const busIdNum = Number(data.bus_id)
-    if (data.vehicle_number || data.shift_id) {
-      await endShift({
-        shift_id: data.shift_id ? Number(data.shift_id) : null,
-        vehicle_number: data.vehicle_number,
-      })
-    }
-    if (busIdNum && activeBuses[busIdNum]) {
-      activeBuses[busIdNum].tracking_status = 'OFFLINE'
-      activeBuses[busIdNum].is_on_shift = false
-      activeBuses[busIdNum].active_shift = null
-      activeBuses[busIdNum].latitude = null
-      activeBuses[busIdNum].longitude = null
-      activeBuses[busIdNum].speed = 0
-      activeBuses[busIdNum].last_telemetry_at = null
-    }
-    const payload = {
-      bus_id: busIdNum,
-      vehicle_number: data.vehicle_number || activeBuses[busIdNum]?.vehicle_number,
-      is_on_shift: false,
-      tracking_status: 'OFFLINE',
-      is_live: false,
-      latitude: null,
-      longitude: null,
-      speed: 0,
-    }
-    io.emit('shift_broadcast', payload)
-    io.emit('shift_ended', { bus_id: busIdNum, vehicle_number: data.vehicle_number })
-    io.emit('bus_tracking_stopped', { bus_id: busIdNum })
-    if (busIdNum && activeBuses[busIdNum]) {
-      io.emit('live_location_broadcast', toPublicBus(activeBuses[busIdNum]))
-      io.emit('bus_location_update', toPublicBus(activeBuses[busIdNum]))
-    }
-    io.emit('sync_buses', publicBusSnapshot(activeBuses))
-  })
-
   socket.on('update_location', async (data) => {
     if (!data || !data.bus_id) return
-
-    // Handle explicit offline or end of tracking update
-    const isOffline = data.tracking_status === 'OFFLINE' || data.is_on_shift === false
-    if (isOffline) {
-      const busIdNum = Number(data.bus_id)
-      if (activeBuses[busIdNum]) {
-        activeBuses[busIdNum].tracking_status = 'OFFLINE'
-        activeBuses[busIdNum].is_on_shift = false
-        activeBuses[busIdNum].active_shift = null
-        activeBuses[busIdNum].latitude = null
-        activeBuses[busIdNum].longitude = null
-        activeBuses[busIdNum].speed = 0
-        activeBuses[busIdNum].last_telemetry_at = null
-      }
-      const offlinePayload = {
-        bus_id: busIdNum,
-        vehicle_number: data.vehicle_number || activeBuses[busIdNum]?.vehicle_number,
-        is_on_shift: false,
-        tracking_status: 'OFFLINE',
-        is_live: false,
-        latitude: null,
-        longitude: null,
-        speed: 0,
-      }
-      io.emit('shift_broadcast', offlinePayload)
-      io.emit('bus_tracking_stopped', { bus_id: busIdNum })
-      io.emit('shift_ended', { bus_id: busIdNum, vehicle_number: data.vehicle_number })
-      if (activeBuses[busIdNum]) {
-        io.emit('live_location_broadcast', toPublicBus(activeBuses[busIdNum]))
-        io.emit('bus_location_update', toPublicBus(activeBuses[busIdNum]))
-      }
-      io.emit('sync_buses', publicBusSnapshot(activeBuses))
-      return
-    }
 
     // Verify token if provided
     if (data.token) {
@@ -1533,12 +1249,9 @@ io.on('connection', (socket) => {
     const lat = Number(data.lat || data.latitude)
     const lng = Number(data.lng || data.longitude)
     if (!isNaN(lat) && !isNaN(lng)) {
-      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-        console.warn(`[GPS Out of Range Rejected] Bus #${data.bus_id} invalid coords (${lat}, ${lng})`)
+      if (lat < 12.0 || lat > 15.0 || lng < 73.5 || lng > 76.0) {
+        console.warn(`[GPS Out of Range Rejected] Bus #${data.bus_id} coords (${lat}, ${lng}) outside coastal corridor`)
         return
-      }
-      if (!data.allow_local && (lat < 12.0 || lat > 15.0 || lng < 73.5 || lng > 76.0)) {
-        console.info(`[GPS Notice] Bus #${data.bus_id} local testing coords (${lat.toFixed(4)}, ${lng.toFixed(4)})`)
       }
     }
 
@@ -1591,19 +1304,9 @@ setInterval(() => {
   }
 }, 15000)
 
-// Periodic GPS Telemetry Retention Pruning (runs every 6 hours)
-setInterval(() => {
-  pruneOldTelemetry(7).catch((err) => console.warn('[Periodic Prune Warning]', err.message))
-}, 6 * 3600 * 1000)
-
 const PORT = process.env.PORT || 5000
 
 await initDB()
-
-// Run startup telemetry cleanup asynchronously
-pruneOldTelemetry(7).then((count) => {
-  if (count > 0) console.log(`[Telemetry Pruner] Cleaned ${count} telemetry records older than 7 days`)
-}).catch(() => {})
 
 server.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`)

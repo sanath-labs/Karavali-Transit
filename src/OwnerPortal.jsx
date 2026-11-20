@@ -45,7 +45,7 @@ export default function OwnerPortal({
   onExitToPassenger,
 }) {
   // Auth state
-  const [authMode, setAuthMode] = useState('signup') // 'signup' | 'login'
+  const [authMode, setAuthMode] = useState('login') // 'signup' | 'login'
   const [otpStep, setOtpStep] = useState('email') // 'email' | 'otp'
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', ''])
   const [resendCountdown, setResendCountdown] = useState(25)
@@ -139,14 +139,16 @@ export default function OwnerPortal({
         setBuses(busList)
         setConductors(data.conductors || [])
         setSelectedBusForView((prev) => {
-          if (!prev && busList.length > 0) return busList[0]
-          if (prev) {
-            const found = busList.find((b) => b.bus_id === prev.bus_id)
-            return found || (busList.length > 0 ? busList[0] : null)
-          }
-          return null
+          if (!prev) return null
+          return busList.find((b) => b.bus_id === prev.bus_id) || null
         })
       } else {
+        if (res.status === 401 || res.status === 403) {
+          setIsOwnerAuthenticated(false)
+          setOwnerToken('')
+          setOtpStep('email')
+          setAuthError('Your owner session has expired. Please log in again.')
+        }
         setBusesError(data.error || 'Failed to load fleet buses from database.')
       }
     } catch (err) {
@@ -173,15 +175,18 @@ export default function OwnerPortal({
               setBuses(busList)
               setConductors(data.conductors || [])
               setSelectedBusForView((prev) => {
-                if (!prev && busList.length > 0) return busList[0]
-                if (prev) {
-                  const found = busList.find((b) => b.bus_id === prev.bus_id)
-                  return found || (busList.length > 0 ? busList[0] : null)
-                }
-                return null
+                if (!prev) return null
+                return busList.find((b) => b.bus_id === prev.bus_id) || null
               })
             } else {
-              setBusesError(data.error || 'Failed to load fleet buses from database.')
+              if (res.status === 401 || res.status === 403) {
+                setIsOwnerAuthenticated(false)
+                setOwnerToken('')
+                setOtpStep('email')
+                setAuthError('Your owner session has expired. Please log in again.')
+              } else {
+                setBusesError(data.error || 'Failed to load fleet buses from database.')
+              }
             }
           }
         } catch (err) {
@@ -194,6 +199,10 @@ export default function OwnerPortal({
       ignore = true
     }
   }, [isOwnerAuthenticated, ownerToken])
+
+  useEffect(() => {
+    if (activeTab === 'buses') setSelectedBusForView(null)
+  }, [activeTab])
 
   // 1. Send OTP Handler
   const handleSendOtp = async (e) => {
@@ -433,7 +442,7 @@ export default function OwnerPortal({
       const data = await res.json()
       if (res.ok && data.success && data.bus) {
         setSavedConfirmationBus(data.bus)
-        setSelectedBusForView(data.bus)
+        setSelectedBusForView(null)
         setViewMode('save-confirmation')
         setNotice(
           isEditingBus
@@ -524,8 +533,7 @@ export default function OwnerPortal({
       if (res.ok && data.success) {
         setNotice(`Bus ${deleteConfirmBus.vehicle_number} removed from fleet.`)
         if (selectedBusForView?.bus_id === deleteConfirmBus.bus_id) {
-          const remaining = buses.filter((b) => b.bus_id !== deleteConfirmBus.bus_id)
-          setSelectedBusForView(remaining.length > 0 ? remaining[0] : null)
+          setSelectedBusForView(null)
         }
         setDeleteConfirmBus(null)
         fetchDashboard(ownerToken)
@@ -542,19 +550,15 @@ export default function OwnerPortal({
   const handleGoToDashboard = () => {
     setViewMode('dashboard')
     setActiveTab('dashboard')
-    if (savedConfirmationBus) {
-      setSelectedBusForView(savedConfirmationBus)
-    }
+    setSelectedBusForView(null)
   }
 
   const handleViewAddedBus = () => {
     setViewMode('dashboard')
-    setActiveTab('dashboard')
-    if (savedConfirmationBus) {
-      setSelectedBusForView(savedConfirmationBus)
-    }
+    setActiveTab('buses')
+    setSelectedBusForView(null)
     setTimeout(() => {
-      const el = document.getElementById('view-bus-panel-anchor')
+      const el = document.querySelector('.owner-buses-table-wrapper')
       if (el) el.scrollIntoView({ behavior: 'smooth' })
     }, 100)
   }
@@ -671,7 +675,7 @@ export default function OwnerPortal({
   // =========================================================================
   // VIEW RENDER: AUTHENTICATION (SCREENS 1 & 2)
   // =========================================================================
-  if (!isOwnerAuthenticated) {
+  if (!isOwnerAuthenticated || !ownerToken) {
     return (
       <div className="owner-auth-wrapper">
         {/* Brand Header */}
@@ -959,7 +963,7 @@ export default function OwnerPortal({
               className="w-full py-3 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs rounded-xl border border-blue-200 flex items-center justify-center gap-2 cursor-pointer transition"
             >
               <Eye size={16} />
-              <span>View Added Bus Details</span>
+              <span>Go to My Buses</span>
               <ArrowRight size={14} />
             </button>
           </div>
@@ -1457,12 +1461,8 @@ export default function OwnerPortal({
   // =========================================================================
   // VIEW RENDER: OWNER DASHBOARD (SCREEN 3)
   // =========================================================================
-  const stats = dashboardData.stats || {
-    total_buses: buses.length,
-    total_conductors: conductors.length,
-    total_routes: 8,
-    live_buses: 3,
-  }
+  const activeBusCount = buses.filter((bus) => bus.is_live || bus.is_on_shift).length
+  const inactiveBusCount = Math.max(0, buses.length - activeBusCount)
 
   return (
     <div className="owner-dashboard-container">
@@ -1591,56 +1591,55 @@ export default function OwnerPortal({
           </div>
         )}
 
-        {/* 4 Stat KPI Cards */}
-        <div className="owner-stats-grid">
+        {activeTab === 'dashboard' && (
+          <div className="owner-overview-heading">
+            <div>
+              <h2>Fleet overview</h2>
+              <p>Current status of your buses</p>
+            </div>
+            <button type="button" onClick={() => setActiveTab('buses')}>
+              Manage buses <ArrowRight size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Fleet overview: total, active, and inactive buses */}
+        {activeTab === 'dashboard' && <div className="owner-stats-grid owner-stats-grid-compact">
           <div className="owner-kpi-card">
             <div className="owner-kpi-icon bg-blue-50 text-blue-600">
               <Bus size={22} />
             </div>
             <div>
-              <h3 className="owner-kpi-val">{stats.total_buses || buses.length || 12}</h3>
+              <h3 className="owner-kpi-val">{buses.length}</h3>
               <p className="owner-kpi-label">Total Buses</p>
             </div>
           </div>
 
           <div className="owner-kpi-card">
             <div className="owner-kpi-icon bg-emerald-50 text-emerald-600">
-              <Users size={22} />
-            </div>
-            <div>
-              <h3 className="owner-kpi-val">{stats.total_conductors || conductors.length || 5}</h3>
-              <p className="owner-kpi-label">Conductors</p>
-            </div>
-          </div>
-
-          <div className="owner-kpi-card">
-            <div className="owner-kpi-icon bg-amber-50 text-amber-600">
-              <Share2 size={22} />
-            </div>
-            <div>
-              <h3 className="owner-kpi-val">{stats.total_routes || 8}</h3>
-              <p className="owner-kpi-label">Routes</p>
-            </div>
-          </div>
-
-          <div className="owner-kpi-card">
-            <div className="owner-kpi-icon bg-purple-50 text-purple-600">
               <Activity size={22} />
             </div>
             <div>
-              <div className="flex items-center">
-                <h3 className="owner-kpi-val">{stats.live_buses || 3}</h3>
-                <span className="owner-kpi-tag bg-emerald-100 text-emerald-800">Today</span>
-              </div>
-              <p className="owner-kpi-label">Live Buses</p>
+              <h3 className="owner-kpi-val">{activeBusCount}</h3>
+              <p className="owner-kpi-label">Active Buses</p>
             </div>
           </div>
-        </div>
+
+          <div className="owner-kpi-card">
+            <div className="owner-kpi-icon bg-slate-100 text-slate-600">
+              <Bus size={22} />
+            </div>
+            <div>
+              <h3 className="owner-kpi-val">{inactiveBusCount}</h3>
+              <p className="owner-kpi-label">Inactive Buses</p>
+            </div>
+          </div>
+        </div>}
 
         {/* ============================================================== */}
         {/* SCREEN 9: MY BUSES SECTION (DASHBOARD & MY BUSES TABS)          */}
         {/* ============================================================== */}
-        {(activeTab === 'dashboard' || activeTab === 'buses') && (
+        {activeTab === 'buses' && (
           <div className="space-y-6">
             {/* Header Toolbar matching Screen 9 */}
             <div className="flex items-center justify-between flex-wrap gap-4">
@@ -1757,11 +1756,11 @@ export default function OwnerPortal({
                       })
                       .map((bus, idx) => {
                         const isSelected = selectedBusForView?.bus_id === bus.bus_id
+                        const isActive = Boolean(bus.is_live || bus.is_on_shift)
                         return (
                           <tr
                             key={bus.bus_id}
                             className={isSelected ? 'selected-row' : ''}
-                            onClick={() => setSelectedBusForView(bus)}
                           >
                             <td className="font-bold text-slate-400">{idx + 1}</td>
                             <td className="font-mono font-black text-slate-900 text-xs">
@@ -1783,9 +1782,9 @@ export default function OwnerPortal({
                               {bus.departure_time || '06:30 AM'} {bus.frequency || 'Daily'}
                             </td>
                             <td>
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-extrabold">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                Active
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-extrabold ${isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                                {isActive ? 'Active' : 'Inactive'}
                               </span>
                             </td>
                             <td>
@@ -1797,8 +1796,9 @@ export default function OwnerPortal({
                                   type="button"
                                   onClick={() => {
                                     setSelectedBusForView(bus)
-                                    const el = document.getElementById('view-bus-panel-anchor')
-                                    if (el) el.scrollIntoView({ behavior: 'smooth' })
+                                    requestAnimationFrame(() => {
+                                      document.getElementById('view-bus-panel-anchor')?.scrollIntoView({ behavior: 'smooth' })
+                                    })
                                   }}
                                   className="btn-action-view"
                                   title="View Details"
@@ -1834,12 +1834,11 @@ export default function OwnerPortal({
               </div>
             )}
 
-            {/* SCREEN 9 BOTTOM TWO-PANEL GRID: View Bus Details & Options */}
-            {!busesLoading && buses.length > 0 && (
-              <div id="view-bus-panel-anchor" className="dashboard-bottom-grid">
+            {/* Bus details stay hidden until View is selected. */}
+            {!busesLoading && buses.length > 0 && selectedBusForView && (
+              <div id="view-bus-panel-anchor" className="dashboard-bottom-grid owner-bus-details-grid">
                 {/* Left Panel: View Bus Details */}
-                {selectedBusForView ? (
-                  <div className="view-bus-panel">
+                <div className="view-bus-panel">
                     <div className="view-bus-header">
                       <h3 className="text-base font-black text-slate-900 m-0">View Bus Details</h3>
                       <button
@@ -1925,145 +1924,6 @@ export default function OwnerPortal({
                         </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="view-bus-panel flex items-center justify-center p-8 text-center text-slate-400">
-                    <div>
-                      <Bus size={32} className="mx-auto mb-2 text-slate-300" />
-                      <p className="text-xs font-bold">Select any bus from the table to view its details and planned route stops.</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Right Panel: Options (Screen 9) */}
-                <div className="options-panel">
-                  <h3 className="text-base font-black text-slate-900 mb-4 m-0">Options</h3>
-
-                  <div className="space-y-3">
-                    <div onClick={handleAddNewBus} className="option-action-item blue">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-black shrink-0 shadow-xs">
-                          <Plus size={18} />
-                        </div>
-                        <div>
-                          <strong className="text-xs font-black text-slate-900 block">Add New Bus</strong>
-                          <p className="text-[11px] text-slate-500 font-bold m-0 mt-0.5">Register another bus for your fleet</p>
-                        </div>
-                      </div>
-                      <ArrowRight size={16} className="text-blue-600 shrink-0" />
-                    </div>
-
-                    <div onClick={() => handleEditBus(selectedBusForView || buses[0])} className="option-action-item green">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black shrink-0 shadow-xs">
-                          <Edit3 size={16} />
-                        </div>
-                        <div>
-                          <strong className="text-xs font-black text-slate-900 block">Edit Bus Details</strong>
-                          <p className="text-[11px] text-slate-500 font-bold m-0 mt-0.5">Update bus information, route or schedule</p>
-                        </div>
-                      </div>
-                      <ArrowRight size={16} className="text-emerald-600 shrink-0" />
-                    </div>
-
-                    <div onClick={() => handlePromptDelete(selectedBusForView || buses[0])} className="option-action-item red">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-rose-600 text-white flex items-center justify-center font-black shrink-0 shadow-xs">
-                          <Trash2 size={16} />
-                        </div>
-                        <div>
-                          <strong className="text-xs font-black text-slate-900 block">Delete Bus</strong>
-                          <p className="text-[11px] text-slate-500 font-bold m-0 mt-0.5">Remove bus from your fleet (with confirmation)</p>
-                        </div>
-                      </div>
-                      <ArrowRight size={16} className="text-rose-600 shrink-0" />
-                    </div>
-
-                    <div
-                      onClick={() => {
-                        if (!selectedBusForView && buses.length > 0) {
-                          setSelectedBusForView(buses[0])
-                        }
-                        const el = document.getElementById('view-bus-panel-anchor')
-                        if (el) el.scrollIntoView({ behavior: 'smooth' })
-                      }}
-                      className="option-action-item purple"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-purple-600 text-white flex items-center justify-center font-black shrink-0 shadow-xs">
-                          <Eye size={16} />
-                        </div>
-                        <div>
-                          <strong className="text-xs font-black text-slate-900 block">View Bus Details</strong>
-                          <p className="text-[11px] text-slate-500 font-bold m-0 mt-0.5">See complete bus information and route stops</p>
-                        </div>
-                      </div>
-                      <ArrowRight size={16} className="text-purple-600 shrink-0" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Extra Section: Recent Activity (if activeTab === 'dashboard') */}
-            {activeTab === 'dashboard' && (
-              <div className="owner-card-panel mt-6">
-                <div className="owner-panel-header">
-                  <h2 className="owner-panel-title">Recent Activity</h2>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('reports')}
-                    className="owner-panel-link"
-                  >
-                    View All →
-                  </button>
-                </div>
-
-                <div>
-                  {(dashboardData.recent_activity?.length > 0
-                    ? dashboardData.recent_activity
-                    : [
-                        {
-                          action_type: 'bus_added',
-                          title: 'Bus KA 19 AB 1234 added',
-                          created_at: '2 hours ago',
-                        },
-                        {
-                          action_type: 'conductor_assigned',
-                          title: 'Conductor Manjunath assigned',
-                          created_at: '4 hours ago',
-                        },
-                        {
-                          action_type: 'route_updated',
-                          title: 'Route Mangaluru - Udupi updated',
-                          created_at: '6 hours ago',
-                        },
-                      ]
-                  ).map((act, index) => (
-                    <div key={index} className="owner-activity-row">
-                      <div
-                        className={`owner-activity-icon ${
-                          act.action_type === 'bus_added'
-                            ? 'bg-emerald-50 text-emerald-600'
-                            : act.action_type === 'conductor_assigned'
-                            ? 'bg-purple-50 text-purple-600'
-                            : 'bg-amber-50 text-amber-600'
-                        }`}
-                      >
-                        {act.action_type === 'bus_added' ? (
-                          <Bus size={18} />
-                        ) : act.action_type === 'conductor_assigned' ? (
-                          <Users size={18} />
-                        ) : (
-                          <Share2 size={18} />
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="owner-activity-text">{act.title}</h4>
-                        <p className="owner-activity-time">{act.created_at || 'Just now'}</p>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
