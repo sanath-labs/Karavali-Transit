@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bus, MapPin, ChevronDown, ArrowUpDown, Search, CheckCircle2 } from 'lucide-react'
+import { ArrowLeftRight, Bus, CheckCircle2, ChevronDown, MapPin, Search } from 'lucide-react'
+import { OFFICIAL_9_CORRIDOR_STOPS } from '../transitUtils.js'
 
 export default function JourneySearchCard({
   currentStop,
@@ -26,7 +27,6 @@ export default function JourneySearchCard({
   const [fromHighlightedIdx, setFromHighlightedIdx] = useState(0)
   const [toHighlightedIdx, setToHighlightedIdx] = useState(0)
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClickOutside(e) {
       if (fromContainerRef.current && !fromContainerRef.current.contains(e.target)) {
@@ -36,329 +36,323 @@ export default function JourneySearchCard({
         setToDropdownOpen(false)
       }
     }
+
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [setFromDropdownOpen, setToDropdownOpen])
 
-  // Derive safe highlighted indices
   const safeFromIdx = Math.min(fromHighlightedIdx, Math.max(0, fromSuggestions.length - 1))
   const safeToIdx = Math.min(toHighlightedIdx, Math.max(0, toSuggestions.length - 1))
+  const boardingStop = OFFICIAL_9_CORRIDOR_STOPS.find((stop) => stop.stop_name === currentStop)
+  const destinationStop = OFFICIAL_9_CORRIDOR_STOPS.find((stop) => stop.stop_name === destination)
+  const isJourneyValid =
+    Boolean(boardingStop && destinationStop && boardingStop.stop_id < destinationStop.stop_id)
 
-  // Bilingual strings
   const text = {
-    heading: lang === 'kn' ? 'ನೀವು ಎಲ್ಲಿಗೆ ಹೋಗಬೇಕಾಗಿದೆ?' : 'Where would you like to go?',
+    heading: lang === 'kn' ? 'ನೀವು ಎಲ್ಲಿಗೆ ಹೋಗಬೇಕಾಗಿದೆ?' : 'Plan your journey',
     subheading:
       lang === 'kn'
-        ? 'ಕರಾವಳಿ ಹೆದ್ದಾರಿಯ (NH-66) ಖಾಸಗಿ ಎಕ್ಸ್‌ಪ್ರೆಸ್ ಬಸ್‌ಗಳ ವೇಳಾಪಟ್ಟಿ ಮತ್ತು ಲೈವ್ ಜಿಪಿಎಸ್ ಟ್ರ್ಯಾಕಿಂಗ್ ಹುಡುಕಿ.'
-        : 'Find scheduled services and live buses along the coastal corridor.',
+        ? 'ಕರಾವಳಿ ಹೆದ್ದಾರಿಯ (NH-66) ಬಸ್‌ಗಳನ್ನು ಹುಡುಕಿ.'
+        : 'Choose your boarding and destination stops along the NH-66 corridor.',
     noLoginBadge:
       lang === 'kn'
-        ? 'ಪ್ರಯಾಣಿಕರ ಲಾಗಿನ್ ಅಗತ್ಯವಿಲ್ಲ • ಉಚಿತ ಸಾರ್ವಜನಿಕ ಸೇವೆ'
-        : 'Search buses without signing in',
-    boardingLabel: lang === 'kn' ? 'ಹತ್ತುವ ನಿಲ್ದಾಣ (Boarding)' : 'Boarding Stop',
-    destinationLabel: lang === 'kn' ? 'ಇಳಿಯುವ ನಿಲ್ದಾಣ (Destination)' : 'Destination Stop',
-    filterPlaceholder: lang === 'kn' ? 'ನಿಲ್ದಾಣದ ಹೆಸರನ್ನು ಟೈಪ್ ಮಾಡಿ...' : 'Type stop name to filter...',
-    searchBtn: lang === 'kn' ? 'ಲಭ್ಯವಿರುವ ಬಸ್‌ಗಳನ್ನು ಹುಡುಕಿ' : 'Search buses',
-    searchingBtn: lang === 'kn' ? 'ಬಸ್‌ಗಳನ್ನು ಹುಡುಕಲಾಗುತ್ತಿದೆ...' : 'Finding Buses...',
-    swapTitle: lang === 'kn' ? 'ನಿಲ್ದಾಣಗಳನ್ನು ಅದಲು ಬದಲು ಮಾಡಿ' : 'Swap Boarding and Destination stops',
+        ? 'ಪ್ರಯಾಣಿಕರ ಲಾಗಿನ್ ಅಗತ್ಯವಿಲ್ಲ'
+        : 'No passenger login required',
+    boardingLabel: lang === 'kn' ? 'ಹತ್ತುವ ನಿಲ್ದಾಣ' : 'From',
+    destinationLabel: lang === 'kn' ? 'ಇಳಿಯುವ ನಿಲ್ದಾಣ' : 'To',
+    filterPlaceholder: lang === 'kn' ? 'ನಿಲ್ದಾಣವನ್ನು ಹುಡುಕಿ...' : 'Search stops by name or landmark',
+    searchBtn: lang === 'kn' ? 'ಬಸ್‌ಗಳನ್ನು ಹುಡುಕಿ' : 'Find buses',
+    searchingBtn: lang === 'kn' ? 'ಬಸ್‌ಗಳನ್ನು ಹುಡುಕಲಾಗುತ್ತಿದೆ...' : 'Searching for buses...',
+    swapTitle: lang === 'kn' ? 'ಪ್ರಾರಂಭ ಮತ್ತು ಗಮ್ಯಸ್ಥಾನ ಬದಲಾಯಿಸಿ' : 'Swap boarding and destination',
     noStopsMatch: lang === 'kn' ? 'ಯಾವುದೇ ನಿಲ್ದಾಣ ಸಿಗಲಿಲ್ಲ' : 'No matching corridor stop found',
+    selectStop: lang === 'kn' ? 'ನಿಲ್ದಾಣ ಆಯ್ಕೆಮಾಡಿ' : 'Select a stop',
+    routeHint: lang === 'kn' ? 'NH-66 ಮಾರ್ಗದಲ್ಲಿ ಉತ್ತರದ ಕಡೆಗೆ' : 'Northbound along the NH-66 corridor',
+    missingStops:
+      lang === 'kn'
+        ? 'ಹತ್ತುವ ಮತ್ತು ಇಳಿಯುವ ನಿಲ್ದಾಣಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ.'
+        : 'Choose both a boarding stop and a destination.',
+    sameStop:
+      lang === 'kn'
+        ? 'ಹತ್ತುವ ಮತ್ತು ಇಳಿಯುವ ನಿಲ್ದಾಣಗಳು ಬೇರೆಬೇರೆಯಾಗಿರಬೇಕು.'
+        : 'Choose two different stops for your journey.',
+    invalidDirection:
+      lang === 'kn'
+        ? 'ಈ ಹುಡುಕಾಟವು NH-66 ಮಾರ್ಗದಲ್ಲಿ ಉತ್ತರದ ಕಡೆಗೆ ಮಾತ್ರ ಲಭ್ಯವಿದೆ. ಮುಂದಿನ ನಿಲ್ದಾಣವನ್ನು ಆಯ್ಕೆಮಾಡಿ.'
+        : 'This search covers northbound NH-66 journeys. Choose a destination north of your boarding stop.',
   }
 
+  const validationMessage = !boardingStop || !destinationStop
+    ? text.missingStops
+    : boardingStop.stop_id === destinationStop.stop_id
+      ? text.sameStop
+      : !isJourneyValid
+        ? text.invalidDirection
+        : ''
+
+  const chooseFromStop = (stopName) => {
+    onSelectFromStop(stopName)
+    setFromDropdownOpen(false)
+    setFromQuery('')
+    setFromHighlightedIdx(0)
+  }
+
+  const chooseToStop = (stopName) => {
+    onSelectToStop(stopName)
+    setToDropdownOpen(false)
+    setToQuery('')
+    setToHighlightedIdx(0)
+  }
+
+  const handleSuggestionKeyDown = (e, suggestions, highlightedIdx, setHighlightedIdx, onSelect, setDropdownOpen, setQuery) => {
+    if (e.key === 'Escape') {
+      setDropdownOpen(false)
+      setQuery('')
+    } else if (e.key === 'ArrowDown' && suggestions.length > 0) {
+      e.preventDefault()
+      setHighlightedIdx((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0))
+    } else if (e.key === 'ArrowUp' && suggestions.length > 0) {
+      e.preventDefault()
+      setHighlightedIdx((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (suggestions[highlightedIdx]) onSelect(suggestions[highlightedIdx].stop_name)
+    }
+  }
+
+  const renderSuggestions = ({
+    suggestions,
+    selectedStop,
+    highlightedIdx,
+    listId,
+    query,
+    setQuery,
+    setHighlightedIdx,
+    onSelect,
+    setDropdownOpen,
+  }) => (
+    <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+      <label className="sr-only" htmlFor={`${listId}-filter`}>
+        {text.filterPlaceholder}
+      </label>
+      <input
+        id={`${listId}-filter`}
+        type="search"
+        role="combobox"
+        aria-label={text.filterPlaceholder}
+        aria-autocomplete="list"
+        aria-expanded="true"
+        aria-controls={listId}
+        aria-activedescendant={
+          suggestions[highlightedIdx]
+            ? `${listId}-option-${suggestions[highlightedIdx].stop_id}`
+            : undefined
+        }
+        placeholder={text.filterPlaceholder}
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setHighlightedIdx(0)
+        }}
+        onKeyDown={(e) =>
+          handleSuggestionKeyDown(
+            e,
+            suggestions,
+            highlightedIdx,
+            setHighlightedIdx,
+            onSelect,
+            setDropdownOpen,
+            setQuery
+          )
+        }
+        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/15"
+        autoFocus
+      />
+      <div id={listId} role="listbox" className="mt-1 max-h-56 overflow-y-auto">
+        {suggestions.length === 0 ? (
+          <p className="m-0 px-3 py-4 text-center text-sm font-medium text-slate-500">
+            {text.noStopsMatch}
+          </p>
+        ) : (
+          suggestions.map((stop, idx) => (
+            <button
+              key={stop.stop_id}
+              id={`${listId}-option-${stop.stop_id}`}
+              type="button"
+              role="option"
+              aria-selected={stop.stop_name === selectedStop}
+              onClick={() => onSelect(stop.stop_name)}
+              className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition ${
+                idx === highlightedIdx
+                  ? 'bg-blue-50 text-blue-900'
+                  : stop.stop_name === selectedStop
+                    ? 'bg-slate-100 text-slate-900'
+                    : 'text-slate-800 hover:bg-slate-50'
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-black text-slate-600">
+                  {stop.stop_id}
+                </span>
+                <span className="truncate text-sm font-bold">{stop.stop_name}</span>
+              </span>
+              <span className="shrink-0 text-xs font-medium text-slate-500">{stop.stop_name_kn}</span>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  )
+
   return (
-    <div className="journey-search-card bg-white rounded-2xl p-5 sm:p-7 border border-slate-200 shadow-xs space-y-5 select-none">
-      {/* Header: Simple Heading, Explanation & Login-Free Badge */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-4 border-b border-slate-100">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Bus size={20} strokeWidth={2.4} />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 m-0 tracking-tight">
+    <section className="journey-search-card rounded-3xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-900/5 sm:p-6 lg:p-7">
+      <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+            <Bus size={22} strokeWidth={2.3} />
+          </div>
+          <div>
+            <h1 className="m-0 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
               {text.heading}
             </h1>
+            <p className="m-0 mt-1 text-sm leading-relaxed text-slate-600">{text.subheading}</p>
           </div>
-          <p className="text-xs sm:text-sm font-medium text-slate-600 m-0 pt-1 leading-relaxed max-w-2xl">
-            {text.subheading}
-          </p>
         </div>
-
-        {/* Prominent "No passenger login required" Badge */}
-        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold self-start shrink-0 shadow-2xs">
-          <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+        <div className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800">
+          <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
           <span>{text.noLoginBadge}</span>
         </div>
       </div>
 
-      {/* Responsive Search Form: Desktop Horizontal Grid / Mobile Vertical Stack */}
-      <div className="grid grid-cols-1 md:grid-cols-[1fr,auto,1fr,auto] items-end gap-3 sm:gap-4">
-        {/* 1. Boarding Stop (From) */}
-        <div className="relative" ref={fromContainerRef}>
-          <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-            <MapPin size={14} className="text-emerald-600 shrink-0" />
-            <span>{text.boardingLabel}</span>
-          </label>
-
-          <div
-            role="combobox"
-            aria-expanded={fromDropdownOpen}
-            aria-haspopup="listbox"
-            aria-label="Select boarding bus stop"
-            tabIndex={0}
-            onClick={() => {
-              setFromDropdownOpen(!fromDropdownOpen)
-              setToDropdownOpen(false)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
-                e.preventDefault()
-                setFromDropdownOpen(true)
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (isJourneyValid && !loadingBuses) onSearchBuses()
+        }}
+      >
+        <div className="grid grid-cols-1 items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-4">
+          <div className="relative z-20" ref={fromContainerRef}>
+            <label className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-600">
+              <MapPin size={15} className="text-emerald-600" />
+              {text.boardingLabel}
+            </label>
+            <button
+              type="button"
+              aria-expanded={fromDropdownOpen}
+              aria-haspopup="listbox"
+              aria-controls="boarding-stop-list"
+              aria-describedby={validationMessage ? 'journey-validation-message' : undefined}
+              aria-label={`${text.boardingLabel}: ${currentStop || text.selectStop}`}
+              onClick={() => {
+                setFromDropdownOpen(!fromDropdownOpen)
                 setToDropdownOpen(false)
-              }
-            }}
-            className="flex items-center justify-between px-4 py-3.5 min-h-[48px] rounded-xl border border-slate-300 bg-slate-50 hover:bg-white hover:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 cursor-pointer transition shadow-2xs"
-          >
-            <div className="flex items-center gap-2 truncate">
-              <span className="text-sm sm:text-base font-black text-slate-900 truncate">
-                {currentStop}
+              }}
+              className={`flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl border bg-slate-50 px-4 text-left transition hover:border-blue-400 hover:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 ${
+                fromDropdownOpen ? 'border-blue-500 bg-white ring-4 ring-blue-500/10' : 'border-slate-200'
+              }`}
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-base font-black text-slate-900">
+                  {currentStop || text.selectStop}
+                </span>
+                <span className="mt-0.5 block text-xs font-medium text-slate-500">NH-66 corridor</span>
               </span>
-              <span className="text-xs text-slate-500 font-semibold hidden sm:inline">
-                (NH-66 Corridor)
-              </span>
-            </div>
-            <ChevronDown
-              size={18}
-              className={`text-slate-500 transition-transform ${fromDropdownOpen ? 'rotate-180' : ''}`}
-            />
+              <ChevronDown
+                size={18}
+                className={`shrink-0 text-slate-500 transition-transform ${fromDropdownOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {fromDropdownOpen &&
+              renderSuggestions({
+                suggestions: fromSuggestions,
+                selectedStop: currentStop,
+                highlightedIdx: safeFromIdx,
+                listId: 'boarding-stop-list',
+                query: fromQuery,
+                setQuery: setFromQuery,
+                setHighlightedIdx: setFromHighlightedIdx,
+                onSelect: chooseFromStop,
+                setDropdownOpen: setFromDropdownOpen,
+              })}
           </div>
 
-          {/* From Suggestions Dropdown */}
-          {fromDropdownOpen && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 py-2 z-50 max-h-72 overflow-y-auto">
-              <div className="px-3 pb-2 border-b border-slate-100">
-                <input
-                  type="text"
-                  placeholder={text.filterPlaceholder}
-                  value={fromQuery}
-                  onChange={(e) => {
-                    setFromQuery(e.target.value)
-                    setFromHighlightedIdx(0)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      setFromDropdownOpen(false)
-                    } else if (e.key === 'ArrowDown') {
-                      e.preventDefault()
-                      setFromHighlightedIdx((prev) =>
-                        prev < fromSuggestions.length - 1 ? prev + 1 : 0
-                      )
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault()
-                      setFromHighlightedIdx((prev) =>
-                        prev > 0 ? prev - 1 : fromSuggestions.length - 1
-                      )
-                    } else if (e.key === 'Enter' && fromSuggestions[safeFromIdx]) {
-                      e.preventDefault()
-                      onSelectFromStop(fromSuggestions[safeFromIdx].stop_name)
-                      setFromDropdownOpen(false)
-                      setFromQuery('')
-                    }
-                  }}
-                  className="w-full text-xs font-semibold bg-slate-100 focus:bg-white text-slate-900 rounded-lg px-3 py-2.5 border border-slate-200 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  autoFocus
-                />
-              </div>
-
-              <div role="listbox" className="pt-1">
-                {fromSuggestions.length === 0 ? (
-                  <div className="px-4 py-3 text-xs text-slate-500 text-center font-medium">
-                    {text.noStopsMatch}
-                  </div>
-                ) : (
-                  fromSuggestions.map((s, idx) => (
-                    <button
-                      key={s.stop_id}
-                      type="button"
-                      role="option"
-                      aria-selected={s.stop_name === currentStop}
-                      onClick={() => {
-                        onSelectFromStop(s.stop_name)
-                        setFromDropdownOpen(false)
-                        setFromQuery('')
-                      }}
-                      className={`w-full px-4 py-2.5 text-left flex items-center justify-between cursor-pointer transition ${
-                        idx === safeFromIdx
-                          ? 'bg-blue-50 text-blue-900'
-                          : s.stop_name === currentStop
-                          ? 'bg-slate-100 text-slate-900'
-                          : 'hover:bg-slate-50 text-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="w-5 h-5 rounded-md bg-slate-200 text-slate-700 text-[10px] font-black flex items-center justify-center shrink-0">
-                          {s.stop_id}
-                        </span>
-                        <span className="text-xs sm:text-sm font-bold truncate">
-                          {s.stop_name}
-                        </span>
-                      </div>
-                      <span className="text-xs text-slate-500 font-semibold shrink-0 ml-2">
-                        {s.stop_name_kn}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 2. Swap Button */}
-        <div className="flex justify-center md:pb-1">
           <button
             type="button"
             onClick={onSwapStops}
-            className="w-11 h-11 rounded-xl border border-slate-300 bg-white hover:bg-blue-50 hover:border-blue-500 text-slate-700 hover:text-blue-600 flex items-center justify-center transition shadow-2xs cursor-pointer active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            title={text.swapTitle}
             aria-label={text.swapTitle}
+            title={text.swapTitle}
+            className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/10 active:scale-95 md:mb-1"
           >
-            <ArrowUpDown size={18} strokeWidth={2.4} />
+            <ArrowLeftRight size={18} strokeWidth={2.4} className="rotate-90 md:rotate-0" />
           </button>
-        </div>
 
-        {/* 3. Destination (To) */}
-        <div className="relative" ref={toContainerRef}>
-          <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-            <MapPin size={14} className="text-rose-600 shrink-0" />
-            <span>{text.destinationLabel}</span>
-          </label>
-
-          <div
-            role="combobox"
-            aria-expanded={toDropdownOpen}
-            aria-haspopup="listbox"
-            aria-label="Select destination bus stop"
-            tabIndex={0}
-            onClick={() => {
-              setToDropdownOpen(!toDropdownOpen)
-              setFromDropdownOpen(false)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
-                e.preventDefault()
-                setToDropdownOpen(true)
+          <div className="relative z-10" ref={toContainerRef}>
+            <label className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-600">
+              <MapPin size={15} className="text-rose-600" />
+              {text.destinationLabel}
+            </label>
+            <button
+              type="button"
+              aria-expanded={toDropdownOpen}
+              aria-haspopup="listbox"
+              aria-controls="destination-stop-list"
+              aria-describedby={validationMessage ? 'journey-validation-message' : undefined}
+              aria-label={`${text.destinationLabel}: ${destination || text.selectStop}`}
+              onClick={() => {
+                setToDropdownOpen(!toDropdownOpen)
                 setFromDropdownOpen(false)
-              }
-            }}
-            className="flex items-center justify-between px-4 py-3.5 min-h-[48px] rounded-xl border border-slate-300 bg-slate-50 hover:bg-white hover:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 cursor-pointer transition shadow-2xs"
-          >
-            <div className="flex items-center gap-2 truncate">
-              <span className="text-sm sm:text-base font-black text-slate-900 truncate">
-                {destination}
+              }}
+              className={`flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl border bg-slate-50 px-4 text-left transition hover:border-blue-400 hover:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 ${
+                toDropdownOpen ? 'border-blue-500 bg-white ring-4 ring-blue-500/10' : 'border-slate-200'
+              }`}
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-base font-black text-slate-900">
+                  {destination || text.selectStop}
+                </span>
+                <span className="mt-0.5 block text-xs font-medium text-slate-500">NH-66 corridor</span>
               </span>
-              <span className="text-xs text-slate-500 font-semibold hidden sm:inline">
-                (NH-66 Corridor)
-              </span>
-            </div>
-            <ChevronDown
-              size={18}
-              className={`text-slate-500 transition-transform ${toDropdownOpen ? 'rotate-180' : ''}`}
-            />
+              <ChevronDown
+                size={18}
+                className={`shrink-0 text-slate-500 transition-transform ${toDropdownOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {toDropdownOpen &&
+              renderSuggestions({
+                suggestions: toSuggestions,
+                selectedStop: destination,
+                highlightedIdx: safeToIdx,
+                listId: 'destination-stop-list',
+                query: toQuery,
+                setQuery: setToQuery,
+                setHighlightedIdx: setToHighlightedIdx,
+                onSelect: chooseToStop,
+                setDropdownOpen: setToDropdownOpen,
+              })}
           </div>
-
-          {/* To Suggestions Dropdown */}
-          {toDropdownOpen && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 py-2 z-50 max-h-72 overflow-y-auto">
-              <div className="px-3 pb-2 border-b border-slate-100">
-                <input
-                  type="text"
-                  placeholder={text.filterPlaceholder}
-                  value={toQuery}
-                  onChange={(e) => {
-                    setToQuery(e.target.value)
-                    setToHighlightedIdx(0)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      setToDropdownOpen(false)
-                    } else if (e.key === 'ArrowDown') {
-                      e.preventDefault()
-                      setToHighlightedIdx((prev) =>
-                        prev < toSuggestions.length - 1 ? prev + 1 : 0
-                      )
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault()
-                      setToHighlightedIdx((prev) =>
-                        prev > 0 ? prev - 1 : toSuggestions.length - 1
-                      )
-                    } else if (e.key === 'Enter' && toSuggestions[safeToIdx]) {
-                      e.preventDefault()
-                      onSelectToStop(toSuggestions[safeToIdx].stop_name)
-                      setToDropdownOpen(false)
-                      setToQuery('')
-                    }
-                  }}
-                  className="w-full text-xs font-semibold bg-slate-100 focus:bg-white text-slate-900 rounded-lg px-3 py-2.5 border border-slate-200 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  autoFocus
-                />
-              </div>
-
-              <div role="listbox" className="pt-1">
-                {toSuggestions.length === 0 ? (
-                  <div className="px-4 py-3 text-xs text-slate-500 text-center font-medium">
-                    {text.noStopsMatch}
-                  </div>
-                ) : (
-                  toSuggestions.map((s, idx) => (
-                    <button
-                      key={s.stop_id}
-                      type="button"
-                      role="option"
-                      aria-selected={s.stop_name === destination}
-                      onClick={() => {
-                        onSelectToStop(s.stop_name)
-                        setToDropdownOpen(false)
-                        setToQuery('')
-                      }}
-                      className={`w-full px-4 py-2.5 text-left flex items-center justify-between cursor-pointer transition ${
-                        idx === safeToIdx
-                          ? 'bg-blue-50 text-blue-900'
-                          : s.stop_name === destination
-                          ? 'bg-slate-100 text-slate-900'
-                          : 'hover:bg-slate-50 text-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="w-5 h-5 rounded-md bg-slate-200 text-slate-700 text-[10px] font-black flex items-center justify-center shrink-0">
-                          {s.stop_id}
-                        </span>
-                        <span className="text-xs sm:text-sm font-bold truncate">
-                          {s.stop_name}
-                        </span>
-                      </div>
-                      <span className="text-xs text-slate-500 font-semibold shrink-0 ml-2">
-                        {s.stop_name_kn}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* 4. Large "Find Available Buses" Button */}
-        <div className="w-full md:w-auto">
-          <button
-            type="button"
-            onClick={onSearchBuses}
-            disabled={loadingBuses}
-            className="w-full md:w-auto min-h-[48px] px-7 py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-sm sm:text-base rounded-xl shadow-xs flex items-center justify-center gap-2.5 transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p
+            id="journey-validation-message"
+            role={validationMessage ? 'alert' : 'status'}
+            aria-live="polite"
+            className={`m-0 min-h-5 text-xs font-semibold ${
+              validationMessage ? 'text-amber-700' : 'text-slate-500'
+            }`}
           >
-            <Search size={19} strokeWidth={2.6} className="shrink-0" />
+            {validationMessage || text.routeHint}
+          </p>
+          <button
+            type="submit"
+            disabled={loadingBuses || !isJourneyValid}
+            className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-2xl bg-blue-700 px-6 py-3 text-sm font-black text-white shadow-md shadow-blue-900/15 transition hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none sm:w-auto"
+          >
+            <Search size={18} strokeWidth={2.6} className="shrink-0" />
             <span>{loadingBuses ? text.searchingBtn : text.searchBtn}</span>
           </button>
         </div>
-      </div>
-    </div>
+      </form>
+    </section>
   )
 }

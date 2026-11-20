@@ -189,7 +189,13 @@ export default function PassengerPortal({
 
   // Real Search Buses API handler
   const handleSearchBuses = async (fromVal = currentStop, toVal = destination, shouldSwitchScreen = true) => {
-    if (!fromVal || !toVal) return
+    const fromStop = OFFICIAL_9_CORRIDOR_STOPS.find(
+      (stop) => stop.stop_name.toLowerCase() === fromVal?.toLowerCase()
+    )
+    const toStop = OFFICIAL_9_CORRIDOR_STOPS.find(
+      (stop) => stop.stop_name.toLowerCase() === toVal?.toLowerCase()
+    )
+    if (!fromStop || !toStop || fromStop.stop_id >= toStop.stop_id) return
 
     setLoadingBuses(true)
     setSearchError('')
@@ -231,27 +237,14 @@ export default function PassengerPortal({
     }
   }
 
-  // Swap From & To safely while preserving forward corridor alignment
+  // Swap the selected stops; the search form explains when that reverses corridor direction.
   const handleSwapStops = () => {
-    const fromObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === currentStop)
-    const toObj = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_name === destination)
-    const fromId = fromObj?.stop_id || 1
-    const toId = toObj?.stop_id || 8
-
-    if (toId < 9) {
-      setCurrentStop(destination)
-      const next = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id > toId)
-      setDestination(next ? next.stop_name : 'Kundapura')
-    } else {
-      const prev = OFFICIAL_9_CORRIDOR_STOPS.find((s) => s.stop_id < fromId)
-      if (prev) {
-        setDestination(currentStop)
-        setCurrentStop(prev.stop_name)
-      } else {
-        setCurrentStop('Surathkal')
-        setDestination('Udupi')
-      }
-    }
+    setCurrentStop(destination)
+    setDestination(currentStop)
+    setFromDropdownOpen(false)
+    setToDropdownOpen(false)
+    setFromQuery('')
+    setToQuery('')
   }
 
   // Select Bus for Details (Screen 3)
