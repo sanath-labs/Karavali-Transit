@@ -1,6 +1,7 @@
+import { memo } from 'react'
 import { Bus, MapPin, Clock, ArrowRight } from 'lucide-react'
 
-export default function BusCard({
+function BusCard({
   bus,
   currentStop,
   destination,
@@ -13,7 +14,7 @@ export default function BusCard({
   )
   const isStale = bus.tracking_status === 'LOCATION STALE'
   const isNotTracking = bus.tracking_status === 'NOT TRACKING'
-  const canTrack = isLive || isStale
+  const canTrack = isLive || isStale || isNotTracking
 
   return (
     <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs hover:border-blue-400 hover:shadow-xs transition flex flex-col justify-between space-y-4 select-none">
@@ -144,3 +145,5 @@ export default function BusCard({
     </div>
   )
 }
+
+export default memo(BusCard)

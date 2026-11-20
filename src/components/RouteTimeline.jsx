@@ -1,6 +1,7 @@
+import { memo } from 'react'
 import { MapPin } from 'lucide-react'
 
-export default function RouteTimeline({ stops = [], currentStop, destination }) {
+function RouteTimeline({ stops = [], currentStop, destination }) {
   return (
     <div className="space-y-0 relative pl-2 pt-2 select-none">
       {stops.map((stop, idx) => {
@@ -67,3 +68,5 @@ export default function RouteTimeline({ stops = [], currentStop, destination }) 
     </div>
   )
 }
+
+export default memo(RouteTimeline)
